@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>删除配置 · aws bedrock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef2f7;--bg2:#e4eaf3;--surface:#fff;--surface2:#f8fafc;
+  --border:#e2e8f0;--border2:#cbd5e1;--text:#0f172a;--t2:#64748b;--t3:#94a3b8;
+  --pr:#2563eb;--ph:#1d4ed8;--pl:#eff6ff;
+  --ok:#16a34a;--ok-bg:#f0fdf4;--ok-bd:#bbf7d0;
+  --er:#dc2626;--er-bg:#fef2f2;--er-bd:#fecaca;
+  --wa:#d97706;--wa-bg:#fffbeb;--wa-bd:#fde68a;
+  --aws:#ff9900;--aws-dark:#232f3e;--r:7px;--r-sm:5px;
+  --shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde6f0 100%);background-attachment:fixed;color:var(--text);font-size:12px;line-height:1.45;min-height:100vh;text-transform:lowercase}
+input,textarea,select{font-family:inherit;text-transform:none}
+.h{background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 60%,#1e3a5f 100%);padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;height:44px;box-shadow:0 1px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
+.h-l{display:flex;align-items:center;gap:10px}
+.nav{display:flex;gap:4px}
+.nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:11px;padding:4px 10px;border-radius:4px;transition:all .15s}
+.nav a:hover,.nav a.act{color:#fff;background:rgba(255,255,255,.12)}
+.h-logo{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--aws) 0%,#ffb84d 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 6px rgba(255,153,0,.3);flex-shrink:0}
+.h-logo svg{color:#232f3e;width:16px;height:16px}
+.h-text h1{font-size:14px;font-weight:600;color:#fff}
+.h-text .s{color:rgba(255,255,255,.5);font-size:11px}
+.b{max-width:880px;margin:14px auto;padding:0 14px 28px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;animation:fadeUp .4s ease both}
+.card:nth-child(1){animation-delay:.05s}.card:nth-child(2){animation-delay:.12s}.card:nth-child(3){animation-delay:.19s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.sht{display:flex;align-items:center;gap:7px;padding:8px 12px;font-size:12px;font-weight:600;background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text)}
+.sht-step{width:18px;height:18px;border-radius:50%;background:var(--pr);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sht-sub{font-weight:400;color:var(--t2);font-size:11px;margin-left:auto}
+.sb{padding:12px}
+.fr{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px}
+.fr:last-child{margin-bottom:0}
+.fg{display:flex;flex-direction:column;gap:3px;min-width:140px;flex:1}
+.fg label{font-size:11px;color:var(--t2);font-weight:500}
+.fg input,.fg select{height:30px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;outline:none;background:var(--surface);color:var(--text);transition:border-color .15s,box-shadow .15s}
+.fg input::placeholder{color:var(--t3)}
+.fg input:focus,.fg select:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:30px;padding:0 11px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);white-space:nowrap;transition:all .15s ease}
+.btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.bp{background:linear-gradient(135deg,var(--pr) 0%,#3b82f6 100%);color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(37,99,235,.3)}
+.bp:hover{background:linear-gradient(135deg,var(--ph) 0%,var(--pr) 100%);color:#fff;border-color:transparent}
+.bd{background:linear-gradient(135deg,var(--er) 0%,#ef4444 100%);color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(220,38,38,.3)}
+.bd:hover{background:linear-gradient(135deg,#b91c1c 0%,var(--er) 100%);color:#fff;border-color:transparent}
+.bsm{height:26px;padding:0 9px;font-size:11px}
+.bdge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:12px;font-size:10px;font-weight:500}
+.bg-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+.bg-er{background:var(--er-bg);color:var(--er);border:1px solid var(--er-bd)}
+.bg-rg{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-family:"SF Mono",Consolas,monospace;font-size:10px}
+#ar{margin-top:2px;padding:8px 10px;background:var(--ok-bg);border:1px solid var(--ok-bd);border-radius:var(--r-sm)}
+#aid{font-weight:600;font-size:12px;color:var(--text);font-family:"SF Mono",Consolas,monospace}
+.fx{display:flex;align-items:center;gap:8px}
+.fb{display:flex;align-items:center;justify-content:space-between}
+.tw{max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r-sm);scrollbar-width:thin;scrollbar-color:var(--border2) transparent}
+.tw::-webkit-scrollbar{width:4px}
+.tw::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+table{width:100%;border-collapse:collapse;font-size:11px}
+table th,table td{text-align:left;padding:5px 9px;border-bottom:1px solid var(--border)}
+table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t2);white-space:nowrap;position:sticky;top:0;z-index:1}
+table tbody tr:hover td{background:var(--er-bg)}
+table tbody tr:last-child td{border-bottom:none}
+.cc{width:32px;text-align:center}
+.cc input[type=checkbox]{width:13px;height:13px;cursor:pointer;accent-color:var(--er)}
+.emp{padding:18px 14px;text-align:center;color:var(--t2);font-size:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px}
+.st{display:flex;align-items:center;gap:6px;padding:7px 10px;border-radius:var(--r-sm);font-size:11px;margin-top:8px;font-weight:500}
+.st.er{background:var(--er-bg);border:1px solid var(--er-bd);color:var(--er)}
+.st.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
+.st.wa{background:var(--wa-bg);border:1px solid var(--wa-bd);color:var(--wa)}
+.st.info{background:var(--pl);border:1px solid #bfdbfe;color:var(--pr)}
+.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--pr);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.tu{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;font-family:"SF Mono",Consolas,monospace;font-size:10px;color:var(--t2)}
+.mt8{margin-top:8px}.mb8{margin-bottom:8px}.tc2{color:var(--t2)}
+.rgl{display:flex;flex-wrap:wrap;gap:4px;max-height:100px;overflow-y:auto;padding:6px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2);scrollbar-width:thin}
+.rgi{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:4px;font-size:11px;cursor:pointer;background:var(--surface);border:1px solid var(--border);transition:all .15s;user-select:none}
+.rgi:has(input:checked){background:var(--er-bg);border-color:#fca5a5;color:var(--er)}
+.rgi input{accent-color:var(--er);width:11px;height:11px;cursor:pointer;margin:0}
+.rg-bar{display:flex;align-items:center;gap:8px;margin-top:5px;font-size:11px;color:var(--t2)}
+.rg-bar label{cursor:pointer;display:flex;align-items:center;gap:4px}
+.preview-bar{padding:7px 10px;background:var(--er-bg);border:1px solid var(--er-bd);border-radius:var(--r-sm);font-size:11px;color:var(--er);margin-top:8px}
+.preview-bar strong{font-size:13px}
+/* 选中计数条 */
+.sel-bar{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);margin-bottom:6px;font-size:11px}
+.footer{text-align:center;color:var(--t3);font-size:10px;padding:4px 0 0}
+</style>
+</head>
+<body>
+<header class="h">
+  <div class="h-l">
+    <div class="h-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+        <path d="M10 11v6"/><path d="M14 11v6"/>
+        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+      </svg>
+    </div>
+    <div class="h-text">
+      <h1>删除配置</h1>
+      <div class="s">按名称前缀扫描并批量删除 inference profile</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <a href="/">profile 标签</a>
+    <a href="/model-tags">创建配置</a>
+    <a href="/delete-profiles" class="act">删除配置</a>
+    <a href="/test-profile">测试模型</a>
+  </nav>
+</header>
+
+<div class="b">
+  <!-- 步骤1：凭证 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">1</span> aws 凭证<span class="sht-sub">验证后方可操作</span></div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:2"><label>access key id</label><input id="ak" type="text" placeholder="akia..." autocomplete="off"></div>
+        <div class="fg" style="flex:2"><label>secret access key</label><input id="sk" type="password" placeholder="..." autocomplete="off"></div>
+        <div class="fg" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn bp" id="btnv" onclick="vrf()">验证</button></div>
+      </div>
+      <div class="fr" id="ar" style="display:none">
+        <div class="fg" style="flex:1"><label>账号 id</label><div class="fx"><span id="aid"></span><span class="bdge bg-ok">✓ 已验证</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤2：按ARN批量删除 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">2</span> 按ARN批量删除<span class="sht-sub">直接填入ARN列表</span></div>
+    <div class="sb">
+      <div class="fg" style="margin-bottom:8px">
+        <label>ARN列表（每行一个）</label>
+        <textarea id="arnList" rows="6" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:11px;font-family:'SF Mono',Consolas,monospace;resize:vertical" placeholder="arn:aws:bedrock:us-east-1::inference-profile/profile-name&#10;arn:aws:bedrock:us-west-2::inference-profile/another-profile"></textarea>
+      </div>
+      <div class="fr">
+        <button class="btn bd" id="btnArnDel" onclick="batchDeleteByArn()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          批量删除
+        </button>
+      </div>
+      <div id="arnDelMsg"></div>
+    </div>
+  </div>
+
+  <!-- 步骤3：按前缀扫描删除 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">3</span> 按前缀扫描删除<span class="sht-sub">按名称前缀 · 多区域</span></div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:1">
+          <label>名称前缀</label>
+          <input id="dname" type="text" placeholder="my-claude-profile" oninput="upDelPreview()">
+        </div>
+      </div>
+      <div class="fr" style="align-items:flex-start;margin-top:4px">
+        <div class="fg" style="flex:1">
+          <label>区域 <span id="drc" style="color:var(--t3)">（0）</span></label>
+          <div class="rgl" id="drgl"></div>
+          <div class="rg-bar"><label><input type="checkbox" id="saDR" onchange="taDR()"> 全选</label></div>
+        </div>
+      </div>
+      <div class="preview-bar" id="delPreview">将在 <strong>0</strong> 个区域扫描匹配项</div>
+      <div class="fr mt8">
+        <button class="btn bp" id="btnScanDel" onclick="scanDelete()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          扫描匹配
+        </button>
+      </div>
+      <div id="scanMsg"></div>
+    </div>
+  </div>
+
+  <!-- 步骤3：确认并删除 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">4</span> 确认删除<span class="sht-sub">勾选后批量删除，操作不可恢复</span></div>
+    <div class="sb">
+      <div id="dw" style="display:none">
+        <div class="sel-bar">
+          <span class="tc2" id="dc">0 项匹配</span>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+            <input type="checkbox" id="saDelAll" onchange="taDelAll()" style="accent-color:var(--er);width:12px;height:12px"> 全选
+          </label>
+        </div>
+        <div class="tw">
+          <table>
+            <thead><tr>
+              <th class="cc"></th>
+              <th>区域</th><th>名称</th><th>状态</th><th>arn</th><th></th>
+            </tr></thead>
+            <tbody id="dt"></tbody>
+          </table>
+        </div>
+        <div class="fr mt8">
+          <button class="btn bd" id="btnBatchDel" onclick="batchDelete()" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            批量删除已选
+          </button>
+        </div>
+        <div id="deleteMsg"></div>
+      </div>
+      <div id="de" class="emp">扫描后将在此显示可删除的配置</div>
+      <div id="dl" class="emp" style="display:none"><span class="sp"></span> 处理中...</div>
+    </div>
+  </div>
+
+  <div class="footer">删除配置 · aws bedrock inference profile</div>
+</div>
+<script src="/static/persist.js"></script>
+<script>
+var B="",deleteList=[],_persistReady=false;
+function $(i){return document.getElementById(i)}
+function es(s){if(!s)return"";var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+function sR(id,msg,type){var el=$(id);if(el)el.innerHTML='<div class="st '+type+'" style="white-space:pre-line">'+es(msg)+'</div>'}
+function creds(){return{access_key:$("ak").value.trim(),secret_key:$("sk").value.trim()}}
+
+function getDelRegions(){var rs=[];document.querySelectorAll("#drgl input:checked").forEach(function(cb){rs.push(cb.value)});return rs}
+function upDR(){var n=document.querySelectorAll("#drgl input:checked").length,all=document.querySelectorAll("#drgl input").length;$("drc").textContent="（"+n+"）";$("saDR").checked=n===all&&all>0;upDelPreview();if(_persistReady)BedrockPersist.save()}
+function taDR(){var c=$("saDR").checked;document.querySelectorAll("#drgl input").forEach(function(cb){cb.checked=c});upDR()}
+function upDelPreview(){var r=getDelRegions().length,name=$("dname").value.trim();$("delPreview").innerHTML="将在 <strong>"+r+"</strong> 个区域搜索前缀 <strong>"+(name?es(name):"—")+"</strong> 的配置"}
+
+document.addEventListener("DOMContentLoaded",async function(){
+  var d=BedrockPersist.init();
+  await lR();
+  BedrockPersist.afterListsReady(d);
+  _persistReady=true;
+});
+
+async function lR(){
+  try{
+    var r=await fetch(B+"/api/regions"),d=await r.json();
+    if(!d.ok)return;
+    var dbox=$("drgl");
+    d.regions.forEach(function(reg){
+      var lbl=document.createElement("label");
+      lbl.className="rgi";
+      lbl.innerHTML='<input type="checkbox" value="'+es(reg)+'" onchange="upDR()"> '+es(reg);
+      dbox.appendChild(lbl);
+    });
+    upDR();
+  }catch(e){}
+}
+
+async function vrf(){
+  var c=creds();
+  if(!c.access_key||!c.secret_key){sR("scanMsg","请填写 ak/sk","wa");return}
+  var btn=$("btnv");btn.disabled=true;btn.textContent="验证中...";
+  try{
+    var r=await fetch(B+"/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c)}),d=await r.json();
+    if(d.ok){$("aid").textContent=d.account_id;$("ar").style.display="flex";BedrockPersist.onVerified(d.account_id);sR("scanMsg","已验证","ok")}
+    else sR("scanMsg",d.error,"er");
+  }finally{btn.disabled=false;btn.textContent="验证"}
+}
+
+async function scanDelete(){
+  var c=creds(),regions=getDelRegions(),prefix=$("dname").value.trim();
+  if(!c.access_key||!c.secret_key){sR("scanMsg","请先填写凭证","wa");return}
+  if(!prefix){sR("scanMsg","请填写名称前缀","wa");return}
+  if(!regions.length){sR("scanMsg","请至少选择一个区域","wa");return}
+  var btn=$("btnScanDel");btn.disabled=true;btn.innerHTML='<span class="sp"></span> 扫描中...';
+  $("dw").style.display="none";$("de").style.display="none";$("dl").style.display="flex";
+  try{
+    var r=await fetch(B+"/api/batch_list_profiles",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,regions:regions,name_prefix:prefix})});
+    var d=await r.json();
+    $("dl").style.display="none";
+    if(d.ok){
+      renderDeleteList(d.profiles||[]);
+      sR("scanMsg","找到 "+(d.total||0)+" 个匹配项","ok");
+    }else{
+      $("de").style.display="flex";$("de").textContent=d.error||"扫描失败";
+      sR("scanMsg",d.error,"er");
+    }
+  }catch(e){
+    $("dl").style.display="none";$("de").style.display="flex";$("de").textContent="扫描失败";
+    sR("scanMsg","错误："+e.message,"er");
+  }finally{
+    btn.disabled=false;
+    btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 扫描匹配';
+  }
+}
+
+function renderDeleteList(rows){
+  deleteList=rows||[];
+  var w=$("dw"),tb=$("dt"),e=$("de"),btn=$("btnBatchDel");
+  if(!deleteList.length){
+    w.style.display="none";e.style.display="flex";e.textContent="未找到匹配的配置";btn.disabled=true;return;
+  }
+  w.style.display="block";e.style.display="none";btn.disabled=false;
+  $("dc").textContent=deleteList.length+" 项匹配";$("saDelAll").checked=true;
+  tb.innerHTML="";
+  deleteList.forEach(function(p,i){
+    var arn=p.arn||"";
+    var tr=document.createElement("tr");
+    tr.innerHTML=
+      '<td class="cc"><input type="checkbox" class="del-cb" data-i="'+i+'" checked onchange="upDelSel()"></td>'+
+      '<td><span class="bdge bg-rg">'+es(p.region||"")+'</span></td>'+
+      '<td>'+es(p.name||"")+'</td>'+
+      '<td>'+es((p.status||"").toLowerCase())+'</td>'+
+      '<td><span class="tu" title="'+es(arn)+'">'+es(arn)+'</span></td>'+
+      '<td><button class="btn bsm bd" onclick="delOneFromList('+i+')">删除</button></td>';
+    tb.appendChild(tr);
+  });
+  upDelSel();
+}
+
+function selDelItems(){
+  var items=[];
+  document.querySelectorAll(".del-cb:checked").forEach(function(cb){
+    var p=deleteList[parseInt(cb.getAttribute("data-i"),10)];
+    if(p)items.push({region:p.region,inference_profile_arn:p.arn,name:p.name});
+  });
+  return items;
+}
+function upDelSel(){
+  var n=document.querySelectorAll(".del-cb:checked").length,all=document.querySelectorAll(".del-cb").length;
+  $("btnBatchDel").disabled=n===0;
+  $("saDelAll").checked=n===all&&all>0;
+  $("dc").textContent=n+" / "+deleteList.length+" 项已选";
+}
+function taDelAll(){var c=$("saDelAll").checked;document.querySelectorAll(".del-cb").forEach(function(cb){cb.checked=c});upDelSel()}
+
+async function batchDelete(){
+  var items=selDelItems();
+  if(!items.length){sR("deleteMsg","请先勾选要删除的配置","wa");return}
+  if(!confirm("确定删除选中的 "+items.length+" 个 inference profile？\n此操作不可恢复。"))return;
+  await doDelete(items);
+}
+
+async function delOneFromList(i){
+  var p=deleteList[i];if(!p)return;
+  if(!confirm("确定删除 "+(p.name||p.arn)+"？"))return;
+  await doDelete([{region:p.region,inference_profile_arn:p.arn,name:p.name}]);
+}
+
+async function doDelete(items){
+  var c=creds();
+  if(!c.access_key||!c.secret_key){sR("deleteMsg","请先填写凭证","wa");return}
+  var btn=$("btnBatchDel");btn.disabled=true;
+  $("dl").style.display="flex";$("dl").innerHTML='<span class="sp"></span> 删除中（'+items.length+' 项）...';
+  try{
+    var r=await fetch(B+"/api/batch_delete_profiles",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,profiles:items})});
+    var d=await r.json();
+    $("dl").style.display="none";
+    if(d.ok){
+      var msg="删除完成："+d.success+"/"+d.total+" 成功";
+      if(d.failed)msg+="，"+d.failed+" 失败";
+      sR("deleteMsg",msg,d.failed?"wa":"ok");
+      // 重新扫描刷新列表
+      var prefix=$("dname").value.trim();
+      if(prefix)scanDelete();
+    }else sR("deleteMsg",d.error,"er");
+  }catch(e){
+    $("dl").style.display="none";sR("deleteMsg","错误："+e.message,"er");
+  }finally{
+    btn.disabled=selDelItems().length===0;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 按 ARN 批量删除
+// ═══════════════════════════════════════════════════════════════════
+function parseArnList(){
+  var text=$("arnList").value.trim();
+  if(!text)return[];
+  var lines=text.split(/\n/);
+  var arns=[];
+  lines.forEach(function(line){
+    var arn=line.trim();
+    if(!arn || arn.charAt(0)==="#") return;
+    // 兼容两种格式：
+    // arn:aws:bedrock:region::inference-profile/name
+    // arn:aws:bedrock:region:accountid:application-inference-profile/name
+    var m=arn.match(/^arn:aws(?:-[^:]+)?:bedrock:([^:]+):[^:]*:(?:application-)?inference-profile\/(.+)$/);
+    if(m){
+      arns.push({region:m[1],inference_profile_arn:arn,name:m[2]});
+    }
+  });
+  return arns;
+}
+
+async function batchDeleteByArn(){
+  var c=creds();
+  if(!c.access_key||!c.secret_key){sR("arnDelMsg","请先验证凭证","wa");return}
+  
+  var items=parseArnList();
+  if(!items.length){
+    sR("arnDelMsg","请输入有效的ARN列表（每行一个）\n示例：arn:aws:bedrock:us-east-1:123456:application-inference-profile/name","wa");
+    return;
+  }
+  
+  if(!confirm("确定删除以下 "+items.length+" 个 inference profile？\n\n"+items.map(function(p){return p.name}).join("\n")+"\n\n此操作不可恢复！"))return;
+  
+  var btn=$("btnArnDel");btn.disabled=true;btn.innerHTML='<span class="sp"></span> 删除中...';
+  sR("arnDelMsg","正在删除 "+items.length+" 个配置...","info");
+  
+  try{
+    var r=await fetch(B+"/api/batch_delete_profiles",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,profiles:items})});
+    var d=await r.json();
+    if(d.ok){
+      var msg="删除完成："+d.success+"/"+d.total+" 成功";
+      if(d.failed)msg+="，"+d.failed+" 失败";
+      sR("arnDelMsg",msg,d.failed?"wa":"ok");
+      // 清空输入
+      if(d.success>0)$("arnList").value="";
+    }else{
+      sR("arnDelMsg",d.error,"er");
+    }
+  }catch(e){
+    sR("arnDelMsg","错误："+e.message,"er");
+  }finally{
+    btn.disabled=false;
+    btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg> 批量删除';
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>aws bedrock 标签管理</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef2f7;
+  --bg2:#e4eaf3;
+  --surface:#fff;
+  --surface2:#f8fafc;
+  --border:#e2e8f0;
+  --border2:#cbd5e1;
+  --text:#0f172a;
+  --t2:#64748b;
+  --t3:#94a3b8;
+  --pr:#2563eb;
+  --ph:#1d4ed8;
+  --pl:#eff6ff;
+  --ok:#16a34a;
+  --ok-bg:#f0fdf4;
+  --ok-bd:#bbf7d0;
+  --er:#dc2626;
+  --er-bg:#fef2f2;
+  --er-bd:#fecaca;
+  --wa:#d97706;
+  --wa-bg:#fffbeb;
+  --wa-bd:#fde68a;
+  --aws:#ff9900;
+  --aws-dark:#232f3e;
+  --r:7px;
+  --r-sm:5px;
+  --shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04);
+  --shadow-lg:0 4px 6px rgba(15,23,42,.04),0 12px 32px rgba(15,23,42,.08);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde6f0 100%);
+  background-attachment:fixed;
+  color:var(--text);
+  font-size:12px;
+  line-height:1.45;
+  min-height:100vh;
+  text-transform:lowercase;
+}
+input,textarea,select{font-family:inherit;text-transform:none}
+
+/* Header */
+.h{
+  background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 60%,#1e3a5f 100%);
+  padding:0 16px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  height:44px;
+  box-shadow:0 1px 8px rgba(0,0,0,.15);
+  position:sticky;top:0;z-index:100;
+}
+.h-l{display:flex;align-items:center;gap:10px}
+.nav{display:flex;gap:4px}
+.nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:11px;padding:4px 10px;border-radius:4px;transition:all .15s}
+.nav a:hover,.nav a.act{color:#fff;background:rgba(255,255,255,.12)}
+.h-logo{
+  width:28px;height:28px;border-radius:6px;
+  background:linear-gradient(135deg,var(--aws) 0%,#ffb84d 100%);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 1px 6px rgba(255,153,0,.3);
+  flex-shrink:0;
+}
+.h-logo svg{color:#232f3e;width:16px;height:16px}
+.h-text h1{font-size:14px;font-weight:600;color:#fff;letter-spacing:0}
+.h-text .s{color:rgba(255,255,255,.5);font-size:11px;margin-top:0}
+
+/* Layout */
+.b{max-width:880px;margin:14px auto;padding:0 14px 28px;display:flex;flex-direction:column;gap:12px}
+
+/* Card */
+.card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+  animation:fadeUp .4s ease both;
+}
+.card:nth-child(1){animation-delay:.05s}
+.card:nth-child(2){animation-delay:.12s}
+.card:nth-child(3){animation-delay:.19s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+.sht{
+  display:flex;align-items:center;gap:7px;
+  padding:8px 12px;
+  font-size:12px;font-weight:600;
+  background:var(--surface2);
+  border-bottom:1px solid var(--border);
+  color:var(--text);
+}
+.sht-icon{
+  width:22px;height:22px;border-radius:5px;
+  background:var(--pl);color:var(--pr);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.sht-icon svg{width:12px;height:12px}
+.sht-step{
+  width:18px;height:18px;border-radius:50%;
+  background:var(--pr);color:#fff;
+  font-size:10px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.sht-sub{font-weight:400;color:var(--t2);font-size:11px;margin-left:auto}
+
+.sb{padding:12px}
+
+/* Form */
+.fr{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px}
+.fr:last-child{margin-bottom:0}
+.fg{display:flex;flex-direction:column;gap:3px;min-width:140px;flex:1}
+.fg label{font-size:11px;color:var(--t2);font-weight:500;letter-spacing:0}
+.fg input,.fg select{
+  height:30px;padding:0 9px;
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  font-size:12px;outline:none;
+  background:var(--surface);
+  color:var(--text);
+  transition:border-color .15s,box-shadow .15s;
+}
+.fg input::placeholder{color:var(--t3)}
+.fg input:focus,.fg select:focus{
+  border-color:var(--pr);
+  box-shadow:0 0 0 2px rgba(37,99,235,.1);
+}
+.fg textarea{
+  height:56px;padding:7px 9px;
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  font-size:11px;outline:none;resize:vertical;
+  font-family:"SF Mono","Cascadia Code",Consolas,monospace;
+  flex:1;min-width:260px;
+  background:var(--surface2);
+  color:var(--text);
+  transition:border-color .15s,box-shadow .15s;
+  line-height:1.4;
+}
+.fg textarea:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+
+/* Buttons */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:4px;
+  height:30px;padding:0 11px;
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  font-size:12px;font-weight:500;
+  cursor:pointer;
+  background:var(--surface);color:var(--text);
+  white-space:nowrap;
+  transition:all .15s ease;
+}
+.btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.bp{
+  background:linear-gradient(135deg,var(--pr) 0%,#3b82f6 100%);
+  color:#fff;border-color:transparent;
+  box-shadow:0 2px 8px rgba(37,99,235,.3);
+}
+.bp:hover{background:linear-gradient(135deg,var(--ph) 0%,var(--pr) 100%);color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(37,99,235,.4)}
+.bs{
+  background:linear-gradient(135deg,var(--ok) 0%,#22c55e 100%);
+  color:#fff;border-color:transparent;
+  box-shadow:0 2px 8px rgba(22,163,74,.3);
+}
+.bs:hover{background:linear-gradient(135deg,#15803d 0%,var(--ok) 100%);color:#fff;border-color:transparent}
+.bsm{height:26px;padding:0 9px;font-size:11px}
+.btn svg{width:12px;height:12px}
+
+/* Badge */
+.bdge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:12px;font-size:10px;font-weight:500;letter-spacing:0}
+.bg-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+.bg-wa{background:var(--wa-bg);color:var(--wa);border:1px solid var(--wa-bd)}
+.bg-er{background:var(--er-bg);color:var(--er);border:1px solid var(--er-bd)}
+.bg-rg{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-family:"SF Mono",Consolas,monospace;font-size:10px}
+
+/* Verified account row */
+#ar{
+  margin-top:2px;padding:8px 10px;
+  background:var(--ok-bg);border:1px solid var(--ok-bd);
+  border-radius:var(--r-sm);
+}
+#aid{font-weight:600;font-size:12px;color:var(--text);font-family:"SF Mono",Consolas,monospace}
+
+/* Table */
+.tw{
+  max-height:240px;overflow-y:auto;
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  scrollbar-width:thin;scrollbar-color:var(--border2) transparent;
+}
+.tw::-webkit-scrollbar{width:4px}
+.tw::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+table{width:100%;border-collapse:collapse;font-size:11px}
+table th,table td{text-align:left;padding:5px 9px;border-bottom:1px solid var(--border)}
+table th{
+  background:var(--surface2);
+  font-weight:600;font-size:10px;
+  color:var(--t2);
+  white-space:nowrap;
+  letter-spacing:0;
+  position:sticky;top:0;z-index:1;
+}
+table tbody tr{transition:background .1s}
+table tbody tr:hover td{background:var(--pl)}
+table tbody tr:last-child td{border-bottom:none}
+.cc{width:32px;text-align:center}
+.cc input[type=checkbox]{width:13px;height:13px;cursor:pointer;accent-color:var(--pr)}
+
+/* Empty & loading */
+.emp{
+  padding:18px 14px;text-align:center;color:var(--t2);font-size:11px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+}
+
+/* Status messages */
+.st{
+  display:flex;align-items:center;gap:6px;
+  padding:7px 10px;border-radius:var(--r-sm);
+  font-size:11px;margin-top:8px;font-weight:500;
+}
+.st.er{background:var(--er-bg);border:1px solid var(--er-bd);color:var(--er)}
+.st.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
+.st.wa{background:var(--wa-bg);border:1px solid var(--wa-bd);color:var(--wa)}
+.st.info{background:var(--pl);border:1px solid #bfdbfe;color:var(--pr)}
+
+/* Spinner */
+.sp{
+  display:inline-block;width:12px;height:12px;
+  border:2px solid var(--border);
+  border-top-color:var(--pr);
+  border-radius:50%;
+  animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Utilities */
+.fx{display:flex;align-items:center;gap:8px}
+.fb{display:flex;align-items:center;justify-content:space-between}
+.mt8{margin-top:8px}.mb8{margin-bottom:8px}
+.tc2{color:var(--t2)}
+.tu{
+  max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  display:inline-block;vertical-align:bottom;
+  font-family:"SF Mono",Consolas,monospace;font-size:10px;color:var(--t2);
+}
+
+/* Tag chips in table */
+.tgb{display:inline-flex;gap:3px;flex-wrap:wrap;max-width:200px}
+.tgb>span{
+  display:inline-flex;align-items:center;
+  padding:1px 6px;border-radius:10px;
+  font-size:10px;font-weight:500;
+  background:var(--pl);color:var(--pr);
+  border:1px solid #bfdbfe;
+  max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.tgb>span::before{content:attr(data-label);overflow:hidden;text-overflow:ellipsis}
+
+/* Tag input rows */
+.tg{display:flex;flex-direction:column;gap:5px}
+.tr{display:flex;gap:5px;align-items:center}
+.tr input{
+  height:28px;padding:0 9px;
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  font-size:12px;outline:none;flex:1;
+  transition:border-color .15s,box-shadow .15s;
+}
+.tr input:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.tk{max-width:160px}.tv{max-width:220px}
+.rm{
+  background:none;border:none;color:var(--er);
+  cursor:pointer;padding:4px;font-size:13px;line-height:1;
+  border-radius:4px;transition:background .15s;
+}
+.rm:hover{background:var(--er-bg)}
+
+/* Mode toggle */
+.tm{
+  display:inline-flex;gap:0;margin-bottom:10px;
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  overflow:hidden;
+  background:var(--surface2);
+  padding:2px;
+}
+.tm button{
+  padding:5px 14px;border:none;
+  font-size:11px;font-weight:500;
+  cursor:pointer;
+  background:transparent;color:var(--t2);
+  transition:all .2s ease;
+  border-radius:4px;
+}
+.tm button.act{
+  background:var(--surface);color:var(--pr);
+  box-shadow:0 1px 4px rgba(15,23,42,.1);
+  font-weight:600;
+}
+.tm button:not(.act):hover{color:var(--text)}
+
+/* Existing tags list */
+.tgl{
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  padding:4px;
+  max-height:150px;overflow-y:auto;
+  margin-bottom:6px;
+  background:var(--surface2);
+}
+.tgi{
+  display:flex;align-items:center;gap:7px;
+  padding:5px 7px;border-radius:4px;cursor:pointer;
+  transition:background .1s;
+}
+.tgi:hover{background:var(--surface)}
+.tgi input[type=checkbox]{width:12px;height:12px;cursor:pointer;accent-color:var(--pr)}
+.tgi .tkv{font-size:11px;color:var(--text);font-family:"SF Mono",Consolas,monospace}
+
+/* Selection bar */
+.sel-bar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:6px 10px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  margin-bottom:8px;
+  font-size:11px;
+}
+.sel-bar strong{color:var(--pr);font-size:13px}
+
+/* Profile count bar */
+.prof-bar{
+  padding:5px 8px;
+  background:var(--surface2);
+  border-radius:var(--r-sm);
+  margin-bottom:6px;
+  font-size:11px;
+}
+.prof-bar label{font-size:11px;color:var(--t2);cursor:pointer;display:flex;align-items:center;gap:5px}
+.prof-bar label input{accent-color:var(--pr);width:12px;height:12px}
+
+/* Region multi-select */
+.rgl{
+  display:flex;flex-wrap:wrap;gap:4px;
+  max-height:100px;overflow-y:auto;
+  padding:6px;border:1px solid var(--border);
+  border-radius:var(--r-sm);background:var(--surface2);
+  scrollbar-width:thin;
+}
+.rgi{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 7px;border-radius:4px;
+  font-size:11px;cursor:pointer;
+  background:var(--surface);border:1px solid var(--border);
+  transition:all .15s;user-select:none;
+}
+.rgi:has(input:checked){background:var(--pl);border-color:#93c5fd;color:var(--pr)}
+.rgi input{accent-color:var(--pr);width:11px;height:11px;cursor:pointer;margin:0}
+.rg-bar{display:flex;align-items:center;gap:8px;margin-top:5px;font-size:11px;color:var(--t2)}
+.rg-bar label{cursor:pointer;display:flex;align-items:center;gap:4px;font-weight:400}
+
+/* Divider hint */
+.hint{font-size:10px;color:var(--t3);margin-top:3px}
+
+/* Footer */
+.footer{
+  text-align:center;color:var(--t3);font-size:10px;
+  padding:4px 0 0;
+}
+
+/* model-tags */
+:root{--bg:#eef2f7;--bg2:#e4eaf3;--surface:#fff;--surface2:#f8fafc;--border:#e2e8f0;--text:#0f172a;--t2:#64748b;--t3:#94a3b8;--pr:#2563eb;--ph:#1d4ed8;--pl:#eff6ff;--ok:#16a34a;--ok-bg:#f0fdf4;--ok-bd:#bbf7d0;--er:#dc2626;--er-bg:#fef2f2;--er-bd:#fecaca;--wa:#d97706;--wa-bg:#fffbeb;--wa-bd:#fde68a;--aws:#ff9900;--aws-dark:#232f3e;--r:7px;--r-sm:5px;--shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04)}
+body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde6f0 100%);background-attachment:fixed;color:var(--text);font-size:12px;line-height:1.45;min-height:100vh;text-transform:lowercase}
+.h{background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 60%,#1e3a5f 100%);padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;height:44px;box-shadow:0 1px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
+.h-logo{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--aws) 0%,#ffb84d 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.h-text h1{font-size:14px;font-weight:600;color:#fff}
+.h-text .s{color:rgba(255,255,255,.5);font-size:11px}
+.b{max-width:920px;margin:14px auto;padding:0 14px 28px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+.sht{display:flex;align-items:center;gap:7px;padding:8px 12px;font-size:12px;font-weight:600;background:var(--surface2);border-bottom:1px solid var(--border)}
+.sht-step{width:18px;height:18px;border-radius:50%;background:var(--pr);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.fg label{font-size:11px;color:var(--t2);font-weight:500}
+.fg input,.fg select{height:30px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;outline:none;background:var(--surface);transition:border-color .15s,box-shadow .15s}
+.fg input:focus,.fg select:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:30px;padding:0 11px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);white-space:nowrap;transition:all .15s}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.bp{background:linear-gradient(135deg,var(--pr) 0%,#3b82f6 100%);color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(37,99,235,.25)}
+.bp:hover{color:#fff;border-color:transparent}
+.bs{background:linear-gradient(135deg,var(--ok) 0%,#22c55e 100%);color:#fff;border-color:transparent}
+.bs:hover{color:#fff;border-color:transparent}
+.bd{background:linear-gradient(135deg,var(--er) 0%,#ef4444 100%);color:#fff;border-color:transparent}
+.bd:hover{color:#fff;border-color:transparent;background:linear-gradient(135deg,#b91c1c 0%,var(--er) 100%)}
+.bdge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:12px;font-size:10px;font-weight:500}
+#ar{margin-top:2px;padding:8px 10px;background:var(--ok-bg);border:1px solid var(--ok-bd);border-radius:var(--r-sm)}
+#aid{font-weight:600;font-size:12px;font-family:"SF Mono",Consolas,monospace}
+.mgl,.rgl{display:flex;flex-wrap:wrap;gap:4px;max-height:100px;overflow-y:auto;padding:6px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2);scrollbar-width:thin}
+.mgi,.rgi{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:4px;font-size:11px;cursor:pointer;background:var(--surface);border:1px solid var(--border);transition:all .15s;user-select:none}
+.mgi:has(input:checked),.rgi:has(input:checked){background:var(--pl);border-color:#93c5fd;color:var(--pr)}
+.mgi input,.rgi input{accent-color:var(--pr);width:11px;height:11px;cursor:pointer;margin:0}
+.mg-bar,.rg-bar{display:flex;align-items:center;gap:8px;margin-top:5px;font-size:11px;color:var(--t2)}
+.mg-bar label,.rg-bar label{cursor:pointer;display:flex;align-items:center;gap:4px;font-weight:400}
+.preview-bar{padding:7px 10px;background:var(--pl);border:1px solid #bfdbfe;border-radius:var(--r-sm);font-size:11px;color:var(--pr);margin-top:8px}
+.preview-bar strong{font-size:13px}
+.tw{max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r-sm);scrollbar-width:thin}
+table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t2);white-space:nowrap;position:sticky;top:0;z-index:1}
+.cc{width:28px;text-align:center}.cc input[type=checkbox]{width:12px;height:12px;accent-color:var(--pr);cursor:pointer;margin:0}
+.tu{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;font-family:"SF Mono",Consolas,monospace;font-size:10px;color:var(--t2)}
+.tgb{display:inline-flex;gap:3px;flex-wrap:wrap;max-width:140px}
+.tgb>span{display:inline-flex;padding:1px 6px;border-radius:10px;font-size:10px;background:var(--pl);color:var(--pr);border:1px solid #bfdbfe;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tgb>span::before{content:attr(data-label)}
+.emp{padding:18px 14px;text-align:center;color:var(--t2);font-size:11px;display:flex;flex-direction:column;align-items:center;gap:5px}
+.st{display:flex;align-items:flex-start;gap:6px;padding:7px 10px;border-radius:var(--r-sm);font-size:11px;margin-top:8px;font-weight:500}
+.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--pr);border-radius:50%;animation:spin .7s linear infinite}
+.mt8{margin-top:8px}.tc2{color:var(--t2)}
+.tr input{height:28px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;outline:none;flex:1}
+.rm{background:none;border:none;color:var(--er);cursor:pointer;padding:4px;font-size:13px}
+.test-box{padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm)}
+.footer{text-align:center;color:var(--t3);font-size:10px;padding:4px 0 0}
+</style>
+</head>
+<body>
+<header class="h">
+  <div class="h-l">
+    <div class="h-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+        <path d="M7 7h.01"/>
+      </svg>
+    </div>
+    <div class="h-text">
+      <h1>aws bedrock 标签管理</h1>
+      <div class="s">inference profile 批量标签操作工具</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <a href="/" class="act">profile 标签</a>
+    <a href="/model-tags">创建配置</a>
+    <a href="/delete-profiles">删除配置</a>
+    <a href="/test-profile">测试模型</a>
+  </nav>
+</header>
+
+<div class="b">
+  <div class="card">
+    <div class="sht">
+      <span class="sht-step">1</span>
+      aws 凭证
+      <span class="sht-sub">验证账号后方可操作</span>
+    </div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:2">
+          <label>access key id</label>
+          <input id="ak" type="text" placeholder="akiaiosfodnn7example" autocomplete="off">
+        </div>
+        <div class="fg" style="flex:2">
+          <label>secret access key</label>
+          <input id="sk" type="password" placeholder="wjalrxutnfemi/k7mdeng/bpxrficyexamplekey" autocomplete="off">
+        </div>
+        <div class="fg" style="flex:0 0 auto">
+          <label>&nbsp;</label>
+          <button class="btn bp" id="btnv" onclick="vrf()">验证</button>
+        </div>
+      </div>
+      <div class="fr" id="ar" style="display:none">
+        <div class="fg" style="flex:1">
+          <label>账号 id</label>
+          <div class="fx">
+            <span id="aid"></span>
+            <span class="bdge bg-ok">✓ 已验证</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sht">
+      <span class="sht-step">2</span>
+      选择配置
+      <span class="sht-sub">支持多区域同时加载与打标签</span>
+    </div>
+    <div class="sb">
+      <div class="fr" style="align-items:flex-start">
+        <div class="fg" style="flex:1">
+          <label>区域 <span id="rc" style="font-weight:400;color:var(--t3)">（已选 0）</span></label>
+          <div class="rgl" id="rgl"></div>
+          <div class="rg-bar">
+            <label><input type="checkbox" id="saR" onchange="taR()"> 全选区域</label>
+          </div>
+        </div>
+        <div class="fg" style="flex:0 0 auto">
+          <label>&nbsp;</label>
+          <button class="btn bp" id="btnld" onclick="loadP()">加载</button>
+        </div>
+      </div>
+      <div id="pw" style="display:none">
+        <div class="prof-bar fb mb8">
+          <span class="tc2" id="pc">0 个配置</span>
+          <label><input type="checkbox" id="sa" onchange="ta()"> 全选</label>
+        </div>
+        <div class="tw">
+          <table>
+            <thead><tr>
+              <th class="cc"></th>
+              <th>区域</th>
+              <th>名称</th>
+              <th>状态</th>
+              <th>标签</th>
+              <th>arn</th>
+            </tr></thead>
+            <tbody id="pt"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="pe" class="emp">未找到配置</div>
+      <div id="pl" class="emp" style="display:none"><span class="sp"></span> 加载中...</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sht">
+      <span class="sht-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+          <path d="M7 7h.01"/>
+        </svg>
+      </span>
+      <span class="sht-step">3</span>
+      批量打标签
+      <span class="sht-sub">追加模式，不会覆盖已有标签</span>
+    </div>
+    <div class="sb">
+      <div class="tm" id="tagMode">
+        <button class="act" data-mode="add" onclick="setTagMode('add')">添加标签</button>
+        <button data-mode="remove" onclick="setTagMode('remove')">删除标签</button>
+      </div>
+      <div class="sel-bar">
+        <span class="tc2">已选择 <strong id="sc">0</strong> 个配置</span>
+        <button class="btn bsm" id="btnRefTags" onclick="loadSelectedTags()">刷新标签</button>
+        <span class="tc2">或粘贴 arn 手动载入</span>
+      </div>
+      <div id="existingTagsPanel">
+        <div class="fg" style="margin-bottom:4px"><label>已有标签</label></div>
+        <div class="tgl" id="existingTagsList"><div class="emp">请先选择配置</div></div>
+        <p class="hint" id="existingTagsHint" style="display:none">勾选要删除的标签，然后点击删除按钮</p>
+      </div>
+      <div class="fr">
+        <div class="fg" style="flex:1">
+          <label>arn 列表</label>
+          <textarea id="manualArns" placeholder="每行一个 arn"></textarea>
+          <button class="btn bsm" onclick="loadManualArns()" style="align-self:flex-start;margin-top:3px">载入 arn</button>
+        </div>
+      </div>
+      <div id="tagAddArea">
+        <div class="fg" style="margin-bottom:8px"><label>标签键值对</label></div>
+        <div class="tg" id="tgg">
+          <div class="tr">
+            <input class="tk" placeholder="key">
+            <input class="tv" placeholder="value">
+            <button class="btn bsm" onclick="addTg()">+ 添加行</button>
+          </div>
+        </div>
+      </div>
+      <div class="fr mt8">
+        <button class="btn bs" id="btntg" onclick="tg()">应用</button>
+        <button class="btn" onclick="clr()">清空</button>
+      </div>
+      <div id="tgr"></div>
+    </div>
+  </div>
+  <div class="footer">aws bedrock inference profile tag manager</div>
+</div>
+<script src="/static/persist.js"></script>
+<script>
+var B="",sp=[],ap=[],_tagMode="add",_manualArns=[],_tagMap=null,_persistReady=false;
+function $(i){return document.getElementById(i)}
+function regionFromArn(arn){var m=(arn||"").match(/^arn:aws:bedrock:([^:]+):/);return m?m[1]:null}
+function allSelArns(){return sp.concat(_manualArns)}
+function groupByRegion(items){var g={};items.forEach(function(it){var r=it.region||regionFromArn(it.arn)||"us-east-1";if(!g[r])g[r]=[];g[r].push(it.arn)});return g}
+function getSelRegions(){var rs=[];document.querySelectorAll("#rgl input[type=checkbox]:checked").forEach(function(cb){rs.push(cb.value)});return rs}
+function upRC(){var n=document.querySelectorAll("#rgl input:checked").length,all=document.querySelectorAll("#rgl input").length;$("rc").textContent="（已选 "+n+"）";$("saR").checked=n===all&&all>0;if(_persistReady)BedrockPersist.save()}
+function taR(){var c=$("saR").checked;document.querySelectorAll("#rgl input").forEach(function(cb){cb.checked=c});upRC()}
+document.addEventListener("DOMContentLoaded",async function(){var d=BedrockPersist.init();await lR();BedrockPersist.afterListsReady(d);_persistReady=true});
+async function lR(){try{var r=await fetch(B+"/api/regions"),d=await r.json();if(d.ok){var box=$("rgl");d.regions.forEach(function(reg){var lbl=document.createElement("label");lbl.className="rgi";lbl.innerHTML='<input type="checkbox" value="'+es(reg)+'" onchange="upRC()"> '+es(reg);box.appendChild(lbl)});upRC()}}catch(e){}}
+
+async function vrf(){var ak=$("ak").value.trim(),sk=$("sk").value.trim();if(!ak||!sk){sR("tgr","请填写 AK/SK","wa");return}var btn=$("btnv");btn.disabled=true;btn.textContent="验证中...";try{var r=await fetch(B+"/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk})}),d=await r.json();if(d.ok){$("aid").textContent=d.account_id;$("ar").style.display="flex";BedrockPersist.onVerified(d.account_id);sR("tgr","已验证，账号 ID："+d.account_id,"ok")}else sR("tgr",d.error,"er")}finally{btn.disabled=false;btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> 验证'}}
+
+async function loadP(){var ak=$("ak").value.trim(),sk=$("sk").value.trim(),regions=getSelRegions();if(!ak||!sk){sR("tgr","请先填写凭证","wa");return}if(!regions.length){sR("tgr","请至少选择一个区域","wa");return}$("pw").style.display="none";$("pe").style.display="none";$("pl").style.display="flex";$("btnld").disabled=true;var allProfiles=[],errors=[];try{for(var ri=0;ri<regions.length;ri++){var region=regions[ri];$("pl").innerHTML='<span class="sp"></span> 加载中 ('+(ri+1)+'/'+regions.length+') '+es(region)+'...';try{var r=await fetch(B+"/api/list_profiles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk,region:region})}),d=await r.json();if(d.ok){(d.profiles||[]).forEach(function(p){p.region=region;allProfiles.push(p)})}else errors.push(region+": "+d.error)}catch(e){errors.push(region+": "+e.message)}}$("pl").style.display="none";ap=allProfiles;if(allProfiles.length){rP(allProfiles);if(errors.length)sR("tgr","已加载 "+allProfiles.length+" 个配置，部分区域失败："+errors.join("; "),"wa")}else{$("pe").style.display="flex";$("pe").textContent=errors.length?errors.join("; "):"未找到配置";if(errors.length)sR("tgr",errors.join("; "),"er")}}catch(e){$("pl").style.display="none";$("pe").style.display="flex";$("pe").textContent="加载失败";sR("tgr","错误："+e.message,"er")}finally{$("btnld").disabled=false}}
+
+function rP(ps){var w=$("pw"),tb=$("pt"),e=$("pe");if(!ps||ps.length===0){w.style.display="none";e.style.display="flex";e.textContent="未找到配置";return}w.style.display="block";e.style.display="none";var rc={};ps.forEach(function(p){rc[p.region||"?"]=1});$("pc").textContent=ps.length+" 个配置 · "+Object.keys(rc).length+" 个区域";tb.innerHTML="";ps.forEach(function(p,i){var tr=document.createElement("tr");var tgs=p.tags||[];var tH="<div class=tgb>";if(tgs.length===0){tH+='<span style="color:var(--t2);font-size:11px;background:none;border:none;padding:0">—</span>'}else{tgs.forEach(function(t){tH+='<span data-label="'+es(t.key||"")+'='+es(t.value||"")+'" title="'+es(t.key)+'='+es(t.value)+'"></span>'})}tH+="</div>";tr.innerHTML='<td class=cc><input type=checkbox data-i="'+i+'" onchange="us()"></td><td><span class="bdge bg-rg">'+es(p.region||"")+'</span></td><td>'+es(p.name)+'</td><td><span class="bdge bg-ok">'+es((p.status||"").toLowerCase())+'</span></td><td>'+tH+'</td><td><span class=tu title="'+es(p.arn)+'">'+es(p.arn)+'</span></td>';tb.appendChild(tr)});$("sa").checked=false;us()}
+function ta(){var c=$("sa").checked;document.querySelectorAll("#pt input[type=checkbox]").forEach(function(cb){cb.checked=c});us()}
+function us(){sp=[];document.querySelectorAll("#pt input[type=checkbox]:checked").forEach(function(cb){var p=ap[parseInt(cb.dataset.i)];if(p)sp.push({arn:p.arn,region:p.region})});$("sc").textContent=allSelArns().length;if(allSelArns().length){loadSelectedTags()}else{_tagMap=null;$("existingTagsList").innerHTML='<div class="emp">请先选择配置</div>'}updateTagBtnText()}
+function updateTagBtnText(){var btn=$("btntg");if(_tagMode==="remove"&&$("existingTagsList").querySelectorAll("input[type=checkbox]:checked").length>0){btn.textContent="删除（"+$("existingTagsList").querySelectorAll("input[type=checkbox]:checked").length+"）"}else if(_tagMode==="add"){var k=document.querySelectorAll("#tgg .tr input.tk");var c=0;for(var i=0;i<k.length;i++){if(k[i].value.trim())c++}btn.textContent=c>0?"应用（"+c+"）":"应用"}else{btn.textContent="应用"}}
+
+function loadManualArns(){var v=$("manualArns").value.trim();if(!v){sR("tgr","请输入 ARN","wa");return}_manualArns=v.split("\n").map(function(s){var arn=s.trim();return arn?{arn:arn,region:regionFromArn(arn)||"us-east-1"}:null}).filter(Boolean);if(_manualArns.length===0){sR("tgr","未找到有效 ARN","wa");return}$("sc").textContent=allSelArns().length;sR("tgr","已载入 "+_manualArns.length+" 个 ARN","ok");loadSelectedTags()}
+
+function setTagMode(m){_tagMode=m;document.querySelectorAll("#tagMode button").forEach(function(b){b.classList.toggle("act",b.dataset.mode===m)});$("tagAddArea").style.display=m==="add"?"block":"none";$("existingTagsHint").style.display=m==="remove"?"block":"none";if(_tagMap)renderExistingTags(_tagMap);else if(allSelArns().length)loadSelectedTags();updateTagBtnText()}
+
+async function loadSelectedTags(){var ak=$("ak").value.trim(),sk=$("sk").value.trim(),items=allSelArns();if(!items.length){_tagMap=null;$("existingTagsList").innerHTML='<div class="emp">未选择配置</div>';return}if(!ak||!sk){$("existingTagsList").innerHTML='<div class="emp">请先填写凭证</div>';return}$("existingTagsList").innerHTML='<div class="emp"><span class="sp"></span> 加载标签中...</div>';var tagMap={},total=items.length;for(var i=0;i<items.length;i++){var it=items[i],arn=it.arn,region=it.region||regionFromArn(arn)||"us-east-1";try{var r=await fetch(B+"/api/get_profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk,region:region,inference_profile_arn:arn})});var d=await r.json();if(d.ok&&d.tags){d.tags.forEach(function(t){var key=t.key||"";if(key){if(!tagMap[key])tagMap[key]={count:0,label:key+"="+(t.value||"")};tagMap[key].count++}})}}catch(e){}}renderExistingTags(tagMap,total)}
+function renderExistingTags(tagMap,total){_tagMap=tagMap;total=total||allSelArns().length;var keys=Object.keys(tagMap),list=$("existingTagsList");if(!keys.length){list.innerHTML='<div class="tgi"><span class="tc2">所选配置暂无标签</span></div>';updateTagBtnText();return}if(_tagMode==="add"){var h='<div class="tgb" style="max-width:none;padding:2px 4px">';keys.sort().forEach(function(key){var tm=tagMap[key],suffix=tm.count<total?" ("+tm.count+"/"+total+")":"";h+='<span data-label="'+es(tm.label+suffix)+'" title="'+es(tm.label+(suffix?" — 仅部分配置有此标签":""))+'"></span>'});h+="</div>";list.innerHTML=h}else{var h2="";keys.sort().forEach(function(key){var tm=tagMap[key],suffix=tm.count<total?" ("+tm.count+"/"+total+")":"";h2+='<div class="tgi"><input type="checkbox" value="'+es(key)+'" onchange="updateTagBtnText()"><span class="tkv">'+es(tm.label+suffix)+'</span></div>'});list.innerHTML=h2}updateTagBtnText()}
+
+function addTg(){var g=$("tgg"),r=document.createElement("div");r.className="tr";r.innerHTML='<input class="tk" placeholder="key"><input class="tv" placeholder="value"><button class="btn bsm" onclick="addTg()">+</button><button class="rm" onclick="this.parentElement.remove();updateTagBtnText();BedrockPersist.save()" title="删除行">✕</button>';g.appendChild(r);updateTagBtnText();BedrockPersist.save()}
+function clr(){_manualArns=[];_tagMap=null;document.querySelectorAll("#tgg .tr").forEach(function(r,i){if(i>0)r.remove()});var f=document.querySelector("#tgg .tr");if(f){f.querySelector(".tk").value="";f.querySelector(".tv").value=""} $("existingTagsList").innerHTML='<div class="emp">请先选择配置</div>';$("manualArns").value="";$("tgr").innerHTML="";us()}
+function colT(ct){var t={};document.querySelectorAll("#"+ct+" .tr").forEach(function(r){var k=r.querySelector(".tk").value.trim(),v=r.querySelector(".tv").value.trim();if(k)t[k]=v||""});return t}
+
+async function tg(){var ak=$("ak").value.trim(),sk=$("sk").value.trim();if(!ak||!sk){sR("tgr","请先填写凭证","wa");return}var items=allSelArns();if(!items.length){sR("tgr","请选择配置或输入 ARN","wa");return}var grouped=groupByRegion(items),regions=Object.keys(grouped),btn=$("btntg");btn.disabled=true;if(_tagMode==="add"){var tags=colT("tgg");if(!Object.keys(tags).length){sR("tgr","请先添加标签","wa");btn.disabled=false;return}btn.textContent="应用中...";var okCnt=0,failCnt=0,details=[],ri=0;try{for(;ri<regions.length;ri++){var region=regions[ri],arns=grouped[region];btn.textContent="应用中 ("+(ri+1)+"/"+regions.length+")...";try{var r=await fetch(B+"/api/tag_profiles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk,region:region,resource_arns:arns,tags:tags})});var d=await r.json();if(d.ok){okCnt+=(d.success||arns.length);details.push(region+": "+arns.length+" 个")}else{failCnt+=arns.length;details.push(region+": 失败 — "+d.error)}}catch(e){failCnt+=arns.length;details.push(region+": "+e.message)}}var msg="✓ 完成 — 已追加 "+Object.keys(tags).length+" 个标签，共 "+items.length+" 个配置（"+regions.length+" 个区域）";if(failCnt)msg+="，"+failCnt+" 个失败";$("tgr").innerHTML='<div class="st '+(failCnt?"wa":"ok")+'">'+es(msg)+'<br><span style="font-size:10px;font-weight:400">'+es(details.join("；"))+'</span></div>';if(!failCnt)loadSelectedTags()}catch(e){sR("tgr","错误："+e.message,"er")}finally{btn.disabled=false;updateTagBtnText()}}else{var rmKeys=[];document.querySelectorAll("#existingTagsList input[type=checkbox]:checked").forEach(function(cb){rmKeys.push(cb.value)});if(!rmKeys.length){sR("tgr","请选择要删除的标签","wa");btn.disabled=false;return}btn.textContent="删除中...";var okCnt2=0,failCnt2=0,details2=[],rj=0;try{for(;rj<regions.length;rj++){var region2=regions[rj],arns2=grouped[region2];btn.textContent="删除中 ("+(rj+1)+"/"+regions.length+")...";try{var r2=await fetch(B+"/api/tag_profiles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk,region:region2,resource_arns:arns2,remove_tag_keys:rmKeys})});var d2=await r2.json();if(d2.ok){okCnt2+=(d2.success||arns2.length);details2.push(region2+": "+arns2.length+" 个")}else{failCnt2+=arns2.length;details2.push(region2+": 失败 — "+d2.error)}}catch(e){failCnt2+=arns2.length;details2.push(region2+": "+e.message)}}var msg2="✓ 完成 — 已删除 "+rmKeys.length+" 个标签，共 "+items.length+" 个配置（"+regions.length+" 个区域）";if(failCnt2)msg2+="，"+failCnt2+" 个失败";$("tgr").innerHTML='<div class="st '+(failCnt2?"wa":"ok")+'">'+es(msg2)+'<br><span style="font-size:10px;font-weight:400">'+es(details2.join("；"))+'</span></div>';if(!failCnt2)loadSelectedTags()}catch(e){sR("tgr","错误："+e.message,"er")}finally{btn.disabled=false;updateTagBtnText()}}}
+
+function sR(id,msg,type){var el=$(id);if(el)el.innerHTML='<div class="st '+type+'">'+es(msg)+'</div>'}
+function es(s){if(!s)return"";var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+
+</script>
+</body>
+</html>

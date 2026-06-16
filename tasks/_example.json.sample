@@ -1,0 +1,11 @@
+{
+    "action": "create",
+    "ak": "你的AK",
+    "sk": "你的SK",
+    "link_id": "172229444780",
+    "models": "4.5, 4.6, 4.7, 4.8, fable 5",
+    "regions": "美东、美西",
+    "tag_key": "map-migrated",
+    "tag_value": "wjc-test",
+    "test_invoke": true
+}

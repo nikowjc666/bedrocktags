@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>测试模型 · aws bedrock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef2f7;--bg2:#e4eaf3;--surface:#fff;--surface2:#f8fafc;
+  --border:#e2e8f0;--border2:#cbd5e1;--text:#0f172a;--t2:#64748b;--t3:#94a3b8;
+  --pr:#2563eb;--ph:#1d4ed8;--pl:#eff6ff;
+  --ok:#16a34a;--ok-bg:#f0fdf4;--ok-bd:#bbf7d0;
+  --er:#dc2626;--er-bg:#fef2f2;--er-bd:#fecaca;
+  --wa:#d97706;--wa-bg:#fffbeb;--wa-bd:#fde68a;
+  --aws:#ff9900;--aws-dark:#232f3e;--r:7px;--r-sm:5px;
+  --shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde6f0 100%);background-attachment:fixed;color:var(--text);font-size:12px;line-height:1.45;min-height:100vh;text-transform:lowercase}
+input,textarea,select{font-family:inherit;text-transform:none}
+
+.h{background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 60%,#1e3a5f 100%);padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;height:44px;box-shadow:0 1px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
+.h-l{display:flex;align-items:center;gap:10px}
+.nav{display:flex;gap:4px}
+.nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:11px;padding:4px 10px;border-radius:4px;transition:all .15s}
+.nav a:hover,.nav a.act{color:#fff;background:rgba(255,255,255,.12)}
+.h-logo{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--aws) 0%,#ffb84d 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 6px rgba(255,153,0,.3);flex-shrink:0}
+.h-logo svg{color:#232f3e;width:16px;height:16px}
+.h-text h1{font-size:14px;font-weight:600;color:#fff}
+.h-text .s{color:rgba(255,255,255,.5);font-size:11px}
+
+.b{max-width:880px;margin:16px auto;padding:0 14px 28px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;animation:fadeUp .4s ease both}
+.card:nth-child(1){animation-delay:.05s}.card:nth-child(2){animation-delay:.12s}.card:nth-child(3){animation-delay:.19s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.sht{display:flex;align-items:center;gap:7px;padding:8px 12px;font-size:12px;font-weight:600;background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text)}
+.sht-step{width:18px;height:18px;border-radius:50%;background:var(--pr);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sht-sub{font-weight:400;color:var(--t2);font-size:11px;margin-left:auto}
+.sb{padding:12px}
+
+.fr{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px}
+.fr:last-child{margin-bottom:0}
+.fg{display:flex;flex-direction:column;gap:3px;min-width:140px;flex:1}
+.fg label{font-size:11px;color:var(--t2);font-weight:500}
+.fg input,.fg select{height:30px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;outline:none;background:var(--surface);color:var(--text);transition:border-color .15s,box-shadow .15s}
+.fg input::placeholder{color:var(--t3)}
+.fg input:focus,.fg select:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.fg textarea{width:600px;height:200px;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:11px;outline:none;resize:vertical;font-family:"SF Mono","Cascadia Code",Consolas,monospace;background:var(--surface2);color:var(--text);transition:border-color .15s,box-shadow .15s;line-height:1.5}
+.fg textarea:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:30px;padding:0 11px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);white-space:nowrap;transition:all .15s ease}
+.btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.bp{background:linear-gradient(135deg,var(--pr) 0%,#3b82f6 100%);color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(37,99,235,.3)}
+.bp:hover{background:linear-gradient(135deg,var(--ph) 0%,var(--pr) 100%);color:#fff;border-color:transparent}
+.bsm{height:26px;padding:0 9px;font-size:11px}
+.btn svg{width:12px;height:12px}
+
+.bdge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:12px;font-size:10px;font-weight:500}
+.bg-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+.bg-er{background:var(--er-bg);color:var(--er);border:1px solid var(--er-bd)}
+.bg-wa{background:var(--wa-bg);color:var(--wa);border:1px solid var(--wa-bd)}
+.bg-rg{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-family:"SF Mono",Consolas,monospace;font-size:10px}
+
+#ar{margin-top:2px;padding:8px 10px;background:var(--ok-bg);border:1px solid var(--ok-bd);border-radius:var(--r-sm)}
+#aid{font-weight:600;font-size:12px;color:var(--text);font-family:"SF Mono",Consolas,monospace}
+.fx{display:flex;align-items:center;gap:8px}
+.fb{display:flex;align-items:center;justify-content:space-between}
+.mt8{margin-top:8px}.mb8{margin-bottom:8px}.tc2{color:var(--t2)}
+.hint{font-size:10px;color:var(--t3);margin-top:3px}
+
+.st{display:flex;align-items:flex-start;gap:6px;padding:7px 10px;border-radius:var(--r-sm);font-size:11px;margin-top:8px;font-weight:500}
+.st.er{background:var(--er-bg);border:1px solid var(--er-bd);color:var(--er)}
+.st.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
+.st.wa{background:var(--wa-bg);border:1px solid var(--wa-bd);color:var(--wa)}
+.st.info{background:var(--pl);border:1px solid #bfdbfe;color:var(--pr)}
+.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--pr);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* 批量测试表格 */
+.tw{max-height:600px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r-sm);scrollbar-width:thin;scrollbar-color:var(--border2) transparent}
+.tw::-webkit-scrollbar{width:4px}
+.tw::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+table{width:100%;border-collapse:collapse;font-size:11px}
+table th,table td{text-align:left;padding:5px 9px;border-bottom:1px solid var(--border)}
+table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t2);white-space:nowrap;position:sticky;top:0;z-index:1}
+table tbody tr:hover td{background:var(--pl)}
+table tbody tr:last-child td{border-bottom:none}
+.tu{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;font-family:"SF Mono",Consolas,monospace;font-size:10px;color:var(--t2)}
+
+/* 单个测试结果卡片 */
+.result-card{
+  margin-top:10px;padding:12px 14px;
+  border:1px solid var(--border);border-radius:var(--r-sm);
+  background:var(--surface2);
+  font-size:11px;line-height:1.7;
+}
+.result-card .label{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.result-card .val{font-family:"SF Mono",Consolas,monospace;color:var(--text);word-break:break-all}
+.result-card .row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.result-card .row:last-child{margin-bottom:0}
+.result-card .col{flex:1;min-width:120px}
+.invoke-box{margin-top:8px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:4px}
+.invoke-box pre{font-size:11px;font-family:"SF Mono",Consolas,monospace;color:var(--text);white-space:pre-wrap;word-break:break-all;margin:0}
+
+/* 复制按钮 */
+.copy-btn{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;height:20px;border:1px solid var(--border);border-radius:3px;font-size:10px;cursor:pointer;background:var(--surface);color:var(--t2);transition:all .15s;white-space:nowrap;vertical-align:middle;margin-left:4px}
+.copy-btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.copy-btn.copied{border-color:var(--ok);color:var(--ok);background:var(--ok-bg)}
+.copy-btn svg{width:10px;height:10px;flex-shrink:0}
+
+/* 批量输入区 */
+.arn-list-wrap{position:relative}
+.arn-count{position:absolute;right:8px;top:6px;font-size:10px;color:var(--t3);pointer-events:none}
+
+/* 进度 */
+.prog-wrap{margin-top:8px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);display:none}
+.prog-wrap.show{display:block}
+.prog-label{font-size:11px;color:var(--t2);margin-bottom:5px;display:flex;justify-content:space-between}
+.prog-label span:last-child{font-weight:600;color:var(--pr)}
+.prog-bar-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.prog-bar-fill{height:100%;background:linear-gradient(90deg,var(--pr),#3b82f6);border-radius:3px;width:0%;transition:width .3s ease}
+.prog-cur{font-size:10px;color:var(--t3);margin-top:4px}
+
+.footer{text-align:center;color:var(--t3);font-size:10px;padding:4px 0 0}
+</style>
+</head>
+<body>
+<header class="h">
+  <div class="h-l">
+    <div class="h-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+        <polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+    </div>
+    <div class="h-text">
+      <h1>测试模型</h1>
+      <div class="s">验证 inference profile 是否可用 · 支持单个或批量测试</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <a href="/">profile 标签</a>
+    <a href="/model-tags">创建配置</a>
+    <a href="/delete-profiles">删除配置</a>
+    <a href="/test-profile" class="act">测试模型</a>
+  </nav>
+</header>
+
+<div class="b">
+
+  <!-- 步骤1：凭证 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">1</span> aws 凭证<span class="sht-sub">验证后方可测试</span></div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:2"><label>access key id</label><input id="ak" type="text" placeholder="akia..." autocomplete="off"></div>
+        <div class="fg" style="flex:2"><label>secret access key</label><input id="sk" type="password" placeholder="..." autocomplete="off"></div>
+        <div class="fg" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn bp" id="btnv" onclick="vrf()">验证</button></div>
+      </div>
+      <div class="fr" id="ar" style="display:none">
+        <div class="fg" style="flex:1"><label>账号 id</label><div class="fx"><span id="aid"></span><span class="bdge bg-ok">✓ 已验证</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 步骤2：单个测试 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">2</span> 单个测试<span class="sht-sub">输入 arn 立即验证</span></div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="min-width:120px;flex:0 0 auto">
+          <label>区域</label>
+          <select id="testRegion"><option value="">-- 自动识别 --</option></select>
+        </div>
+        <div class="fg" style="flex:3">
+          <label>inference profile arn</label>
+          <input id="testArn" type="text" placeholder="arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/xxxx" oninput="autoRegion()">
+        </div>
+        <div class="fg" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn bp" id="btnTest" onclick="testOne()">测试</button></div>
+      </div>
+      <div class="fr" style="margin-bottom:0">
+        <label style="font-size:11px;color:var(--t2);cursor:pointer;display:flex;align-items:center;gap:5px">
+          <input type="checkbox" id="testInvoke" checked style="accent-color:var(--pr);width:12px;height:12px">
+          实际调用（发送 "hi" 验证推理是否正常）
+        </label>
+      </div>
+      <div id="singleResult"></div>
+    </div>
+  </div>
+
+  <!-- 步骤3：批量测试 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">3</span> 批量测试<span class="sht-sub">每行一个 arn，并发检测</span></div>
+    <div class="sb">
+      <div class="fr" style="align-items:flex-start">
+        <div class="fg" style="flex:1">
+          <label>arn 列表（每行一个）</label>
+          <div class="arn-list-wrap">
+            <textarea id="batchArns" placeholder="arn:aws:bedrock:us-east-1:...:application-inference-profile/xxx&#10;arn:aws:bedrock:eu-west-1:...:application-inference-profile/yyy" oninput="countArns()"></textarea>
+            <span class="arn-count" id="arnCount">0 条</span>
+          </div>
+        </div>
+      </div>
+      <div class="fr" style="align-items:center">
+        <label style="font-size:11px;color:var(--t2);cursor:pointer;display:flex;align-items:center;gap:5px">
+          <input type="checkbox" id="batchInvoke" checked style="accent-color:var(--pr);width:12px;height:12px">
+          实际调用验证
+        </label>
+        <button class="btn bp" id="btnBatch" onclick="testBatch()" style="margin-left:auto">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 4 12 14.01 9 11.01"/><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/></svg>
+          批量测试
+        </button>
+        <button class="btn bsm" onclick="clearBatch()">清空</button>
+      </div>
+      <!-- 进度条 -->
+      <div class="prog-wrap" id="batchProg">
+        <div class="prog-label"><span>测试进度</span><span id="batchPct">0%</span></div>
+        <div class="prog-bar-track"><div class="prog-bar-fill" id="batchFill"></div></div>
+        <div class="prog-cur" id="batchCur">等待开始...</div>
+      </div>
+      <div id="batchMsg"></div>
+      <!-- 批量结果表 -->
+      <div id="batchResultWrap" style="display:none;margin-top:10px">
+        <div class="fb mb8">
+          <span class="tc2" id="batchSummary">0 项</span>
+          <div style="display:flex;gap:6px">
+            <button class="btn bsm" onclick="filterBatch('all')" id="fAll" style="font-size:10px">全部</button>
+            <button class="btn bsm" onclick="filterBatch('ok')" id="fOk" style="font-size:10px">✓ 可用</button>
+            <button class="btn bsm" onclick="filterBatch('err')" id="fErr" style="font-size:10px">✗ 不可用</button>
+          </div>
+        </div>
+        <div class="tw">
+          <table>
+            <thead><tr><th>状态</th><th>区域</th><th>arn</th><th>profile 名称</th><th>调用</th><th>详情</th></tr></thead>
+            <tbody id="batchTb"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">测试模型 · aws bedrock inference profile</div>
+</div>
+<script src="/static/persist.js"></script>
+<script>
+var B="",_batchResults=[],_persistReady=false;
+function $(i){return document.getElementById(i)}
+function es(s){if(!s)return"";var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+function sR(id,msg,type){var el=$(id);if(el)el.innerHTML='<div class="st '+type+'" style="white-space:pre-line">'+es(msg)+'</div>'}
+function creds(){return{access_key:$("ak").value.trim(),secret_key:$("sk").value.trim()}}
+function regionFromArn(arn){var m=(arn||"").match(/^arn:aws:bedrock:([^:]+):/);return m?m[1]:null}
+
+// ── 初始化 ────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded",async function(){
+  var d=BedrockPersist.init();
+  await loadRegions();
+  BedrockPersist.afterListsReady(d);
+  _persistReady=true;
+  // URL 参数：?arn=xxx 直接预填
+  var params=new URLSearchParams(location.search);
+  var arn=params.get("arn");
+  if(arn){$("testArn").value=arn;autoRegion();testOne()}
+});
+
+async function loadRegions(){
+  try{
+    var r=await fetch(B+"/api/regions"),d=await r.json();
+    if(!d.ok)return;
+    var sel=$("testRegion");
+    d.regions.forEach(function(reg){
+      var o=document.createElement("option");o.value=reg;o.textContent=reg;sel.appendChild(o);
+    });
+  }catch(e){}
+}
+
+// ── 凭证验证 ─────────────────────────────────────────────────
+async function vrf(){
+  var c=creds();
+  if(!c.access_key||!c.secret_key){sR("singleResult","请填写 ak/sk","wa");return}
+  var btn=$("btnv");btn.disabled=true;btn.textContent="验证中...";
+  try{
+    var r=await fetch(B+"/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c)});
+    var d=await r.json();
+    if(d.ok){$("aid").textContent=d.account_id;$("ar").style.display="flex";BedrockPersist.onVerified(d.account_id)}
+    else sR("singleResult",d.error,"er");
+  }finally{btn.disabled=false;btn.textContent="验证"}
+}
+
+// ── 自动识别区域 ─────────────────────────────────────────────
+function autoRegion(){
+  var arn=$("testArn").value.trim();
+  var r=regionFromArn(arn);
+  if(r){
+    var sel=$("testRegion");
+    for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===r){sel.value=r;break}}
+  }
+}
+
+// ── 单个测试 ─────────────────────────────────────────────────
+async function testOne(){
+  var c=creds(),arn=$("testArn").value.trim(),invoke=$("testInvoke").checked;
+  var region=$("testRegion").value;
+  if(!c.access_key||!c.secret_key){sR("singleResult","请先填写凭证","wa");return}
+  if(!arn){sR("singleResult","请输入 arn","wa");return}
+  if(!region){region=regionFromArn(arn)||"";if(region)$("testRegion").value=region}
+  if(!region){sR("singleResult","无法识别区域，请手动选择","wa");return}
+  var btn=$("btnTest");btn.disabled=true;btn.textContent="测试中...";
+  $("singleResult").innerHTML='<div class="st info"><span class="sp"></span> 测试中...</div>';
+  try{
+    var r=await fetch(B+"/api/test_profile",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,region:region,inference_profile_arn:arn,invoke:invoke})});
+    var d=await r.json();
+    renderSingleResult(d,arn,region);
+  }catch(e){sR("singleResult","错误："+e.message,"er")}
+  finally{btn.disabled=false;btn.textContent="测试"}
+}
+
+function renderSingleResult(d,arn,region){
+  if(!d.ok&&!d.available){
+    sR("singleResult",d.error||"测试失败","er");return;
+  }
+  var status=d.available?"available":"unavailable";
+  var statusBadge=d.available
+    ?'<span class="bdge bg-ok">✓ 可用</span>'
+    :'<span class="bdge bg-er">✗ 不可用</span>';
+  var invokeHtml="";
+  if(d.invoke_ok===true){
+    invokeHtml='<div class="invoke-box"><div class="label">调用响应（前80字符）</div><pre>'+es(d.invoke_preview||"(空)")+'</pre></div>';
+  }else if(d.invoke_ok===false){
+    invokeHtml='<div class="invoke-box" style="border-color:var(--er-bd);background:var(--er-bg)"><div class="label" style="color:var(--er)">调用失败</div><pre style="color:var(--er)">'+es(d.invoke_error||"")+'</pre></div>';
+  }
+  $("singleResult").innerHTML=
+    '<div class="result-card">'+
+      '<div class="row">'+
+        '<div class="col"><div class="label">状态</div><div class="val">'+statusBadge+'</div></div>'+
+        '<div class="col"><div class="label">区域</div><div class="val"><span class="bdge bg-rg">'+es(region)+'</span></div></div>'+
+        '<div class="col"><div class="label">profile 状态</div><div class="val">'+es((d.status||"").toLowerCase())+'</div></div>'+
+      '</div>'+
+      '<div class="row">'+
+        '<div class="col"><div class="label">名称</div><div class="val">'+es(d.name||"—")+'</div></div>'+
+        '<div class="col" style="flex:2"><div class="label">profile id</div><div class="val">'+es(d.inferenceProfileId||"—")+
+          (d.inferenceProfileId?'<button class="copy-btn" onclick="copyText(this,\''+es(d.inferenceProfileId)+'\')" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制</button>':"")+
+        '</div></div>'+
+      '</div>'+
+      '<div class="row">'+
+        '<div class="col" style="flex:3"><div class="label">arn</div><div class="val">'+es(d.inferenceProfileArn||arn)+
+          '<button class="copy-btn" onclick="copyText(this,\''+es(d.inferenceProfileArn||arn)+'\')" title="复制 arn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制</button>'+
+        '</div></div>'+
+      '</div>'+
+      invokeHtml+
+    '</div>';
+}
+
+// ── ARN 列表计数 ─────────────────────────────────────────────
+function countArns(){
+  var v=$("batchArns").value;
+  var n=v.split("\n").filter(function(s){return s.trim().startsWith("arn:")}).length;
+  $("arnCount").textContent=n+" 条";
+  return n;
+}
+
+function clearBatch(){
+  $("batchArns").value="";$("arnCount").textContent="0 条";
+  $("batchResultWrap").style.display="none";$("batchMsg").innerHTML="";
+  $("batchProg").classList.remove("show");_batchResults=[];
+}
+
+// ── 批量测试（顺序逐个，推送实时结果） ───────────────────────
+async function testBatch(){
+  var c=creds();
+  if(!c.access_key||!c.secret_key){sR("batchMsg","请先填写凭证","wa");return}
+  var lines=$("batchArns").value.split("\n").map(function(s){return s.trim()}).filter(function(s){return s.startsWith("arn:")});
+  if(!lines.length){sR("batchMsg","请输入至少一个 arn","wa");return}
+  var invoke=$("batchInvoke").checked;
+  var btn=$("btnBatch");btn.disabled=true;
+  _batchResults=[];
+  $("batchResultWrap").style.display="block";
+  $("batchTb").innerHTML="";
+  $("batchSummary").textContent="测试中...";
+  $("batchMsg").innerHTML="";
+  var prog=$("batchProg");prog.classList.add("show");
+  $("batchFill").style.width="0%";$("batchPct").textContent="0%";
+  $("batchCur").textContent="准备中...";
+  var total=lines.length,done=0,okCnt=0;
+  for(var i=0;i<lines.length;i++){
+    var arn=lines[i];
+    var region=regionFromArn(arn)||"";
+    $("batchCur").textContent="（"+(done+1)+"/"+total+"）"+arn.slice(0,50)+(arn.length>50?"...":"");
+    var result={arn:arn,region:region,ok:false,available:false,status:"",name:"",invoke_ok:null,invoke_error:"",error:""};
+    if(!region){result.error="无法识别区域";_batchResults.push(result);done++;_appendBatchRow(result,_batchResults.length-1);_updateBatchProg(done,total,okCnt);continue}
+    try{
+      var r=await fetch(B+"/api/test_profile",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,region:region,inference_profile_arn:arn,invoke:invoke})});
+      var d=await r.json();
+      result.ok=d.ok!==false;
+      result.available=!!d.available;
+      result.status=(d.status||"").toLowerCase();
+      result.name=d.name||"";
+      result.inferenceProfileId=d.inferenceProfileId||"";
+      result.invoke_ok=d.invoke_ok;
+      result.invoke_error=d.invoke_error||"";
+      result.error=d.error||"";
+      if(result.available)okCnt++;
+    }catch(e){result.error=e.message}
+    _batchResults.push(result);done++;
+    _appendBatchRow(result,_batchResults.length-1);
+    _updateBatchProg(done,total,okCnt);
+  }
+  $("batchSummary").textContent="共 "+total+" 项，"+okCnt+" 可用，"+(total-okCnt)+" 不可用";
+  sR("batchMsg","完成："+okCnt+"/"+total+" 可用",okCnt===total?"ok":okCnt>0?"wa":"er");
+  setTimeout(function(){prog.classList.remove("show")},2000);
+  btn.disabled=false;
+}
+
+function _updateBatchProg(done,total,okCnt){
+  var pct=Math.round(done/total*100);
+  $("batchFill").style.width=pct+"%";$("batchPct").textContent=pct+"%";
+  $("batchSummary").textContent=done+"/"+total+" 已测，"+okCnt+" 可用";
+}
+
+function _appendBatchRow(p,i){
+  var tb=$("batchTb");
+  var statusBadge=p.available
+    ?'<span class="bdge bg-ok">✓ 可用</span>'
+    :'<span class="bdge bg-er">✗ 不可用</span>';
+  var invokeCell="—";
+  if(p.invoke_ok===true) invokeCell='<span class="bdge bg-ok">成功</span>';
+  else if(p.invoke_ok===false) invokeCell='<span class="bdge bg-er">失败</span>';
+  var detail=p.error||p.invoke_error||p.status||"";
+  var arnShort='<span class="tu" title="'+es(p.arn)+'">'+es(p.arn)+'</span>'+
+    '<button class="copy-btn" onclick="copyText(this,\''+es(p.arn)+'\')" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>';
+  var tr=document.createElement("tr");
+  tr.dataset.avail=p.available?"ok":"err";
+  tr.innerHTML=
+    '<td>'+statusBadge+'</td>'+
+    '<td><span class="bdge bg-rg">'+es(p.region||"—")+'</span></td>'+
+    '<td>'+arnShort+'</td>'+
+    '<td>'+es(p.name||"—")+'</td>'+
+    '<td>'+invokeCell+'</td>'+
+    '<td style="color:var(--t2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+es(detail)+'">'+es(detail)+'</td>';
+  tb.appendChild(tr);
+}
+
+// ── 筛选批量结果 ─────────────────────────────────────────────
+function filterBatch(type){
+  document.querySelectorAll("#batchTb tr").forEach(function(tr){
+    if(type==="all") tr.style.display="";
+    else if(type==="ok") tr.style.display=tr.dataset.avail==="ok"?"":"none";
+    else tr.style.display=tr.dataset.avail==="err"?"":"none";
+  });
+  ["fAll","fOk","fErr"].forEach(function(id){$( id).classList.remove("bp")});
+  var map={all:"fAll",ok:"fOk",err:"fErr"};
+  $(map[type]).classList.add("bp");
+}
+
+// ── 复制工具 ─────────────────────────────────────────────────
+function copyText(btn,text){
+  if(!text)return;
+  navigator.clipboard.writeText(text).then(function(){
+    btn.classList.add("copied");btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>已复制';
+    setTimeout(function(){btn.classList.remove("copied");btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制'},2000);
+  }).catch(function(){
+    var ta=document.createElement("textarea");ta.value=text;ta.style.position="fixed";ta.style.opacity="0";
+    document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);
+    btn.classList.add("copied");btn.textContent="已复制";
+    setTimeout(function(){btn.classList.remove("copied");btn.textContent="复制"},2000);
+  });
+}
+</script>
+</body>
+</html>

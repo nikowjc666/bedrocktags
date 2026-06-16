@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>创建配置 · aws bedrock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef2f7;
+  --bg2:#e4eaf3;
+  --surface:#fff;
+  --surface2:#f8fafc;
+  --border:#e2e8f0;
+  --border2:#cbd5e1;
+  --text:#0f172a;
+  --t2:#64748b;
+  --t3:#94a3b8;
+  --pr:#2563eb;
+  --ph:#1d4ed8;
+  --pl:#eff6ff;
+  --ok:#16a34a;
+  --ok-bg:#f0fdf4;
+  --ok-bd:#bbf7d0;
+  --er:#dc2626;
+  --er-bg:#fef2f2;
+  --er-bd:#fecaca;
+  --wa:#d97706;
+  --wa-bg:#fffbeb;
+  --wa-bd:#fde68a;
+  --aws:#ff9900;
+  --aws-dark:#232f3e;
+  --r:7px;
+  --r-sm:5px;
+  --shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04);
+  --shadow-lg:0 4px 6px rgba(15,23,42,.04),0 12px 32px rgba(15,23,42,.08);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde6f0 100%);
+  background-attachment:fixed;
+  color:var(--text);
+  font-size:12px;
+  line-height:1.45;
+  min-height:100vh;
+  text-transform:lowercase;
+}
+input,textarea,select{font-family:inherit;text-transform:none}
+
+/* Header */
+.h{
+  background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 60%,#1e3a5f 100%);
+  padding:0 16px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  height:44px;
+  box-shadow:0 1px 8px rgba(0,0,0,.15);
+  position:sticky;top:0;z-index:100;
+}
+.h-l{display:flex;align-items:center;gap:10px}
+.nav{display:flex;gap:4px}
+.nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:11px;padding:4px 10px;border-radius:4px;transition:all .15s}
+.nav a:hover,.nav a.act{color:#fff;background:rgba(255,255,255,.12)}
+.h-logo{
+  width:28px;height:28px;border-radius:6px;
+  background:linear-gradient(135deg,var(--aws) 0%,#ffb84d 100%);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 1px 6px rgba(255,153,0,.3);
+  flex-shrink:0;
+}
+.h-logo svg{color:#232f3e;width:16px;height:16px}
+.h-text h1{font-size:14px;font-weight:600;color:#fff;letter-spacing:0}
+.h-text .s{color:rgba(255,255,255,.5);font-size:11px;margin-top:0}
+
+/* Layout */
+.b{max-width:880px;margin:14px auto;padding:0 14px 28px;display:flex;flex-direction:column;gap:12px}
+
+/* Card */
+.card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+  animation:fadeUp .4s ease both;
+}
+.card:nth-child(1){animation-delay:.05s}
+.card:nth-child(2){animation-delay:.12s}
+.card:nth-child(3){animation-delay:.19s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+.sht{
+  display:flex;align-items:center;gap:7px;
+  padding:8px 12px;
+  font-size:12px;font-weight:600;
+  background:var(--surface2);
+  border-bottom:1px solid var(--border);
+  color:var(--text);
+}
+.sht-icon{
+  width:22px;height:22px;border-radius:5px;
+  background:var(--pl);color:var(--pr);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.sht-icon svg{width:12px;height:12px}
+.sht-step{
+  width:18px;height:18px;border-radius:50%;
+  background:var(--pr);color:#fff;
+  font-size:10px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.sht-sub{font-weight:400;color:var(--t2);font-size:11px;margin-left:auto}
+
+.sb{padding:12px}
+
+/* Form */
+.fr{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px}
+.fr:last-child{margin-bottom:0}
+.fg{display:flex;flex-direction:column;gap:3px;min-width:140px;flex:1}
+.fg label{font-size:11px;color:var(--t2);font-weight:500;letter-spacing:0}
+.fg input,.fg select{
+  height:30px;padding:0 9px;
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  font-size:12px;outline:none;
+  background:var(--surface);
+  color:var(--text);
+  transition:border-color .15s,box-shadow .15s;
+}
+.fg input::placeholder{color:var(--t3)}
+.fg input:focus,.fg select:focus{
+  border-color:var(--pr);
+  box-shadow:0 0 0 2px rgba(37,99,235,.1);
+}
+.fg textarea{
+  height:56px;padding:7px 9px;
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  font-size:11px;outline:none;resize:vertical;
+  font-family:"SF Mono","Cascadia Code",Consolas,monospace;
+  flex:1;min-width:260px;
+  background:var(--surface2);
+  color:var(--text);
+  transition:border-color .15s,box-shadow .15s;
+  line-height:1.4;
+}
+.fg textarea:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+
+/* Buttons */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:4px;
+  height:30px;padding:0 11px;
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  font-size:12px;font-weight:500;
+  cursor:pointer;
+  background:var(--surface);color:var(--text);
+  white-space:nowrap;
+  transition:all .15s ease;
+}
+.btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.bp{
+  background:linear-gradient(135deg,var(--pr) 0%,#3b82f6 100%);
+  color:#fff;border-color:transparent;
+  box-shadow:0 2px 8px rgba(37,99,235,.3);
+}
+.bp:hover{background:linear-gradient(135deg,var(--ph) 0%,var(--pr) 100%);color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(37,99,235,.4)}
+.bs{
+  background:linear-gradient(135deg,var(--ok) 0%,#22c55e 100%);
+  color:#fff;border-color:transparent;
+  box-shadow:0 2px 8px rgba(22,163,74,.3);
+}
+.bs:hover{background:linear-gradient(135deg,#15803d 0%,var(--ok) 100%);color:#fff;border-color:transparent}
+.bsm{height:26px;padding:0 9px;font-size:11px}
+.btn svg{width:12px;height:12px}
+
+/* Badge */
+.bdge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:12px;font-size:10px;font-weight:500;letter-spacing:0}
+.bg-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+.bg-wa{background:var(--wa-bg);color:var(--wa);border:1px solid var(--wa-bd)}
+.bg-er{background:var(--er-bg);color:var(--er);border:1px solid var(--er-bd)}
+.bg-rg{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-family:"SF Mono",Consolas,monospace;font-size:10px}
+
+/* Verified account row */
+#ar{
+  margin-top:2px;padding:8px 10px;
+  background:var(--ok-bg);border:1px solid var(--ok-bd);
+  border-radius:var(--r-sm);
+}
+#aid{font-weight:600;font-size:12px;color:var(--text);font-family:"SF Mono",Consolas,monospace}
+
+/* Table */
+.tw{
+  max-height:240px;overflow-y:auto;
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  scrollbar-width:thin;scrollbar-color:var(--border2) transparent;
+}
+.tw::-webkit-scrollbar{width:4px}
+.tw::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+table{width:100%;border-collapse:collapse;font-size:11px}
+table th,table td{text-align:left;padding:5px 9px;border-bottom:1px solid var(--border)}
+table th{
+  background:var(--surface2);
+  font-weight:600;font-size:10px;
+  color:var(--t2);
+  white-space:nowrap;
+  letter-spacing:0;
+  position:sticky;top:0;z-index:1;
+}
+table tbody tr{transition:background .1s}
+table tbody tr:hover td{background:var(--pl)}
+table tbody tr:last-child td{border-bottom:none}
+.cc{width:32px;text-align:center}
+.cc input[type=checkbox]{width:13px;height:13px;cursor:pointer;accent-color:var(--pr)}
+
+/* Empty & loading */
+.emp{
+  padding:18px 14px;text-align:center;color:var(--t2);font-size:11px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+}
+
+/* Status messages */
+.st{
+  display:flex;align-items:center;gap:6px;
+  padding:7px 10px;border-radius:var(--r-sm);
+  font-size:11px;margin-top:8px;font-weight:500;
+}
+.st.er{background:var(--er-bg);border:1px solid var(--er-bd);color:var(--er)}
+.st.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
+.st.wa{background:var(--wa-bg);border:1px solid var(--wa-bd);color:var(--wa)}
+.st.info{background:var(--pl);border:1px solid #bfdbfe;color:var(--pr)}
+
+/* Spinner */
+.sp{
+  display:inline-block;width:12px;height:12px;
+  border:2px solid var(--border);
+  border-top-color:var(--pr);
+  border-radius:50%;
+  animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Utilities */
+.fx{display:flex;align-items:center;gap:8px}
+.fb{display:flex;align-items:center;justify-content:space-between}
+.mt8{margin-top:8px}.mb8{margin-bottom:8px}
+.tc2{color:var(--t2)}
+.tu{
+  max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  display:inline-block;vertical-align:bottom;
+  font-family:"SF Mono",Consolas,monospace;font-size:10px;color:var(--t2);
+}
+
+/* Tag chips in table */
+.tgb{display:inline-flex;gap:3px;flex-wrap:wrap;max-width:200px}
+.tgb>span{
+  display:inline-flex;align-items:center;
+  padding:1px 6px;border-radius:10px;
+  font-size:10px;font-weight:500;
+  background:var(--pl);color:var(--pr);
+  border:1px solid #bfdbfe;
+  max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.tgb>span::before{content:attr(data-label);overflow:hidden;text-overflow:ellipsis}
+
+/* Tag input rows */
+.tg{display:flex;flex-direction:column;gap:5px}
+.tr{display:flex;gap:5px;align-items:center}
+.tr input{
+  height:28px;padding:0 9px;
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  font-size:12px;outline:none;flex:1;
+  transition:border-color .15s,box-shadow .15s;
+}
+.tr input:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.tk{max-width:160px}.tv{max-width:220px}
+.rm{
+  background:none;border:none;color:var(--er);
+  cursor:pointer;padding:4px;font-size:13px;line-height:1;
+  border-radius:4px;transition:background .15s;
+}
+.rm:hover{background:var(--er-bg)}
+
+/* Mode toggle */
+.tm{
+  display:inline-flex;gap:0;margin-bottom:10px;
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  overflow:hidden;
+  background:var(--surface2);
+  padding:2px;
+}
+.tm button{
+  padding:5px 14px;border:none;
+  font-size:11px;font-weight:500;
+  cursor:pointer;
+  background:transparent;color:var(--t2);
+  transition:all .2s ease;
+  border-radius:4px;
+}
+.tm button.act{
+  background:var(--surface);color:var(--pr);
+  box-shadow:0 1px 4px rgba(15,23,42,.1);
+  font-weight:600;
+}
+.tm button:not(.act):hover{color:var(--text)}
+
+/* Existing tags list */
+.tgl{
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  padding:4px;
+  max-height:150px;overflow-y:auto;
+  margin-bottom:6px;
+  background:var(--surface2);
+}
+.tgi{
+  display:flex;align-items:center;gap:7px;
+  padding:5px 7px;border-radius:4px;cursor:pointer;
+  transition:background .1s;
+}
+.tgi:hover{background:var(--surface)}
+.tgi input[type=checkbox]{width:12px;height:12px;cursor:pointer;accent-color:var(--pr)}
+.tgi .tkv{font-size:11px;color:var(--text);font-family:"SF Mono",Consolas,monospace}
+
+/* Selection bar */
+.sel-bar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:6px 10px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  margin-bottom:8px;
+  font-size:11px;
+}
+.sel-bar strong{color:var(--pr);font-size:13px}
+
+/* Profile count bar */
+.prof-bar{
+  padding:5px 8px;
+  background:var(--surface2);
+  border-radius:var(--r-sm);
+  margin-bottom:6px;
+  font-size:11px;
+}
+.prof-bar label{font-size:11px;color:var(--t2);cursor:pointer;display:flex;align-items:center;gap:5px}
+.prof-bar label input{accent-color:var(--pr);width:12px;height:12px}
+
+/* Region multi-select */
+.rgl{
+  display:flex;flex-wrap:wrap;gap:4px;
+  max-height:100px;overflow-y:auto;
+  padding:6px;border:1px solid var(--border);
+  border-radius:var(--r-sm);background:var(--surface2);
+  scrollbar-width:thin;
+}
+.rgi{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 7px;border-radius:4px;
+  font-size:11px;cursor:pointer;
+  background:var(--surface);border:1px solid var(--border);
+  transition:all .15s;user-select:none;
+}
+.rgi:has(input:checked){background:var(--pl);border-color:#93c5fd;color:var(--pr)}
+.rgi input{accent-color:var(--pr);width:11px;height:11px;cursor:pointer;margin:0}
+.rg-bar{display:flex;align-items:center;gap:8px;margin-top:5px;font-size:11px;color:var(--t2)}
+.rg-bar label{cursor:pointer;display:flex;align-items:center;gap:4px;font-weight:400}
+
+/* Divider hint */
+.hint{font-size:10px;color:var(--t3);margin-top:3px}
+
+/* Footer */
+.footer{
+  text-align:center;color:var(--t3);font-size:10px;
+  padding:4px 0 0;
+}
+
+/* model-tags */
+:root{--bg:#eef2f7;--bg2:#e4eaf3;--surface:#fff;--surface2:#f8fafc;--border:#e2e8f0;--text:#0f172a;--t2:#64748b;--t3:#94a3b8;--pr:#2563eb;--ph:#1d4ed8;--pl:#eff6ff;--ok:#16a34a;--ok-bg:#f0fdf4;--ok-bd:#bbf7d0;--er:#dc2626;--er-bg:#fef2f2;--er-bd:#fecaca;--wa:#d97706;--wa-bg:#fffbeb;--wa-bd:#fde68a;--aws:#ff9900;--aws-dark:#232f3e;--r:7px;--r-sm:5px;--shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04)}
+body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde6f0 100%);background-attachment:fixed;color:var(--text);font-size:12px;line-height:1.45;min-height:100vh;text-transform:lowercase}
+.h{background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 60%,#1e3a5f 100%);padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;height:44px;box-shadow:0 1px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
+.h-logo{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--aws) 0%,#ffb84d 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.h-text h1{font-size:14px;font-weight:600;color:#fff}
+.h-text .s{color:rgba(255,255,255,.5);font-size:11px}
+.b{max-width:920px;margin:14px auto;padding:0 14px 28px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+.sht{display:flex;align-items:center;gap:7px;padding:8px 12px;font-size:12px;font-weight:600;background:var(--surface2);border-bottom:1px solid var(--border)}
+.sht-step{width:18px;height:18px;border-radius:50%;background:var(--pr);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.fg label{font-size:11px;color:var(--t2);font-weight:500}
+.fg input,.fg select{height:30px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;outline:none;background:var(--surface);transition:border-color .15s,box-shadow .15s}
+.fg input:focus,.fg select:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:30px;padding:0 11px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);white-space:nowrap;transition:all .15s}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.bp{background:linear-gradient(135deg,var(--pr) 0%,#3b82f6 100%);color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(37,99,235,.25)}
+.bp:hover{color:#fff;border-color:transparent}
+.bs{background:linear-gradient(135deg,var(--ok) 0%,#22c55e 100%);color:#fff;border-color:transparent}
+.bs:hover{color:#fff;border-color:transparent}
+.bd{background:linear-gradient(135deg,var(--er) 0%,#ef4444 100%);color:#fff;border-color:transparent}
+.bd:hover{color:#fff;border-color:transparent;background:linear-gradient(135deg,#b91c1c 0%,var(--er) 100%)}
+.bdge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:12px;font-size:10px;font-weight:500}
+#ar{margin-top:2px;padding:8px 10px;background:var(--ok-bg);border:1px solid var(--ok-bd);border-radius:var(--r-sm)}
+#aid{font-weight:600;font-size:12px;font-family:"SF Mono",Consolas,monospace}
+.mgl,.rgl{display:flex;flex-wrap:wrap;gap:4px;max-height:100px;overflow-y:auto;padding:6px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2);scrollbar-width:thin}
+.mgi,.rgi{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:4px;font-size:11px;cursor:pointer;background:var(--surface);border:1px solid var(--border);transition:all .15s;user-select:none}
+.mgi:has(input:checked),.rgi:has(input:checked){background:var(--pl);border-color:#93c5fd;color:var(--pr)}
+.mgi input,.rgi input{accent-color:var(--pr);width:11px;height:11px;cursor:pointer;margin:0}
+.mg-bar,.rg-bar{display:flex;align-items:center;gap:8px;margin-top:5px;font-size:11px;color:var(--t2)}
+.mg-bar label,.rg-bar label{cursor:pointer;display:flex;align-items:center;gap:4px;font-weight:400}
+.preview-bar{padding:7px 10px;background:var(--pl);border:1px solid #bfdbfe;border-radius:var(--r-sm);font-size:11px;color:var(--pr);margin-top:8px}
+.preview-bar strong{font-size:13px}
+.tw{max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r-sm);scrollbar-width:thin}
+table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t2);white-space:nowrap;position:sticky;top:0;z-index:1}
+.cc{width:28px;text-align:center}.cc input[type=checkbox]{width:12px;height:12px;accent-color:var(--pr);cursor:pointer;margin:0}
+.tu{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;font-family:"SF Mono",Consolas,monospace;font-size:10px;color:var(--t2)}
+.tgb{display:inline-flex;gap:3px;flex-wrap:wrap;max-width:140px}
+.tgb>span{display:inline-flex;padding:1px 6px;border-radius:10px;font-size:10px;background:var(--pl);color:var(--pr);border:1px solid #bfdbfe;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tgb>span::before{content:attr(data-label)}
+.emp{padding:18px 14px;text-align:center;color:var(--t2);font-size:11px;display:flex;flex-direction:column;align-items:center;gap:5px}
+.st{display:flex;align-items:flex-start;gap:6px;padding:7px 10px;border-radius:var(--r-sm);font-size:11px;margin-top:8px;font-weight:500}
+.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--pr);border-radius:50%;animation:spin .7s linear infinite}
+.mt8{margin-top:8px}.tc2{color:var(--t2)}
+.tr input{height:28px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;outline:none;flex:1}
+.rm{background:none;border:none;color:var(--er);cursor:pointer;padding:4px;font-size:13px}
+.test-box{padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm)}
+.footer{text-align:center;color:var(--t3);font-size:10px;padding:4px 0 0}
+
+/* ── 确认弹窗 ───────────────────────────────────────── */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(15,23,42,.45);
+  display:flex;align-items:center;justify-content:center;
+  z-index:999;opacity:0;pointer-events:none;
+  transition:opacity .2s ease;
+}
+.modal-overlay.show{opacity:1;pointer-events:all}
+.modal{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:20px 22px;width:340px;max-width:92vw;
+  box-shadow:0 8px 40px rgba(15,23,42,.18);
+  transform:translateY(10px);transition:transform .2s ease;
+}
+.modal-overlay.show .modal{transform:translateY(0)}
+.modal-title{font-size:14px;font-weight:600;margin-bottom:6px;color:var(--text)}
+.modal-body{font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:16px}
+.modal-body strong{color:var(--text);font-weight:600}
+.modal-foot{display:flex;gap:8px;justify-content:flex-end}
+
+/* ── 进度条 ─────────────────────────────────────────── */
+.prog-wrap{
+  margin-top:8px;padding:10px 12px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--r-sm);display:none;
+}
+.prog-wrap.show{display:block}
+.prog-label{font-size:11px;color:var(--t2);margin-bottom:5px;display:flex;justify-content:space-between}
+.prog-label span:last-child{font-weight:600;color:var(--pr)}
+.prog-bar-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.prog-bar-fill{height:100%;background:linear-gradient(90deg,var(--pr),#3b82f6);border-radius:3px;width:0%;transition:width .3s ease}
+.prog-cur{font-size:10px;color:var(--t3);margin-top:4px}
+
+/* ── ARN 复制按钮 ────────────────────────────────────── */
+.copy-btn{
+  display:inline-flex;align-items:center;gap:3px;
+  padding:1px 6px;height:20px;
+  border:1px solid var(--border);border-radius:3px;
+  font-size:10px;cursor:pointer;
+  background:var(--surface);color:var(--t2);
+  transition:all .15s;white-space:nowrap;vertical-align:middle;margin-left:4px;
+}
+.copy-btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.copy-btn.copied{border-color:var(--ok);color:var(--ok);background:var(--ok-bg)}
+.copy-btn svg{width:10px;height:10px;flex-shrink:0}
+</style>
+</head>
+<body>
+<header class="h">
+  <div class="h-l">
+    <div class="h-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
+    <div class="h-text">
+      <h1>创建配置</h1>
+      <div class="s">批量创建 inference profile · 多区域 · 多模型 · 打标签</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <a href="/">profile 标签</a>
+    <a href="/model-tags" class="act">创建配置</a>
+    <a href="/delete-profiles">删除配置</a>
+    <a href="/test-profile">测试模型</a>
+  </nav>
+</header>
+
+<div class="b">
+  <div class="card">
+    <div class="sht"><span class="sht-step">1</span> aws 凭证</div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:2"><label>access key id</label><input id="ak" type="text" placeholder="akia..." autocomplete="off"></div>
+        <div class="fg" style="flex:2"><label>secret access key</label><input id="sk" type="password" placeholder="..." autocomplete="off"></div>
+        <div class="fg" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn bp" id="btnv" onclick="vrf()">验证</button></div>
+      </div>
+      <div class="fr" id="ar" style="display:none">
+        <div class="fg" style="flex:1"><label>账号 id</label><div class="fx"><span id="aid"></span><span class="bdge bg-ok">✓ 已验证</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sht"><span class="sht-step">2</span> 创建配置<span class="sht-sub">claude 4.5+ · fable 5 · 区域 × 模型</span></div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:1"><label>配置名称</label><input id="pname" type="text" placeholder="my-claude-profile" oninput="upPreview()"></div>
+        <div class="fg" style="flex:1"><label>描述（可选）</label><input id="pdesc" type="text" placeholder="..."></div>
+      </div>
+      <p class="hint">多区域或多模型时，名称自动追加后缀</p>
+      <div class="fr" style="align-items:flex-start;margin-top:8px">
+        <div class="fg" style="flex:1">
+          <label>区域 <span id="rc" style="color:var(--t3)">（0）</span></label>
+          <div class="rgl" id="rgl"></div>
+          <div class="rg-bar"><label><input type="checkbox" id="saR" onchange="taR()"> 全选</label></div>
+        </div>
+        <div class="fg" style="flex:1">
+          <label>模型 <span id="mc" style="color:var(--t3)">（0）</span></label>
+          <div class="mgl" id="mgl"></div>
+          <div class="mg-bar"><label><input type="checkbox" id="saM" onchange="taM()"> 全选</label></div>
+        </div>
+      </div>
+      <div class="preview-bar" id="preview">将创建 <strong>0</strong> 个 inference profile</div>
+      <div class="fg" style="margin-top:10px;margin-bottom:5px"><label>创建时附加标签</label></div>
+      <div class="tg" id="tgg">
+        <div class="tr"><input class="tk" placeholder="key"><input class="tv" placeholder="value"><button class="btn bsm" onclick="addTg()">+ 添加行</button></div>
+      </div>
+      <div class="fr mt8">
+        <button class="btn bs" id="btnCreate" onclick="batchCreate()">批量创建</button>
+        <button class="btn" onclick="clrForm()">清空</button>
+      </div>
+      <!-- 进度条 -->
+      <div class="prog-wrap" id="progWrap">
+        <div class="prog-label">
+          <span>创建进度</span>
+          <span id="progPct">0%</span>
+        </div>
+        <div class="prog-bar-track"><div class="prog-bar-fill" id="progFill"></div></div>
+        <div class="prog-cur" id="progCur">等待开始...</div>
+      </div>
+      <div id="createMsg"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sht"><span class="sht-step">3</span> 创建结果</div>
+    <div class="sb">
+      <div id="pw" style="display:none">
+        <div class="fb mb8">
+          <span class="tc2" id="pc">0 项</span>
+          <button class="btn bs bsm" id="btnExport" onclick="exportExcel()" style="gap:5px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            导出 Excel
+          </button>
+        </div>
+        <div class="tw"><table>
+          <thead><tr><th>状态</th><th>区域</th><th>模型</th><th>名称</th><th>标签</th><th>arn</th><th></th></tr></thead>
+          <tbody id="pt"></tbody>
+        </table></div>
+      </div>
+      <div id="pe" class="emp">创建后将在此显示结果</div>
+      <div id="pl" class="emp" style="display:none"><span class="sp"></span> 创建中...</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sht"><span class="sht-step">4</span> 测试 arn</div>
+    <div class="sb">
+      <div class="test-box">
+        <div class="fr">
+          <div class="fg" style="flex:0 0 auto;min-width:0"><label>区域</label><span id="testRegion" style="display:inline-flex;align-items:center;height:30px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:11px;background:var(--surface2);color:var(--t2);font-family:'SF Mono',Consolas,monospace;min-width:110px">— 自动识别 —</span></div>
+          <div class="fg" style="flex:2"><label>inference profile arn</label><input id="testArn" type="text" placeholder="arn:aws:bedrock:..." oninput="autoDetectRegion()"></div>
+          <div class="fg" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn bp" id="btnTest" onclick="testArn()">测试</button></div>
+        </div>
+        <div class="fr" style="margin-bottom:0"><label style="font-size:11px;color:var(--t2);cursor:pointer"><input type="checkbox" id="testInvoke" checked style="accent-color:var(--pr)"> 尝试实际调用（converse）</label></div>
+      </div>
+      <div id="testResult"></div>
+    </div>
+  </div>
+  <div class="footer">创建配置 · aws bedrock inference profile</div>
+</div>
+
+<!-- 确认弹窗 -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal">
+    <div class="modal-title">确认批量创建</div>
+    <div class="modal-body" id="confirmBody"></div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeConfirm()">取消</button>
+      <button class="btn bs" id="confirmOk" onclick="doCreate()">确认创建</button>
+    </div>
+  </div>
+</div>
+<script src="/static/persist.js"></script>
+<script>
+var B="",results=[],_persistReady=false;
+function $(i){return document.getElementById(i)}
+function es(s){if(!s)return"";var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+function sR(id,msg,type){var el=$(id);if(el)el.innerHTML='<div class="st '+type+'" style="white-space:pre-line">'+es(msg)+'</div>'}
+function creds(){return{access_key:$("ak").value.trim(),secret_key:$("sk").value.trim()}}
+function regionFromArn(arn){var m=(arn||"").match(/^arn:aws:bedrock:([^:]+):/);return m?m[1]:null}
+function getSelRegions(){var rs=[];document.querySelectorAll("#rgl input:checked").forEach(function(cb){rs.push(cb.value)});return rs}
+function getSelModels(){var ms=[];document.querySelectorAll("#mgl input:checked").forEach(function(cb){ms.push(cb.value)});return ms}
+function upRC(){var n=document.querySelectorAll("#rgl input:checked").length,all=document.querySelectorAll("#rgl input").length;$("rc").textContent="（"+n+"）";$("saR").checked=n===all&&all>0;upPreview();if(_persistReady)BedrockPersist.save()}
+function upMC(){var n=document.querySelectorAll("#mgl input:checked").length,all=document.querySelectorAll("#mgl input").length;$("mc").textContent="（"+n+"）";$("saM").checked=n===all&&all>0;upPreview();if(_persistReady)BedrockPersist.save()}
+function taR(){var c=$("saR").checked;document.querySelectorAll("#rgl input").forEach(function(cb){cb.checked=c});upRC()}
+function taM(){var c=$("saM").checked;document.querySelectorAll("#mgl input").forEach(function(cb){cb.checked=c});upMC()}
+function upPreview(){var r=getSelRegions().length,m=getSelModels().length,n=r*m;$("preview").innerHTML="将创建 <strong>"+n+"</strong> 个 inference profile（"+r+" 区域 × "+m+" 模型）"}
+document.addEventListener("DOMContentLoaded",async function(){var d=BedrockPersist.init();await lR();await lM();BedrockPersist.afterListsReady(d);_persistReady=true});
+
+async function lR(){try{var r=await fetch(B+"/api/regions"),d=await r.json();if(!d.ok)return;var box=$("rgl");d.regions.forEach(function(reg){var lbl=document.createElement("label");lbl.className="rgi";lbl.innerHTML='<input type="checkbox" value="'+es(reg)+'" onchange="upRC()"> '+es(reg);box.appendChild(lbl)});upRC()}catch(e){}}
+
+async function lM(){try{var r=await fetch(B+"/api/claude_45_versions"),d=await r.json();if(!d.ok)return;var box=$("mgl");(d.versions||[]).forEach(function(v){var lbl=document.createElement("label");lbl.className="mgi";lbl.title=v.id;lbl.innerHTML='<input type="checkbox" value="'+es(v.id)+'" onchange="upMC()"> '+es(v.label);box.appendChild(lbl)});upMC()}catch(e){}}
+
+async function vrf(){var c=creds();if(!c.access_key||!c.secret_key){sR("createMsg","请填写 ak/sk","wa");return}var btn=$("btnv");btn.disabled=true;btn.textContent="验证中...";try{var r=await fetch(B+"/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c)}),d=await r.json();if(d.ok){$("aid").textContent=d.account_id;$("ar").style.display="flex";BedrockPersist.onVerified(d.account_id);sR("createMsg","已验证","ok")}else sR("createMsg",d.error,"er")}finally{btn.disabled=false;btn.textContent="验证"}}
+
+function colT(){var t={};document.querySelectorAll("#tgg .tr").forEach(function(r){var k=r.querySelector(".tk").value.trim(),v=r.querySelector(".tv").value.trim();if(k)t[k]=v||""});return t}
+function addTg(){var g=$("tgg"),r=document.createElement("div");r.className="tr";r.innerHTML='<input class="tk" placeholder="key"><input class="tv" placeholder="value"><button class="btn bsm" onclick="addTg()">+</button><button class="rm" onclick="this.parentElement.remove();BedrockPersist.save()">✕</button>';g.appendChild(r);BedrockPersist.save()}
+function clrForm(){$("pname").value="";$("pdesc").value="";document.querySelectorAll("#tgg .tr").forEach(function(r,i){if(i>0)r.remove()});var f=document.querySelector("#tgg .tr");if(f){f.querySelector(".tk").value="";f.querySelector(".tv").value=""} $("createMsg").innerHTML=""}
+
+// ── 确认弹窗 ────────────────────────────────────────────────────
+var _pendingCreateParams = null;
+function batchCreate(){  var c=creds(),regions=getSelRegions(),model_ids=getSelModels(),
+      name=$("pname").value.trim(),desc=$("pdesc").value.trim(),tags=colT();
+  if(!c.access_key||!c.secret_key){sR("createMsg","请先填写凭证","wa");return}
+  if(!name){sR("createMsg","请填写配置名称","wa");return}
+  if(!regions.length){sR("createMsg","请至少选择一个区域","wa");return}
+  if(!model_ids.length){sR("createMsg","请至少选择一个模型","wa");return}
+  // 存参数，弹确认框
+  _pendingCreateParams={c:c,regions:regions,model_ids:model_ids,name:name,desc:desc,tags:tags};
+  var n=regions.length*model_ids.length;
+  var tagKeys=Object.keys(tags);
+  var tagHint=tagKeys.length?'<br>标签：<strong>'+es(tagKeys.map(function(k){return k+"="+tags[k]}).join(", "))+'</strong>':"";
+  $("confirmBody").innerHTML=
+    '将在 <strong>'+regions.length+'</strong> 个区域创建 <strong>'+model_ids.length+'</strong> 个模型版本，共 <strong>'+n+'</strong> 个 Inference Profile。'+
+    '<br>名称前缀：<strong>'+es(name)+'</strong>'+tagHint+
+    '<br><br>确认后将立即执行，请检查参数无误。';
+  $("confirmModal").classList.add("show");
+}
+function closeConfirm(){$("confirmModal").classList.remove("show")}
+
+// ── 实际创建（SSE 流式） ─────────────────────────────────────
+async function doCreate(){
+  closeConfirm();
+  var p=_pendingCreateParams;
+  if(!p)return;
+  var btn=$("btnCreate");
+  btn.disabled=true;btn.textContent="创建中...";
+  $("pw").style.display="none";$("pe").style.display="none";$("pl").style.display="none";
+  // 显示进度条
+  var pw=$("progWrap");pw.classList.add("show");
+  $("progFill").style.width="0%";$("progPct").textContent="0%";
+  $("progCur").textContent="连接中...";
+  results=[];
+  var total=p.regions.length*p.model_ids.length,done=0,okCnt=0;
+  // 先把结果卡片占位
+  $("pw").style.display="block";$("pe").style.display="none";
+  $("pc").textContent="0 成功 / "+total+" 项";
+  $("pt").innerHTML="";
+  try{
+    var resp=await fetch(B+"/api/batch_create_stream",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        access_key:p.c.access_key,secret_key:p.c.secret_key,
+        regions:p.regions,model_ids:p.model_ids,
+        name_prefix:p.name,description:p.desc,tags:p.tags,
+        claude_45_only:true
+      })
+    });
+    if(!resp.ok||!resp.body){
+      var e=await resp.json().catch(function(){return{error:"请求失败"}});
+      sR("createMsg",e.error||"请求失败","er");
+      pw.classList.remove("show");
+      return;
+    }
+    var reader=resp.body.getReader(),decoder=new TextDecoder(),buf="";
+    while(true){
+      var chunk=await reader.read();
+      if(chunk.done)break;
+      buf+=decoder.decode(chunk.value,{stream:true});
+      var parts=buf.split("\n\n");
+      buf=parts.pop();
+      for(var i=0;i<parts.length;i++){
+        var line=parts[i].trim();
+        if(!line.startsWith("data:"))continue;
+        var evt;try{evt=JSON.parse(line.slice(5).trim())}catch(ex){continue}
+        if(evt.type==="start"){
+          total=evt.total||total;
+          $("pc").textContent="0 成功 / "+total+" 项";
+        } else if(evt.type==="item"){
+          done=evt.done;
+          if(evt.ok)okCnt++;
+          results.push(evt);
+          // 追加一行到表格
+          _appendResultRow(evt,results.length-1);
+          $("pc").textContent=okCnt+" 成功 / "+done+" / "+total+" 项";
+          // 更新进度条
+          var pct=Math.round(done/total*100);
+          $("progFill").style.width=pct+"%";
+          $("progPct").textContent=pct+"%";
+          $("progCur").textContent="（"+done+"/"+total+"）"+es(evt.region)+" · "+es(evt.model_label||evt.model_id||"");
+        } else if(evt.type==="done"){
+          var msg="完成："+okCnt+"/"+total+" 成功";
+          var failed=total-okCnt;
+          if(failed)msg+="，"+failed+" 失败";
+          sR("createMsg",msg,failed?"wa":"ok");
+          $("progCur").textContent="✓ 全部完成";
+        } else if(evt.type==="error"){
+          sR("createMsg",evt.error,"er");
+        }
+      }
+    }
+  }catch(ex){
+    sR("createMsg","错误："+ex.message,"er");
+  }finally{
+    btn.disabled=false;btn.textContent="批量创建";
+    // 2秒后收起进度条
+    setTimeout(function(){pw.classList.remove("show")},2000);
+  }
+}
+
+// ── 追加单行到结果表（流式用） ──────────────────────────────
+function _appendResultRow(p,i){
+  var tb=$("pt");
+  var tgs=p.tags||{},tH='<div class=tgb>',keys=Object.keys(tgs);
+  if(!keys.length)tH+='<span style="background:none;border:none;color:var(--t2);padding:0">—</span>';
+  else keys.forEach(function(k){tH+='<span data-label="'+es(k+"="+tgs[k])+'"></span>'});
+  tH+="</div>";
+  var arn=p.inferenceProfileArn||"";
+  var arnCell=p.ok
+    ?'<span class=tu title="'+es(arn)+'">'+es(arn)+'</span>'+
+      '<button class="copy-btn" onclick="copyArn(this,\''+es(arn)+'\')" title="复制 ARN">'+
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制</button>'
+    :'<span class="tc2">'+es(p.error||"")+'</span>';
+  var tr=document.createElement("tr");
+  tr.innerHTML='<td><span class="bdge '+(p.ok?"bg-ok":"bg-er")+'">'+(p.ok?"成功":"失败")+'</span></td>'+
+    '<td><span class="bdge bg-rg">'+es(p.region||"")+'</span></td>'+
+    '<td>'+es(p.model_label||p.model_id||"")+'</td>'+
+    '<td>'+es(p.name||"")+'</td>'+
+    '<td>'+tH+'</td>'+
+    '<td>'+arnCell+'</td>'+
+    '<td>'+(p.ok?'<button class="btn bsm" onclick="fillTest('+i+')">测试</button> <button class="btn bsm bd" onclick="delOne('+i+')">删除</button>':"")+'</td>';
+  tb.appendChild(tr);
+}
+
+// ── renderResults（刷新全部，如删除后重渲染） ─────────────────
+function renderResults(rows){
+  var w=$("pw"),tb=$("pt"),e=$("pe");
+  if(!rows.length){w.style.display="none";e.style.display="flex";return}
+  w.style.display="block";e.style.display="none";
+  var ok=rows.filter(function(x){return x.ok}).length;
+  $("pc").textContent=ok+" 成功 / "+rows.length+" 项";
+  tb.innerHTML="";
+  rows.forEach(function(p,i){_appendResultRow(p,i)});
+}
+
+// ── ARN 一键复制 ─────────────────────────────────────────────
+function copyArn(btn,arn){
+  if(!arn)return;
+  navigator.clipboard.writeText(arn).then(function(){
+    btn.classList.add("copied");
+    btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>已复制';
+    setTimeout(function(){
+      btn.classList.remove("copied");
+      btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制';
+    },2000);
+  }).catch(function(){
+    // 降级：选中文本
+    var ta=document.createElement("textarea");
+    ta.value=arn;ta.style.position="fixed";ta.style.opacity="0";
+    document.body.appendChild(ta);ta.select();
+    document.execCommand("copy");document.body.removeChild(ta);
+    btn.classList.add("copied");btn.textContent="已复制";
+    setTimeout(function(){btn.classList.remove("copied");btn.textContent="复制"},2000);
+  });
+}
+function autoDetectRegion(){var arn=$("testArn").value.trim(),r=regionFromArn(arn);$("testRegion").textContent=r||"— 自动识别 —";$("testRegion").dataset.region=r||""}
+function fillTest(i){var p=results[i];if(!p||!p.ok)return;$("testArn").value=p.inferenceProfileArn||"";$("testRegion").textContent=p.region||"";$("testRegion").dataset.region=p.region||"";testArn()}
+
+async function testArn(){var c=creds(),arn=$("testArn").value.trim(),invoke=$("testInvoke").checked;var region=$("testRegion").dataset.region||regionFromArn(arn)||"";if(!c.access_key||!c.secret_key){sR("testResult","请先填写凭证","wa");return}if(!arn){sR("testResult","请输入 arn","wa");return}if(!region){sR("testResult","无法识别区域，请检查 arn 格式","wa");return}var btn=$("btnTest");btn.disabled=true;btn.textContent="测试中...";$("testResult").innerHTML='<div class="st info"><span class="sp"></span> 测试中...</div>';try{var r=await fetch(B+"/api/test_profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,region:region,inference_profile_arn:arn,invoke:invoke})}),d=await r.json();if(!d.ok){sR("testResult",d.error||"测试失败","er");return}var lines=[];lines.push("状态: "+(d.status||"unknown").toLowerCase());lines.push("profile id: "+(d.inferenceProfileId||"—"));lines.push("名称: "+(d.name||"—"));if(d.available)lines.push("✓ profile 可用");else if(d.status==="NOT_FOUND")lines.push("✗ arn 不存在或无权限");else lines.push("✗ profile 不可用");if(invoke&&d.invoke_ok===true)lines.push("✓ 调用成功 — "+(d.invoke_preview||"(空)"));else if(invoke&&d.invoke_ok===false)lines.push("✗ 调用失败: "+(d.invoke_error||""));sR("testResult",lines.join("\n"),d.available?"ok":"er")}catch(e){sR("testResult","错误："+e.message,"er")}finally{btn.disabled=false;btn.textContent="测试"}}
+
+async function exportExcel(){
+  if(!results||!results.length){sR("createMsg","暂无可导出的结果","wa");return}
+  var account_id=$("aid").textContent.trim()||"";
+  var btn=$("btnExport");
+  btn.disabled=true;btn.textContent="导出中...";
+  try{
+    var r=await fetch(B+"/api/export_excel",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({results:results,account_id:account_id})
+    });
+    if(!r.ok){var e=await r.json().catch(function(){return{error:"导出失败"}});sR("createMsg",e.error||"导出失败","er");return}
+    var blob=await r.blob();
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    var cd=r.headers.get("Content-Disposition")||"";
+    var m=cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    a.download=m?m[1].replace(/['"]/g,""):"bedrock_profiles.xlsx";
+    a.href=url;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url)},200);
+  }catch(e){sR("createMsg","导出失败："+e.message,"er")}
+  finally{btn.disabled=false;btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 导出 Excel'}
+}
+</script>
+</body>
+</html>
