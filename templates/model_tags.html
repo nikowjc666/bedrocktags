@@ -494,6 +494,7 @@ table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t
     <a href="/model-tags" class="act">创建配置</a>
     <a href="/delete-profiles">删除配置</a>
     <a href="/test-profile">测试模型</a>
+    <a href="/quotas">模型配额</a>
   </nav>
 </header>
 
@@ -618,7 +619,26 @@ function upMC(){var n=document.querySelectorAll("#mgl input:checked").length,all
 function taR(){var c=$("saR").checked;document.querySelectorAll("#rgl input").forEach(function(cb){cb.checked=c});upRC()}
 function taM(){var c=$("saM").checked;document.querySelectorAll("#mgl input").forEach(function(cb){cb.checked=c});upMC()}
 function upPreview(){var r=getSelRegions().length,m=getSelModels().length,n=r*m;$("preview").innerHTML="将创建 <strong>"+n+"</strong> 个 inference profile（"+r+" 区域 × "+m+" 模型）"}
-document.addEventListener("DOMContentLoaded",async function(){var d=BedrockPersist.init();await lR();await lM();BedrockPersist.afterListsReady(d);_persistReady=true});
+
+// ── 创建结果持久化（sessionStorage，刷新清除） ───────────────
+var RESULTS_KEY="bedrock_create_results";
+function saveResults(){
+  try{sessionStorage.setItem(RESULTS_KEY,JSON.stringify(results))}catch(e){}
+}
+function loadResults(){
+  try{
+    var raw=sessionStorage.getItem(RESULTS_KEY);
+    if(raw){var d=JSON.parse(raw);if(Array.isArray(d)&&d.length){results=d;renderResults(results);return true}}
+  }catch(e){}
+  return false;
+}
+function clearResults(){
+  results=[];
+  try{sessionStorage.removeItem(RESULTS_KEY)}catch(e){}
+  $("pw").style.display="none";$("pe").style.display="flex";
+  $("pt").innerHTML="";
+}
+document.addEventListener("DOMContentLoaded",async function(){var d=BedrockPersist.init();await lR();await lM();BedrockPersist.afterListsReady(d);_persistReady=true;loadResults()});
 
 async function lR(){try{var r=await fetch(B+"/api/regions"),d=await r.json();if(!d.ok)return;var box=$("rgl");d.regions.forEach(function(reg){var lbl=document.createElement("label");lbl.className="rgi";lbl.innerHTML='<input type="checkbox" value="'+es(reg)+'" onchange="upRC()"> '+es(reg);box.appendChild(lbl)});upRC()}catch(e){}}
 
@@ -664,6 +684,7 @@ async function doCreate(){
   $("progFill").style.width="0%";$("progPct").textContent="0%";
   $("progCur").textContent="连接中...";
   results=[];
+  clearResults();
   var total=p.regions.length*p.model_ids.length,done=0,okCnt=0;
   // 先把结果卡片占位
   $("pw").style.display="block";$("pe").style.display="none";
@@ -704,6 +725,7 @@ async function doCreate(){
           done=evt.done;
           if(evt.ok)okCnt++;
           results.push(evt);
+          saveResults();
           // 追加一行到表格
           _appendResultRow(evt,results.length-1);
           $("pc").textContent=okCnt+" 成功 / "+done+" / "+total+" 项";
@@ -752,7 +774,7 @@ function _appendResultRow(p,i){
     '<td>'+es(p.name||"")+'</td>'+
     '<td>'+tH+'</td>'+
     '<td>'+arnCell+'</td>'+
-    '<td>'+(p.ok?'<button class="btn bsm" onclick="fillTest('+i+')">测试</button> <button class="btn bsm bd" onclick="delOne('+i+')">删除</button>':"")+'</td>';
+    '<td>'+(p.ok?'<button class="btn bsm" onclick="fillTest('+i+')">测试</button>':"")+'</td>';
   tb.appendChild(tr);
 }
 
@@ -795,13 +817,14 @@ async function testArn(){var c=creds(),arn=$("testArn").value.trim(),invoke=$("t
 async function exportExcel(){
   if(!results||!results.length){sR("createMsg","暂无可导出的结果","wa");return}
   var account_id=$("aid").textContent.trim()||"";
+  var c=creds();
   var btn=$("btnExport");
   btn.disabled=true;btn.textContent="导出中...";
   try{
     var r=await fetch(B+"/api/export_excel",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({results:results,account_id:account_id})
+      body:JSON.stringify({results:results,account_id:account_id,access_key:c.access_key,secret_key:c.secret_key})
     });
     if(!r.ok){var e=await r.json().catch(function(){return{error:"导出失败"}});sR("createMsg",e.error||"导出失败","er");return}
     var blob=await r.blob();

@@ -35,6 +35,7 @@ var BedrockPersist = (function () {
       if (navType === 1) {
         sessionStorage.removeItem(CREDS_KEY);
         sessionStorage.removeItem(PREFS_KEY);
+        sessionStorage.removeItem("bedrock_create_results");
       }
     } catch (e) {}
     // 清除旧版 localStorage 残留

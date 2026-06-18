@@ -148,6 +148,7 @@ table tbody tr:last-child td{border-bottom:none}
     <a href="/model-tags">创建配置</a>
     <a href="/delete-profiles">删除配置</a>
     <a href="/test-profile" class="act">测试模型</a>
+    <a href="/quotas">模型配额</a>
   </nav>
 </header>
 
@@ -370,7 +371,7 @@ function clearBatch(){
   $("batchProg").classList.remove("show");_batchResults=[];
 }
 
-// ── 批量测试（顺序逐个，推送实时结果） ───────────────────────
+// ── 批量测试（并发，推送实时结果） ───────────────────────
 async function testBatch(){
   var c=creds();
   if(!c.access_key||!c.secret_key){sR("batchMsg","请先填写凭证","wa");return}
@@ -378,7 +379,7 @@ async function testBatch(){
   if(!lines.length){sR("batchMsg","请输入至少一个 arn","wa");return}
   var invoke=$("batchInvoke").checked;
   var btn=$("btnBatch");btn.disabled=true;
-  _batchResults=[];
+  _batchResults=new Array(lines.length);
   $("batchResultWrap").style.display="block";
   $("batchTb").innerHTML="";
   $("batchSummary").textContent="测试中...";
@@ -386,31 +387,51 @@ async function testBatch(){
   var prog=$("batchProg");prog.classList.add("show");
   $("batchFill").style.width="0%";$("batchPct").textContent="0%";
   $("batchCur").textContent="准备中...";
+
   var total=lines.length,done=0,okCnt=0;
-  for(var i=0;i<lines.length;i++){
+  var CONCURRENCY=8; // 并发数
+
+  async function testOne(i){
     var arn=lines[i];
     var region=regionFromArn(arn)||"";
-    $("batchCur").textContent="（"+(done+1)+"/"+total+"）"+arn.slice(0,50)+(arn.length>50?"...":"");
     var result={arn:arn,region:region,ok:false,available:false,status:"",name:"",invoke_ok:null,invoke_error:"",error:""};
-    if(!region){result.error="无法识别区域";_batchResults.push(result);done++;_appendBatchRow(result,_batchResults.length-1);_updateBatchProg(done,total,okCnt);continue}
-    try{
-      var r=await fetch(B+"/api/test_profile",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,region:region,inference_profile_arn:arn,invoke:invoke})});
-      var d=await r.json();
-      result.ok=d.ok!==false;
-      result.available=!!d.available;
-      result.status=(d.status||"").toLowerCase();
-      result.name=d.name||"";
-      result.inferenceProfileId=d.inferenceProfileId||"";
-      result.invoke_ok=d.invoke_ok;
-      result.invoke_error=d.invoke_error||"";
-      result.error=d.error||"";
-      if(result.available)okCnt++;
-    }catch(e){result.error=e.message}
-    _batchResults.push(result);done++;
-    _appendBatchRow(result,_batchResults.length-1);
+    if(!region){
+      result.error="无法识别区域";
+    } else {
+      try{
+        var r=await fetch(B+"/api/test_profile",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,region:region,inference_profile_arn:arn,invoke:invoke})});
+        var d=await r.json();
+        result.ok=d.ok!==false;
+        result.available=!!d.available;
+        result.status=(d.status||"").toLowerCase();
+        result.name=d.name||"";
+        result.inferenceProfileId=d.inferenceProfileId||"";
+        result.invoke_ok=d.invoke_ok;
+        result.invoke_error=d.invoke_error||"";
+        result.error=d.error||"";
+      }catch(e){result.error=e.message}
+    }
+    _batchResults[i]=result;
+    done++;
+    if(result.available)okCnt++;
+    $("batchCur").textContent=done+"/"+total+" 完成中...";
+    _appendBatchRow(result,i);
     _updateBatchProg(done,total,okCnt);
   }
+
+  // 并发池：每次最多 CONCURRENCY 个同时跑
+  var idx=0;
+  async function worker(){
+    while(idx<total){
+      var i=idx++;
+      await testOne(i);
+    }
+  }
+  var workers=[];
+  for(var w=0;w<Math.min(CONCURRENCY,total);w++) workers.push(worker());
+  await Promise.all(workers);
+
   $("batchSummary").textContent="共 "+total+" 项，"+okCnt+" 可用，"+(total-okCnt)+" 不可用";
   sR("batchMsg","完成："+okCnt+"/"+total+" 可用",okCnt===total?"ok":okCnt>0?"wa":"er");
   setTimeout(function(){prog.classList.remove("show")},2000);

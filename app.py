@@ -1,5 +1,7 @@
 """AWS Bedrock Inference Profile 管理工具"""
+import re
 import json
+import threading
 import boto3
 import botocore
 from flask import Flask, render_template, request, jsonify, send_file, Response, stream_with_context
@@ -131,9 +133,12 @@ def _make_profile_name(prefix, region, model_id, multi):
     格式：claude-{版本}-auto{月日}-{前缀}
     例如：claude-sonnet-45-auto0615-myprofile
     """
-    # 从 model_id 获取版本标签
+    # 从 model_id 获取版本标签，去掉 "claude " 前缀避免重复
     ver = CLAUDE_45_BY_ID.get(model_id) or CLAUDE_BY_ID.get(model_id) or {}
-    label = (ver.get("label") or model_id).lower().replace(" ", "-").replace(".", "")
+    raw_label = (ver.get("label") or model_id)
+    # 去掉开头的 "claude " / "Claude "（不区分大小写）
+    raw_label = re.sub(r"(?i)^claude\s*", "", raw_label).strip()
+    label = raw_label.lower().replace(" ", "-").replace(".", "")
     
     # 月份日期（如 0615）
     auto_date = datetime.now().strftime("%m%d")
@@ -142,7 +147,7 @@ def _make_profile_name(prefix, region, model_id, multi):
     parts = ["claude", label, f"auto{auto_date}"]
     if prefix:
         parts.append(prefix)
-    name = "-".join(parts)
+    name = "-".join(p for p in parts if p)
     return name[:64]
 
 US_GEO_REGIONS = {
@@ -249,14 +254,29 @@ def _creds(data):
     return ak, sk, user_id
 
 
+# ── boto3 客户端缓存（相同 ak/sk/region 复用连接，避免重复握手）──
+_client_cache: dict = {}
+
+def _get_client(service, ak, sk, region):
+    key = (service, ak, sk, region)
+    if key not in _client_cache:
+        cfg = botocore.config.Config(
+            max_pool_connections=20,        # 连接池大小（支持并发）
+            connect_timeout=5,
+            read_timeout=30,
+            retries={"max_attempts": 2},
+        )
+        sess = boto3.Session(aws_access_key_id=ak, aws_secret_access_key=sk)
+        _client_cache[key] = sess.client(service, region_name=region, config=cfg)
+    return _client_cache[key]
+
+
 def _bedrock(ak, sk, region):
-    sess = boto3.Session(aws_access_key_id=ak, aws_secret_access_key=sk)
-    return sess.client("bedrock", region_name=region)
+    return _get_client("bedrock", ak, sk, region)
 
 
 def _bedrock_runtime(ak, sk, region):
-    sess = boto3.Session(aws_access_key_id=ak, aws_secret_access_key=sk)
-    return sess.client("bedrock-runtime", region_name=region)
+    return _get_client("bedrock-runtime", ak, sk, region)
 
 
 def _list_resource_tags(br, resource_arn):
@@ -325,13 +345,13 @@ def _profile_summary(p, tags=None):
 
 
 def _list_application_profiles(br, name_prefix=None):
-    """列出 APPLICATION 类型 inference profile，可按名称前缀过滤"""
+    """列出 APPLICATION 类型 inference profile，可按名称关键词过滤（包含匹配）"""
     profiles = []
     paginator = br.get_paginator("list_inference_profiles")
     for page in paginator.paginate(typeEquals="APPLICATION"):
         for p in page.get("inferenceProfileSummaries", []):
             name = p.get("inferenceProfileName", "")
-            if name_prefix and not name.startswith(name_prefix):
+            if name_prefix and name_prefix.lower() not in name.lower():
                 continue
             profiles.append(_profile_summary(p))
     return profiles
@@ -348,6 +368,11 @@ def verify():
         info, err = _verify_account(ak, sk, user_id or None)
         if err:
             return jsonify({"ok": False, "error": err}), 400
+        # 验证成功后后台预热 code_map
+        def _prewarm():
+            if not _quota_code_map:
+                _build_code_map(ak, sk)
+        threading.Thread(target=_prewarm, daemon=True).start()
         return jsonify({"ok": True, **info})
     except Exception as e:
         return jsonify({"ok": False, "error": _aws_error(e)}), 400
@@ -1113,7 +1138,7 @@ def test_profile():
                     invoke_resp = rt.converse(
                         modelId=profile_arn,
                         messages=[{"role": "user", "content": [{"text": "hi"}]}],
-                        inferenceConfig={"maxTokens": 8, "temperature": 0},
+                        inferenceConfig={"maxTokens": 8},
                     )
                     text = ""
                     for block in invoke_resp.get("output", {}).get("message", {}).get("content", []):
@@ -1147,14 +1172,18 @@ def export_excel():
       B  登录URL    ─ 全部数据行合并
       C  账号       ─ 全部数据行合并（留空，用户填）
       D  密码       ─ 全部数据行合并（留空，用户填）
-      E  模型类型   ─ 同一模型的连续行合并
-      F  区域       ─ 每行独立
-      G  模型QRN    ─ 每行独立
-      H  标签       ─ 连续相同标签的行合并
+      E  Access Key ─ 全部数据行合并
+      F  Secret Key ─ 全部数据行合并
+      G  模型类型   ─ 同一模型的连续行合并
+      H  区域       ─ 每行独立
+      I  模型QRN    ─ 每行独立
+      J  标签       ─ 连续相同标签的行合并
     """
     data = request.get_json() or {}
     raw_results = data.get("results", [])
     account_id  = (data.get("account_id") or "").strip()
+    access_key  = (data.get("access_key") or "").strip()
+    secret_key  = (data.get("secret_key") or "").strip()
 
     if not raw_results:
         return jsonify({"ok": False, "error": "无数据可导出"}), 400
@@ -1184,6 +1213,8 @@ def export_excel():
             "login_url":   login_url,
             "username":    "",           # C 留空
             "password":    "",           # D 留空
+            "access_key":  access_key,   # E
+            "secret_key":  secret_key,   # F
             "model_label": r.get("model_label", r.get("model_id", "")),
             "region":      r.get("region", ""),
             "qrn":         r.get("inferenceProfileArn", "") if r.get("ok")
@@ -1200,8 +1231,7 @@ def export_excel():
     ws = wb.active
     ws.title = "Inference Profiles"
 
-    hdr_font  = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-    hdr_fill  = PatternFill(start_color="2563EB", end_color="2563EB", fill_type="solid")
+    hdr_font  = Font(name="Calibri", size=11, bold=True)
     hdr_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     val_align   = Alignment(horizontal="left",   vertical="center", wrap_text=False)
@@ -1210,23 +1240,21 @@ def export_excel():
 
     def _border(top="thin", bottom="thin", left="thin", right="thin"):
         def _side(s):
-            return Side(style=s, color="D0D7E3") if s else Side(style=None)
+            return Side(style=s) if s else Side(style=None)
         return Border(left=_side(left), right=_side(right),
                       top=_side(top),   bottom=_side(bottom))
 
     full_border = _border()
-    todo_fill   = PatternFill(start_color="FFFDE7", end_color="FFFDE7", fill_type="solid")
-    err_font    = Font(name="Calibri", color="C65911", italic=True)
+    err_font    = Font(name="Calibri", italic=True)
 
     # ── 表头（行 1） ─────────────────────────────────────────
-    headers    = ["AWS账户ID", "登录URL", "账号", "密码",
+    headers    = ["AWS账户ID", "登录URL", "账号", "密码", "Access Key", "Secret Key",
                   "模型类型", "区域", "模型QRN", "标签"]
-    col_widths = [18, 52, 18, 18, 26, 14, 72, 32]
+    col_widths = [18, 52, 18, 18, 22, 44, 26, 14, 72, 32]
 
     for ci, h in enumerate(headers, 1):
         cell = ws.cell(row=1, column=ci, value=h)
         cell.font      = hdr_font
-        cell.fill      = hdr_fill
         cell.alignment = hdr_align
         cell.border    = full_border
     for ci, w in enumerate(col_widths, 1):
@@ -1239,25 +1267,25 @@ def export_excel():
 
     for ri, row in enumerate(rows):
         excel_row = data_start + ri
-        # 写各列
         values = [
             row["account_id"],  # A
             row["login_url"],   # B
             row["username"],    # C
             row["password"],    # D
-            row["model_label"], # E
-            row["region"],      # F
-            row["qrn"],         # G
-            row["tags"],        # H
+            row["access_key"],  # E
+            row["secret_key"],  # F
+            row["model_label"], # G
+            row["region"],      # H
+            row["qrn"],         # I
+            row["tags"],        # J
         ]
         for ci, val in enumerate(values, 1):
             cell = ws.cell(row=excel_row, column=ci, value=val)
             cell.border    = full_border
             cell.alignment = val_align
-            if ci in (3, 4):          # 账号/密码：留空高亮
-                cell.fill      = todo_fill
+            if ci in (3, 4):
                 cell.alignment = todo_align
-            if ci == 7 and not row["ok"]:   # QRN 失败标红
+            if ci == 9 and not row["ok"]:
                 cell.font = err_font
 
     # ── 合并辅助函数 ─────────────────────────────────────────
@@ -1284,7 +1312,7 @@ def export_excel():
                 top=top, bottom=bottom, left="thin", right="thin"
             )
 
-    # ── A/B/C/D：全部数据行合并 ──────────────────────────────
+    # ── A/B/C/D/E/F：全部数据行合并 ─────────────────────────
     last_data = data_start + total_rows - 1
     if total_rows > 1:
         _apply_merge(ws, data_start, last_data, 1,
@@ -1292,28 +1320,32 @@ def export_excel():
         _apply_merge(ws, data_start, last_data, 2,
                      login_url,  merge_align)
         _apply_merge(ws, data_start, last_data, 3,
-                     "",         todo_align,  fill=todo_fill)
+                     "",         todo_align)
         _apply_merge(ws, data_start, last_data, 4,
-                     "",         todo_align,  fill=todo_fill)
+                     "",         todo_align)
+        _apply_merge(ws, data_start, last_data, 5,
+                     access_key, merge_align)
+        _apply_merge(ws, data_start, last_data, 6,
+                     secret_key, merge_align)
 
-    # ── E（模型类型）：同一模型连续行合并 ────────────────────
+    # ── G（模型类型）：同一模型连续行合并 ────────────────────
     i = 0
     while i < total_rows:
         j = i + 1
         while j < total_rows and rows[j]["model_label"] == rows[i]["model_label"]:
             j += 1
         r1, r2 = data_start + i, data_start + j - 1
-        _apply_merge(ws, r1, r2, 5, rows[i]["model_label"], merge_align)
+        _apply_merge(ws, r1, r2, 7, rows[i]["model_label"], merge_align)
         i = j
 
-    # ── H（标签）：连续相同标签行合并 ────────────────────────
+    # ── J（标签）：连续相同标签行合并 ────────────────────────
     i = 0
     while i < total_rows:
         j = i + 1
         while j < total_rows and rows[j]["tags"] == rows[i]["tags"]:
             j += 1
         r1, r2 = data_start + i, data_start + j - 1
-        _apply_merge(ws, r1, r2, 8, rows[i]["tags"], merge_align)
+        _apply_merge(ws, r1, r2, 10, rows[i]["tags"], merge_align)
         i = j
 
     # ── 冻结首行 ─────────────────────────────────────────────
@@ -1337,6 +1369,151 @@ def export_excel():
         download_name=filename,
     )
 
+@app.route("/quotas")
+def quotas_page():
+    return render_template("quotas.html")
+
+
+# ── 持久化 code_map（写到 outputs/quota_codes.json，跨重启复用）────
+import json as _json
+import os as _os
+import time as _time
+import concurrent.futures as _cf
+
+_CODE_MAP_PATH = _os.path.join(_os.path.dirname(__file__), "outputs", "quota_codes.json")
+_quota_code_map: dict = {}   # lower(name) → QuotaCode，全局内存
+_quota_code_loaded = False
+
+def _load_code_map_from_disk():
+    global _quota_code_map, _quota_code_loaded
+    if _quota_code_loaded:
+        return
+    try:
+        if _os.path.exists(_CODE_MAP_PATH):
+            with open(_CODE_MAP_PATH, "r", encoding="utf-8") as f:
+                _quota_code_map = _json.load(f)
+    except Exception:
+        pass
+    _quota_code_loaded = True
+
+def _save_code_map_to_disk():
+    try:
+        _os.makedirs(_os.path.dirname(_CODE_MAP_PATH), exist_ok=True)
+        with open(_CODE_MAP_PATH, "w", encoding="utf-8") as f:
+            _json.dump(_quota_code_map, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+def _build_code_map(ak, sk):
+    """用 us-east-1 list_aws_default_service_quotas 建立 code_map，写入磁盘"""
+    global _quota_code_map
+    new_map = {}
+    try:
+        client = _get_client("service-quotas", ak, sk, "us-east-1")
+        for page in client.get_paginator("list_aws_default_service_quotas").paginate(ServiceCode="bedrock"):
+            for q in page.get("Quotas", []):
+                name = q.get("QuotaName", "")
+                nl   = name.lower()
+                if ("claude" in nl or "anthropic" in nl) and q.get("QuotaCode"):
+                    new_map[nl] = q["QuotaCode"]
+    except Exception:
+        pass
+    if new_map:
+        _quota_code_map = new_map
+        _save_code_map_to_disk()
+
+# 应用启动时从磁盘加载
+_load_code_map_from_disk()
+
+
+@app.route("/api/query_quotas", methods=["POST"])
+def query_quotas():
+    """查询单区域 Bedrock Claude 配额 — 用已知 QuotaCode 精准查，极快"""
+    data        = request.get_json(force=True) or {}
+    ak, sk, _   = _creds(data)
+    region      = (data.get("region") or "").strip()
+    quota_types = data.get("quota_types") or []
+    sel_models  = data.get("models") or []
+    if not ak or not sk:
+        return jsonify({"ok": False, "error": "请提供 access_key 和 secret_key"})
+    if not region:
+        return jsonify({"ok": False, "error": "请选择区域"})
+
+    # 配额类型关键词（只保留图片里的三种）
+    # 你创建的是 Cross-Region Inference Profile，所以只看 cross-region 配额
+    TYPE_KEYWORDS = {
+        "tpm": "tokens per minute",
+        "tpd": "tokens per day",
+        "rpm": "requests per minute",
+    }
+    type_filters = [TYPE_KEYWORDS[t.lower()] for t in quota_types if t.lower() in TYPE_KEYWORDS]
+
+    # 始终只看 cross-region（Application Inference Profile 走的是这个配额）
+    # 过滤掉 on-demand（直接调用 foundation model 用的）和 doubled（TPD 双倍计算项）
+    EXCLUDE_KEYWORDS = ["on-demand", "doubled for cross-region"]
+
+    # ── 确保 code_map 已加载 ──────────────────────────────────
+    _load_code_map_from_disk()
+    if not _quota_code_map:
+        # 磁盘没有，实时建（只发生一次）
+        _build_code_map(ak, sk)
+        if not _quota_code_map:
+            return jsonify({"ok": False, "error": "无法获取配额代码映射，请稍后重试"})
+
+    # ── 筛选目标配额代码 ──────────────────────────────────────
+    targets = []   # [(display_name, code), ...]
+    for nl, code in _quota_code_map.items():
+        if sel_models and not any(m.lower() in nl for m in sel_models):
+            continue
+        if type_filters and not any(kw in nl for kw in type_filters):
+            continue
+        # 过滤掉 on-demand 和 doubled（cross-region 翻倍计算项）
+        if any(ex in nl for ex in EXCLUDE_KEYWORDS):
+            continue
+        targets.append((nl, code))
+
+    if not targets:
+        return jsonify({"ok": True, "quotas": [], "errors": [], "total": 0})
+
+    # ── 精准查：每个 code 两次 API 调用（applied + default）────
+    # applied 不存在时只用 default
+    sc     = "bedrock"
+    client = _get_client("service-quotas", ak, sk, region)
+
+    def _fetch_one(nl_code):
+        nl, code = nl_code
+        aq, dq = {}, {}
+        try:
+            aq = client.get_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})
+        except Exception:
+            pass
+        try:
+            dq = client.get_aws_default_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})
+        except Exception:
+            pass
+        if not aq and not dq:
+            return None
+        return {
+            "region":        region,
+            "name":          (aq or dq).get("QuotaName", ""),
+            "value":         aq.get("Value"),
+            "default_value": dq.get("Value"),
+            "quota_code":    code,
+        }
+
+    results = []
+    max_w   = min(30, len(targets))
+    with _cf.ThreadPoolExecutor(max_workers=max_w) as pool:
+        for item in pool.map(_fetch_one, targets):
+            if item:
+                results.append(item)
+
+    results.sort(key=lambda x: x["name"])
+    return jsonify({"ok": True, "quotas": results, "errors": [], "total": len(results)})
+
+query_quotas._cache = {}
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -1358,4 +1535,4 @@ def test_profile_page():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001, debug=False, use_reloader=False)
+    app.run(host="0.0.0.0", port=5001, debug=False, use_reloader=False, threaded=True)

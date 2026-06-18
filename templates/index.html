@@ -270,6 +270,9 @@ table tbody tr:last-child td{border-bottom:none}
   max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .tgb>span::before{content:attr(data-label);overflow:hidden;text-overflow:ellipsis}
+/* 已有标签面板里的 chip：不限宽，允许换行 */
+.tgl .tgb{max-width:none;display:flex;flex-wrap:wrap;gap:4px}
+.tgl .tgb>span{max-width:none;white-space:normal;word-break:break-all}
 
 /* Tag input rows */
 .tg{display:flex;flex-direction:column;gap:5px}
@@ -354,6 +357,21 @@ table tbody tr:last-child td{border-bottom:none}
 }
 .prof-bar label{font-size:11px;color:var(--t2);cursor:pointer;display:flex;align-items:center;gap:5px}
 .prof-bar label input{accent-color:var(--pr);width:12px;height:12px}
+
+/* 筛选栏 */
+.list-filter{
+  display:flex;flex-wrap:wrap;gap:6px;
+  padding:6px 0 8px;
+  align-items:center;
+}
+.list-filter input{
+  height:28px;padding:0 9px;
+  border:1px solid var(--border);border-radius:var(--r-sm);
+  font-size:11px;outline:none;background:var(--surface);color:var(--text);
+  transition:border-color .15s;
+}
+.list-filter input:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.list-filter input::placeholder{color:var(--t3)}
 
 /* Region multi-select */
 .rgl{
@@ -453,6 +471,7 @@ table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t
     <a href="/model-tags">创建配置</a>
     <a href="/delete-profiles">删除配置</a>
     <a href="/test-profile">测试模型</a>
+    <a href="/quotas">模型配额</a>
   </nav>
 </header>
 
@@ -511,6 +530,13 @@ table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t
         </div>
       </div>
       <div id="pw" style="display:none">
+        <div class="list-filter" id="listFilter">
+          <input id="fName" type="text" placeholder="名称搜索..." style="flex:2;min-width:140px" oninput="filterProfiles()">
+          <input id="fRegion" type="text" placeholder="区域筛选..." style="flex:1;min-width:100px" oninput="filterProfiles()">
+          <input id="fTag" type="text" placeholder="标签搜索..." style="flex:1;min-width:100px" oninput="filterProfiles()">
+          <input id="fArn" type="text" placeholder="ARN 搜索..." style="flex:3;min-width:180px" oninput="filterProfiles()">
+          <button class="btn bsm" onclick="clearFilter()" style="flex-shrink:0">清空</button>
+        </div>
         <div class="prof-bar fb mb8">
           <span class="tc2" id="pc">0 个配置</span>
           <label><input type="checkbox" id="sa" onchange="ta()"> 全选</label>
@@ -557,7 +583,16 @@ table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t
         <span class="tc2">或粘贴 arn 手动载入</span>
       </div>
       <div id="existingTagsPanel">
-        <div class="fg" style="margin-bottom:4px"><label>已有标签</label></div>
+        <div class="fg" style="margin-bottom:4px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+            <label>已有标签</label>
+            <div style="display:flex;gap:3px">
+              <button class="btn bsm" id="btnViewSum" onclick="setTagView('sum')" style="background:var(--pr);color:#fff;border-color:transparent">汇总</button>
+              <button class="btn bsm" id="btnViewByProfile" onclick="setTagView('profile')">按配置</button>
+              <button class="btn bsm" id="btnViewByTag" onclick="setTagView('tag')">按标签</button>
+            </div>
+          </div>
+        </div>
         <div class="tgl" id="existingTagsList"><div class="emp">请先选择配置</div></div>
         <p class="hint" id="existingTagsHint" style="display:none">勾选要删除的标签，然后点击删除按钮</p>
       </div>
@@ -602,25 +637,183 @@ async function lR(){try{var r=await fetch(B+"/api/regions"),d=await r.json();if(
 
 async function vrf(){var ak=$("ak").value.trim(),sk=$("sk").value.trim();if(!ak||!sk){sR("tgr","请填写 AK/SK","wa");return}var btn=$("btnv");btn.disabled=true;btn.textContent="验证中...";try{var r=await fetch(B+"/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk})}),d=await r.json();if(d.ok){$("aid").textContent=d.account_id;$("ar").style.display="flex";BedrockPersist.onVerified(d.account_id);sR("tgr","已验证，账号 ID："+d.account_id,"ok")}else sR("tgr",d.error,"er")}finally{btn.disabled=false;btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> 验证'}}
 
-async function loadP(){var ak=$("ak").value.trim(),sk=$("sk").value.trim(),regions=getSelRegions();if(!ak||!sk){sR("tgr","请先填写凭证","wa");return}if(!regions.length){sR("tgr","请至少选择一个区域","wa");return}$("pw").style.display="none";$("pe").style.display="none";$("pl").style.display="flex";$("btnld").disabled=true;var allProfiles=[],errors=[];try{for(var ri=0;ri<regions.length;ri++){var region=regions[ri];$("pl").innerHTML='<span class="sp"></span> 加载中 ('+(ri+1)+'/'+regions.length+') '+es(region)+'...';try{var r=await fetch(B+"/api/list_profiles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk,region:region})}),d=await r.json();if(d.ok){(d.profiles||[]).forEach(function(p){p.region=region;allProfiles.push(p)})}else errors.push(region+": "+d.error)}catch(e){errors.push(region+": "+e.message)}}$("pl").style.display="none";ap=allProfiles;if(allProfiles.length){rP(allProfiles);if(errors.length)sR("tgr","已加载 "+allProfiles.length+" 个配置，部分区域失败："+errors.join("; "),"wa")}else{$("pe").style.display="flex";$("pe").textContent=errors.length?errors.join("; "):"未找到配置";if(errors.length)sR("tgr",errors.join("; "),"er")}}catch(e){$("pl").style.display="none";$("pe").style.display="flex";$("pe").textContent="加载失败";sR("tgr","错误："+e.message,"er")}finally{$("btnld").disabled=false}}
+async function loadP(){var ak=$("ak").value.trim(),sk=$("sk").value.trim(),regions=getSelRegions();if(!ak||!sk){sR("tgr","请先填写凭证","wa");return}if(!regions.length){sR("tgr","请至少选择一个区域","wa");return}$("pw").style.display="none";$("pe").style.display="none";$("pl").style.display="flex";$("pl").innerHTML='<span class="sp"></span> 加载中 (0/'+regions.length+')...';$("btnld").disabled=true;var allProfiles=[],errors=[],done=0;try{// 并发加载所有区域
+var CONCURRENCY=8,idx=0;async function worker(){while(idx<regions.length){var i=idx++;var region=regions[i];try{var r=await fetch(B+"/api/list_profiles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk,region:region})});var d=await r.json();if(d.ok){(d.profiles||[]).forEach(function(p){p.region=region;allProfiles.push(p)})}else errors.push(region+": "+d.error)}catch(e){errors.push(region+": "+e.message)}done++;$("pl").innerHTML='<span class="sp"></span> 加载中 ('+done+'/'+regions.length+')...'}}var workers=[];for(var w=0;w<Math.min(CONCURRENCY,regions.length);w++)workers.push(worker());await Promise.all(workers);$("pl").style.display="none";ap=allProfiles;if(allProfiles.length){rP(allProfiles);if(errors.length)sR("tgr","已加载 "+allProfiles.length+" 个配置，部分区域失败："+errors.join("; "),"wa")}else{$("pe").style.display="flex";$("pe").textContent=errors.length?errors.join("; "):"未找到配置";if(errors.length)sR("tgr",errors.join("; "),"er")}}catch(e){$("pl").style.display="none";$("pe").style.display="flex";$("pe").textContent="加载失败";sR("tgr","错误："+e.message,"er")}finally{$("btnld").disabled=false}}
 
-function rP(ps){var w=$("pw"),tb=$("pt"),e=$("pe");if(!ps||ps.length===0){w.style.display="none";e.style.display="flex";e.textContent="未找到配置";return}w.style.display="block";e.style.display="none";var rc={};ps.forEach(function(p){rc[p.region||"?"]=1});$("pc").textContent=ps.length+" 个配置 · "+Object.keys(rc).length+" 个区域";tb.innerHTML="";ps.forEach(function(p,i){var tr=document.createElement("tr");var tgs=p.tags||[];var tH="<div class=tgb>";if(tgs.length===0){tH+='<span style="color:var(--t2);font-size:11px;background:none;border:none;padding:0">—</span>'}else{tgs.forEach(function(t){tH+='<span data-label="'+es(t.key||"")+'='+es(t.value||"")+'" title="'+es(t.key)+'='+es(t.value)+'"></span>'})}tH+="</div>";tr.innerHTML='<td class=cc><input type=checkbox data-i="'+i+'" onchange="us()"></td><td><span class="bdge bg-rg">'+es(p.region||"")+'</span></td><td>'+es(p.name)+'</td><td><span class="bdge bg-ok">'+es((p.status||"").toLowerCase())+'</span></td><td>'+tH+'</td><td><span class=tu title="'+es(p.arn)+'">'+es(p.arn)+'</span></td>';tb.appendChild(tr)});$("sa").checked=false;us()}
-function ta(){var c=$("sa").checked;document.querySelectorAll("#pt input[type=checkbox]").forEach(function(cb){cb.checked=c});us()}
+function rP(ps){var w=$("pw"),tb=$("pt"),e=$("pe");if(!ps||ps.length===0){w.style.display="none";e.style.display="flex";e.textContent="未找到配置";return}w.style.display="block";e.style.display="none";// 重置筛选框
+$("fName").value="";$("fRegion").value="";$("fTag").value="";$("fArn").value="";renderFilteredProfiles(ps)}
+
+function renderFilteredProfiles(ps){var tb=$("pt"),total=ap.length;var rc={};ps.forEach(function(p){rc[p.region||"?"]=1});$("pc").textContent=ps.length+(ps.length<total?" / "+total+" 个配置":" 个配置")+" · "+Object.keys(rc).length+" 个区域";tb.innerHTML="";ps.forEach(function(p,i){// 找到在 ap 中的真实 index（用于选择）
+var realIdx=ap.indexOf(p);var tr=document.createElement("tr");var tgs=p.tags||[];var tH="<div class=tgb>";if(tgs.length===0){tH+='<span style="color:var(--t2);font-size:11px;background:none;border:none;padding:0">—</span>'}else{tgs.forEach(function(t){tH+='<span data-label="'+es(t.key||"")+'='+es(t.value||"")+'" title="'+es(t.key)+'='+es(t.value)+'"></span>'})}tH+="</div>";var checked=sp.some(function(s){return s.arn===p.arn});tr.innerHTML='<td class=cc><input type=checkbox data-i="'+realIdx+'" '+(checked?"checked":"")+'onchange="us()"></td><td><span class="bdge bg-rg">'+es(p.region||"")+'</span></td><td>'+es(p.name)+'</td><td><span class="bdge bg-ok">'+es((p.status||"").toLowerCase())+'</span></td><td>'+tH+'</td><td><span class=tu title="'+es(p.arn)+'">'+es(p.arn)+'</span></td>';tb.appendChild(tr)});var allChecked=ps.length>0&&ps.every(function(p){return sp.some(function(s){return s.arn===p.arn})});$("sa").checked=allChecked;$("sa").indeterminate=!allChecked&&sp.length>0}
+
+function filterProfiles(){var nameF=($("fName").value||"").toLowerCase();var regF=($("fRegion").value||"").toLowerCase();var tagF=($("fTag").value||"").toLowerCase();var arnF=($("fArn").value||"").toLowerCase();var filtered=ap.filter(function(p){var nameOk=!nameF||(p.name||"").toLowerCase().indexOf(nameF)!==-1;var regOk=!regF||(p.region||"").toLowerCase().indexOf(regF)!==-1;var arnOk=!arnF||(p.arn||"").toLowerCase().indexOf(arnF)!==-1;var tagOk=!tagF;if(!tagOk){var tgs=p.tags||[];tagOk=tgs.some(function(t){return(t.key+"="+t.value).toLowerCase().indexOf(tagF)!==-1})}return nameOk&&regOk&&arnOk&&tagOk});renderFilteredProfiles(filtered)}
+
+function clearFilter(){$("fName").value="";$("fRegion").value="";$("fTag").value="";$("fArn").value="";renderFilteredProfiles(ap)}
+function ta(){var c=$("sa").checked;document.querySelectorAll("#pt input[type=checkbox]").forEach(function(cb){cb.checked=c;var p=ap[parseInt(cb.dataset.i)];if(p){if(c&&!sp.some(function(s){return s.arn===p.arn}))sp.push({arn:p.arn,region:p.region});else if(!c)sp=sp.filter(function(s){return s.arn!==p.arn})}});$("sc").textContent=allSelArns().length;if(allSelArns().length){loadSelectedTags()}else{_tagMap=null;$("existingTagsList").innerHTML='<div class="emp">请先选择配置</div>'}updateTagBtnText()}
 function us(){sp=[];document.querySelectorAll("#pt input[type=checkbox]:checked").forEach(function(cb){var p=ap[parseInt(cb.dataset.i)];if(p)sp.push({arn:p.arn,region:p.region})});$("sc").textContent=allSelArns().length;if(allSelArns().length){loadSelectedTags()}else{_tagMap=null;$("existingTagsList").innerHTML='<div class="emp">请先选择配置</div>'}updateTagBtnText()}
 function updateTagBtnText(){var btn=$("btntg");if(_tagMode==="remove"&&$("existingTagsList").querySelectorAll("input[type=checkbox]:checked").length>0){btn.textContent="删除（"+$("existingTagsList").querySelectorAll("input[type=checkbox]:checked").length+"）"}else if(_tagMode==="add"){var k=document.querySelectorAll("#tgg .tr input.tk");var c=0;for(var i=0;i<k.length;i++){if(k[i].value.trim())c++}btn.textContent=c>0?"应用（"+c+"）":"应用"}else{btn.textContent="应用"}}
 
 function loadManualArns(){var v=$("manualArns").value.trim();if(!v){sR("tgr","请输入 ARN","wa");return}_manualArns=v.split("\n").map(function(s){var arn=s.trim();return arn?{arn:arn,region:regionFromArn(arn)||"us-east-1"}:null}).filter(Boolean);if(_manualArns.length===0){sR("tgr","未找到有效 ARN","wa");return}$("sc").textContent=allSelArns().length;sR("tgr","已载入 "+_manualArns.length+" 个 ARN","ok");loadSelectedTags()}
 
-function setTagMode(m){_tagMode=m;document.querySelectorAll("#tagMode button").forEach(function(b){b.classList.toggle("act",b.dataset.mode===m)});$("tagAddArea").style.display=m==="add"?"block":"none";$("existingTagsHint").style.display=m==="remove"?"block":"none";if(_tagMap)renderExistingTags(_tagMap);else if(allSelArns().length)loadSelectedTags();updateTagBtnText()}
+function setTagMode(m){_tagMode=m;document.querySelectorAll("#tagMode button").forEach(function(b){b.classList.toggle("act",b.dataset.mode===m)});$("tagAddArea").style.display=m==="add"?"block":"none";$("existingTagsHint").style.display=m==="remove"?"block":"none";if(_profileTagData.length)renderTagView();else if(_tagMap)renderExistingTags(_tagMap);updateTagBtnText()}
 
-async function loadSelectedTags(){var ak=$("ak").value.trim(),sk=$("sk").value.trim(),items=allSelArns();if(!items.length){_tagMap=null;$("existingTagsList").innerHTML='<div class="emp">未选择配置</div>';return}if(!ak||!sk){$("existingTagsList").innerHTML='<div class="emp">请先填写凭证</div>';return}$("existingTagsList").innerHTML='<div class="emp"><span class="sp"></span> 加载标签中...</div>';var tagMap={},total=items.length;for(var i=0;i<items.length;i++){var it=items[i],arn=it.arn,region=it.region||regionFromArn(arn)||"us-east-1";try{var r=await fetch(B+"/api/get_profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk,region:region,inference_profile_arn:arn})});var d=await r.json();if(d.ok&&d.tags){d.tags.forEach(function(t){var key=t.key||"";if(key){if(!tagMap[key])tagMap[key]={count:0,label:key+"="+(t.value||"")};tagMap[key].count++}})}}catch(e){}}renderExistingTags(tagMap,total)}
-function renderExistingTags(tagMap,total){_tagMap=tagMap;total=total||allSelArns().length;var keys=Object.keys(tagMap),list=$("existingTagsList");if(!keys.length){list.innerHTML='<div class="tgi"><span class="tc2">所选配置暂无标签</span></div>';updateTagBtnText();return}if(_tagMode==="add"){var h='<div class="tgb" style="max-width:none;padding:2px 4px">';keys.sort().forEach(function(key){var tm=tagMap[key],suffix=tm.count<total?" ("+tm.count+"/"+total+")":"";h+='<span data-label="'+es(tm.label+suffix)+'" title="'+es(tm.label+(suffix?" — 仅部分配置有此标签":""))+'"></span>'});h+="</div>";list.innerHTML=h}else{var h2="";keys.sort().forEach(function(key){var tm=tagMap[key],suffix=tm.count<total?" ("+tm.count+"/"+total+")":"";h2+='<div class="tgi"><input type="checkbox" value="'+es(key)+'" onchange="updateTagBtnText()"><span class="tkv">'+es(tm.label+suffix)+'</span></div>'});list.innerHTML=h2}updateTagBtnText()}
+var _tagView="sum"; // "sum" | "profile" | "tag"
+var _profileTagData=[];
+
+function setTagView(v){
+  _tagView=v;
+  ["sum","profile","tag"].forEach(function(k){
+    var btn=$(k==="sum"?"btnViewSum":k==="profile"?"btnViewByProfile":"btnViewByTag");
+    if(!btn)return;
+    var active=k===v;
+    btn.style.background=active?"var(--pr)":"var(--surface)";
+    btn.style.color=active?"#fff":"var(--text)";
+    btn.style.borderColor=active?"transparent":"var(--border)";
+  });
+  if(_profileTagData.length)renderTagView();
+}
+
+function renderTagView(){
+  var list=$("existingTagsList");
+  if(!_profileTagData.length){list.innerHTML='<div class="emp">未选择配置</div>';return}
+  var total=_profileTagData.length;
+
+  if(_tagView==="sum"){
+    // ── 汇总视图：原来的合并展示 ─────────────────────────────
+    var tagMap={};
+    _profileTagData.forEach(function(p){(p.tags||[]).forEach(function(t){var key=t.key||"";if(key){if(!tagMap[key])tagMap[key]={count:0,label:key+"="+(t.value||"")};tagMap[key].count++}})});
+    var keys=Object.keys(tagMap);
+    if(!keys.length){list.innerHTML='<div class="tgi"><span class="tc2">所选配置暂无标签</span></div>';updateTagBtnText();return}
+    if(_tagMode==="add"){
+      var h='<div class="tgb" style="max-width:none;padding:2px 4px">';
+      keys.sort().forEach(function(key){var tm=tagMap[key],suffix=tm.count<total?" ("+tm.count+"/"+total+")":"";h+='<span data-label="'+es(tm.label+suffix)+'" title="'+es(tm.label+(suffix?" — 仅部分配置有此标签":""))+'"></span>'});
+      h+="</div>";list.innerHTML=h;
+    } else {
+      var h2="";
+      keys.sort().forEach(function(key){var tm=tagMap[key],suffix=tm.count<total?" ("+tm.count+"/"+total+")":"";h2+='<div class="tgi"><input type="checkbox" value="'+es(tm.key||key)+'" data-kv="'+es(key)+'" onchange="updateTagBtnText()"><span class="tkv">'+es(tm.label+suffix)+'</span></div>'});
+      list.innerHTML=h2;
+    }
+
+  } else if(_tagView==="profile"){
+    // ── 按配置视图：每个配置单独一行，展示其所有标签 ────────
+    var h="";
+    _profileTagData.forEach(function(p){
+      var tgs=p.tags||[];
+      var shortName=p.name||(p.arn||"").split("/").pop()||p.arn;
+      if(_tagMode==="remove"){
+        if(!tgs.length)return;
+        h+='<div style="border-bottom:1px solid var(--border);padding:5px 7px">';
+        h+='<div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:3px">'+es(shortName)+'<span class="bdge bg-rg" style="margin-left:5px">'+es(p.region||"")+'</span></div>';
+        tgs.forEach(function(t){h+='<div class="tgi"><input type="checkbox" class="del-tag-cb" value="'+es(t.key)+'" data-arn="'+es(p.arn)+'" data-region="'+es(p.region)+'" data-key="'+es(t.key)+'" onchange="updateTagBtnText()"><span class="tkv">'+es(t.key+"="+t.value)+'</span></div>'});
+        h+='</div>';
+      } else {
+        h+='<div style="border-bottom:1px solid var(--border);padding:5px 7px;display:flex;align-items:flex-start;gap:8px">';
+        h+='<div style="font-size:11px;font-weight:600;min-width:120px;flex-shrink:0">'+es(shortName)+'<br><span class="bdge bg-rg" style="margin-top:2px;display:inline-flex">'+es(p.region||"")+'</span></div>';
+        if(!tgs.length){h+='<span style="color:var(--t3);font-size:11px">无标签</span>';}
+        else{h+='<div class="tgb" style="max-width:none;flex-wrap:wrap;gap:4px">';tgs.forEach(function(t){h+='<span data-label="'+es(t.key+"="+t.value)+'"></span>'});h+='</div>';}
+        h+='</div>';
+      }
+    });
+    list.innerHTML=h||'<div class="tgi"><span class="tc2">所有选中配置均无标签</span></div>';
+
+  } else {
+    // ── 按标签视图：每个 key=value 一行，显示哪些配置有此标签 ─
+    var tagIndex={};
+    _profileTagData.forEach(function(p){(p.tags||[]).forEach(function(t){var kv=t.key+"="+t.value;if(!tagIndex[kv])tagIndex[kv]={key:t.key,value:t.value,profiles:[]};tagIndex[kv].profiles.push(p)})});
+    var kvs=Object.keys(tagIndex).sort();
+    if(!kvs.length){list.innerHTML='<div class="tgi"><span class="tc2">所选配置暂无标签</span></div>';updateTagBtnText();return}
+    var h3="";
+    kvs.forEach(function(kv){
+      var td=tagIndex[kv];
+      if(_tagMode==="remove"){
+        h3+='<div class="tgi"><input type="checkbox" class="del-tag-cb" value="'+es(td.key)+'" data-key="'+es(td.key)+'" onchange="updateTagBtnText()"><span class="tkv">'+es(kv)+'</span>';
+        h3+='<span style="color:var(--t3);font-size:10px;margin-left:auto">'+td.profiles.length+' 个配置</span></div>';
+      } else {
+        h3+='<div style="border-bottom:1px solid var(--border);padding:5px 7px">';
+        h3+='<div style="font-size:11px;font-weight:600;margin-bottom:3px"><span class="bdge" style="background:var(--pl);color:var(--pr);border:1px solid #bfdbfe">'+es(kv)+'</span><span style="color:var(--t3);font-size:10px;margin-left:6px">'+td.profiles.length+' 个配置</span></div>';
+        h3+='<div style="display:flex;flex-wrap:wrap;gap:3px">';
+        td.profiles.forEach(function(p){var shortName=p.name||(p.arn||"").split("/").pop();h3+='<span class="bdge bg-rg" title="'+es(p.arn)+'">'+es(shortName)+'</span>'});
+        h3+='</div></div>';
+      }
+    });
+    list.innerHTML=h3;
+  }
+  updateTagBtnText();
+}
+
+async function loadSelectedTags(){
+  var ak=$("ak").value.trim(),sk=$("sk").value.trim(),items=allSelArns();
+  if(!items.length){_tagMap=null;_profileTagData=[];$("existingTagsList").innerHTML='<div class="emp">未选择配置</div>';return}
+  if(!ak||!sk){$("existingTagsList").innerHTML='<div class="emp">请先填写凭证</div>';return}
+  $("existingTagsList").innerHTML='<div class="emp"><span class="sp"></span> 加载标签中...</div>';
+  var profileData=[],tagMap={},total=items.length,CONCURRENCY=8,idx=0;
+  async function worker(){
+    while(idx<total){
+      var i=idx++;var it=items[i],arn=it.arn,region=it.region||regionFromArn(arn)||"us-east-1";
+      try{
+        var r=await fetch(B+"/api/get_profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk,region:region,inference_profile_arn:arn})});
+        var d=await r.json();
+        var tags=d.ok&&d.tags?d.tags:[];
+        profileData.push({arn:arn,region:region,name:d.name||"",tags:tags});
+        tags.forEach(function(t){
+          var key=t.key||"";var val=t.value||"";
+          if(key){
+            // 用 key=value 作为索引，避免同 key 不同 value 被合并
+            var kv=key+"="+val;
+            if(!tagMap[kv])tagMap[kv]={count:0,label:kv,key:key,value:val};
+            tagMap[kv].count++;
+          }
+        });
+      }catch(e){profileData.push({arn:arn,region:region,name:"",tags:[]})}
+    }
+  }
+  var workers=[];for(var w=0;w<Math.min(CONCURRENCY,total);w++)workers.push(worker());
+  await Promise.all(workers);
+  _profileTagData=profileData;
+  _tagMap=tagMap;
+  renderTagView();
+}
+function renderExistingTags(tagMap,total){
+  // renderTagView 已接管展示逻辑，这里保持兼容
+  if(_profileTagData.length){renderTagView();return}
+  _tagMap=tagMap;total=total||allSelArns().length;
+  var keys=Object.keys(tagMap),list=$("existingTagsList");
+  if(!keys.length){list.innerHTML='<div class="tgi"><span class="tc2">所选配置暂无标签</span></div>';updateTagBtnText();return}
+  var h='<div class="tgb" style="max-width:none;padding:2px 4px">';
+  keys.sort().forEach(function(key){var tm=tagMap[key],suffix=tm.count<total?" ("+tm.count+"/"+total+")":"";h+='<span data-label="'+es(tm.label+suffix)+'" title="'+es(tm.label+(suffix?" — 仅部分配置有此标签":""))+'"></span>'});
+  h+="</div>";list.innerHTML=h;updateTagBtnText();
+}
 
 function addTg(){var g=$("tgg"),r=document.createElement("div");r.className="tr";r.innerHTML='<input class="tk" placeholder="key"><input class="tv" placeholder="value"><button class="btn bsm" onclick="addTg()">+</button><button class="rm" onclick="this.parentElement.remove();updateTagBtnText();BedrockPersist.save()" title="删除行">✕</button>';g.appendChild(r);updateTagBtnText();BedrockPersist.save()}
 function clr(){_manualArns=[];_tagMap=null;document.querySelectorAll("#tgg .tr").forEach(function(r,i){if(i>0)r.remove()});var f=document.querySelector("#tgg .tr");if(f){f.querySelector(".tk").value="";f.querySelector(".tv").value=""} $("existingTagsList").innerHTML='<div class="emp">请先选择配置</div>';$("manualArns").value="";$("tgr").innerHTML="";us()}
 function colT(ct){var t={};document.querySelectorAll("#"+ct+" .tr").forEach(function(r){var k=r.querySelector(".tk").value.trim(),v=r.querySelector(".tv").value.trim();if(k)t[k]=v||""});return t}
 
-async function tg(){var ak=$("ak").value.trim(),sk=$("sk").value.trim();if(!ak||!sk){sR("tgr","请先填写凭证","wa");return}var items=allSelArns();if(!items.length){sR("tgr","请选择配置或输入 ARN","wa");return}var grouped=groupByRegion(items),regions=Object.keys(grouped),btn=$("btntg");btn.disabled=true;if(_tagMode==="add"){var tags=colT("tgg");if(!Object.keys(tags).length){sR("tgr","请先添加标签","wa");btn.disabled=false;return}btn.textContent="应用中...";var okCnt=0,failCnt=0,details=[],ri=0;try{for(;ri<regions.length;ri++){var region=regions[ri],arns=grouped[region];btn.textContent="应用中 ("+(ri+1)+"/"+regions.length+")...";try{var r=await fetch(B+"/api/tag_profiles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk,region:region,resource_arns:arns,tags:tags})});var d=await r.json();if(d.ok){okCnt+=(d.success||arns.length);details.push(region+": "+arns.length+" 个")}else{failCnt+=arns.length;details.push(region+": 失败 — "+d.error)}}catch(e){failCnt+=arns.length;details.push(region+": "+e.message)}}var msg="✓ 完成 — 已追加 "+Object.keys(tags).length+" 个标签，共 "+items.length+" 个配置（"+regions.length+" 个区域）";if(failCnt)msg+="，"+failCnt+" 个失败";$("tgr").innerHTML='<div class="st '+(failCnt?"wa":"ok")+'">'+es(msg)+'<br><span style="font-size:10px;font-weight:400">'+es(details.join("；"))+'</span></div>';if(!failCnt)loadSelectedTags()}catch(e){sR("tgr","错误："+e.message,"er")}finally{btn.disabled=false;updateTagBtnText()}}else{var rmKeys=[];document.querySelectorAll("#existingTagsList input[type=checkbox]:checked").forEach(function(cb){rmKeys.push(cb.value)});if(!rmKeys.length){sR("tgr","请选择要删除的标签","wa");btn.disabled=false;return}btn.textContent="删除中...";var okCnt2=0,failCnt2=0,details2=[],rj=0;try{for(;rj<regions.length;rj++){var region2=regions[rj],arns2=grouped[region2];btn.textContent="删除中 ("+(rj+1)+"/"+regions.length+")...";try{var r2=await fetch(B+"/api/tag_profiles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk,region:region2,resource_arns:arns2,remove_tag_keys:rmKeys})});var d2=await r2.json();if(d2.ok){okCnt2+=(d2.success||arns2.length);details2.push(region2+": "+arns2.length+" 个")}else{failCnt2+=arns2.length;details2.push(region2+": 失败 — "+d2.error)}}catch(e){failCnt2+=arns2.length;details2.push(region2+": "+e.message)}}var msg2="✓ 完成 — 已删除 "+rmKeys.length+" 个标签，共 "+items.length+" 个配置（"+regions.length+" 个区域）";if(failCnt2)msg2+="，"+failCnt2+" 个失败";$("tgr").innerHTML='<div class="st '+(failCnt2?"wa":"ok")+'">'+es(msg2)+'<br><span style="font-size:10px;font-weight:400">'+es(details2.join("；"))+'</span></div>';if(!failCnt2)loadSelectedTags()}catch(e){sR("tgr","错误："+e.message,"er")}finally{btn.disabled=false;updateTagBtnText()}}}
+async function tg(){var ak=$("ak").value.trim(),sk=$("sk").value.trim();if(!ak||!sk){sR("tgr","请先填写凭证","wa");return}var items=allSelArns();if(!items.length){sR("tgr","请选择配置或输入 ARN","wa");return}var grouped=groupByRegion(items),regions=Object.keys(grouped),btn=$("btntg");btn.disabled=true;if(_tagMode==="add"){var tags=colT("tgg");if(!Object.keys(tags).length){sR("tgr","请先添加标签","wa");btn.disabled=false;return}btn.textContent="应用中...";var okCnt=0,failCnt=0,details=[],ri=0;try{for(;ri<regions.length;ri++){var region=regions[ri],arns=grouped[region];btn.textContent="应用中 ("+(ri+1)+"/"+regions.length+")...";try{var r=await fetch(B+"/api/tag_profiles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk,region:region,resource_arns:arns,tags:tags})});var d=await r.json();if(d.ok){okCnt+=(d.success||arns.length);details.push(region+": "+arns.length+" 个")}else{failCnt+=arns.length;details.push(region+": 失败 — "+d.error)}}catch(e){failCnt+=arns.length;details.push(region+": "+e.message)}}var msg="✓ 完成 — 已追加 "+Object.keys(tags).length+" 个标签，共 "+items.length+" 个配置（"+regions.length+" 个区域）";if(failCnt)msg+="，"+failCnt+" 个失败";$("tgr").innerHTML='<div class="st '+(failCnt?"wa":"ok")+'">'+es(msg)+'<br><span style="font-size:10px;font-weight:400">'+es(details.join("；"))+'</span></div>';if(!failCnt)loadSelectedTags()}catch(e){sR("tgr","错误："+e.message,"er")}finally{btn.disabled=false;updateTagBtnText()}}else{
+  // ── 删除标签模式 ─────────────────────────────────────────
+  // 按配置视图：checkbox 带 data-arn，只删该 ARN 的 key
+  // 汇总/按标签视图：checkbox 无 data-arn，删所有选中 ARN 上的 key
+  var byArn={};var globalKeys=[];
+  document.querySelectorAll("#existingTagsList input[type=checkbox]:checked").forEach(function(cb){
+    var key=cb.value||cb.dataset.key;if(!key)return;
+    var arn=cb.dataset.arn;
+    if(arn){if(!byArn[arn])byArn[arn]=[];if(byArn[arn].indexOf(key)===-1)byArn[arn].push(key);}
+    else{if(globalKeys.indexOf(key)===-1)globalKeys.push(key);}
+  });
+  if(!Object.keys(byArn).length&&!globalKeys.length){sR("tgr","请选择要删除的标签","wa");btn.disabled=false;return}
+  btn.textContent="删除中...";var ok2=0,fail2=0,details2=[];
+  try{
+    // 按配置删：每个 ARN 单独删自己的 key
+    for(var arn in byArn){
+      var arnReg=regionFromArn(arn)||"us-east-1";
+      try{var ra=await fetch(B+"/api/tag_profiles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk,region:arnReg,resource_arns:[arn],remove_tag_keys:byArn[arn]})});var da=await ra.json();if(da.ok){ok2++;details2.push(arn.split("/").pop()+": 删除 "+byArn[arn].join(","))}else{fail2++;details2.push("失败: "+da.error)}}catch(e){fail2++;details2.push("错误: "+e.message)}
+    }
+    // 全局删：对所有选中 ARN 删这些 key
+    if(globalKeys.length){var rj=0;for(;rj<regions.length;rj++){var region2=regions[rj],arns2=grouped[region2];try{var r2=await fetch(B+"/api/tag_profiles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk,region:region2,resource_arns:arns2,remove_tag_keys:globalKeys})});var d2=await r2.json();if(d2.ok){ok2+=(d2.success||arns2.length);details2.push(region2+": "+arns2.length+" 个")}else{fail2+=arns2.length;details2.push(region2+": 失败 — "+d2.error)}}catch(e){fail2++;details2.push(region2+": "+e.message)}}}
+    var msg2="✓ 完成 — 标签删除"+(fail2?"部分失败":"成功");
+    $("tgr").innerHTML='<div class="st '+(fail2?"wa":"ok")+'">'+es(msg2)+'<br><span style="font-size:10px;font-weight:400">'+es(details2.join("；"))+'</span></div>';
+    if(!fail2)loadSelectedTags();
+  }catch(e){sR("tgr","错误："+e.message,"er")}finally{btn.disabled=false;updateTagBtnText()}
+}}
 
 function sR(id,msg,type){var el=$(id);if(el)el.innerHTML='<div class="st '+type+'">'+es(msg)+'</div>'}
 function es(s){if(!s)return"";var d=document.createElement("div");d.textContent=s;return d.innerHTML}

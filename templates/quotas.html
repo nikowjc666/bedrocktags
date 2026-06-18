@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>模型配额 · aws bedrock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef2f7;--bg2:#e4eaf3;--surface:#fff;--surface2:#f8fafc;
+  --border:#e2e8f0;--border2:#cbd5e1;--text:#0f172a;--t2:#64748b;--t3:#94a3b8;
+  --pr:#2563eb;--ph:#1d4ed8;--pl:#eff6ff;
+  --ok:#16a34a;--ok-bg:#f0fdf4;--ok-bd:#bbf7d0;
+  --er:#dc2626;--er-bg:#fef2f2;--er-bd:#fecaca;
+  --wa:#d97706;--wa-bg:#fffbeb;--wa-bd:#fde68a;
+  --aws:#ff9900;--aws-dark:#232f3e;--r:7px;--r-sm:5px;
+  --shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde6f0 100%);background-attachment:fixed;color:var(--text);font-size:12px;line-height:1.45;min-height:100vh;text-transform:lowercase}
+input,textarea,select{font-family:inherit;text-transform:none}
+.h{background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 60%,#1e3a5f 100%);padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;height:44px;box-shadow:0 1px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
+.h-l{display:flex;align-items:center;gap:10px}
+.nav{display:flex;gap:4px}
+.nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:11px;padding:4px 10px;border-radius:4px;transition:all .15s}
+.nav a:hover,.nav a.act{color:#fff;background:rgba(255,255,255,.12)}
+.h-logo{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--aws) 0%,#ffb84d 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 6px rgba(255,153,0,.3);flex-shrink:0}
+.h-logo svg{color:#232f3e;width:16px;height:16px}
+.h-text h1{font-size:14px;font-weight:600;color:#fff}
+.h-text .s{color:rgba(255,255,255,.5);font-size:11px}
+.b{max-width:1100px;margin:14px auto;padding:0 14px 28px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;animation:fadeUp .4s ease both}
+.card:nth-child(1){animation-delay:.05s}.card:nth-child(2){animation-delay:.12s}.card:nth-child(3){animation-delay:.19s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.sht{display:flex;align-items:center;gap:7px;padding:8px 12px;font-size:12px;font-weight:600;background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text)}
+.sht-step{width:18px;height:18px;border-radius:50%;background:var(--pr);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sht-sub{font-weight:400;color:var(--t2);font-size:11px;margin-left:auto}
+.sb{padding:12px}
+.fr{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px}
+.fr:last-child{margin-bottom:0}
+.fg{display:flex;flex-direction:column;gap:3px;min-width:140px;flex:1}
+.fg label{font-size:11px;color:var(--t2);font-weight:500}
+.fg input,.fg select{height:30px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;outline:none;background:var(--surface);color:var(--text);transition:border-color .15s,box-shadow .15s}
+.fg input::placeholder{color:var(--t3)}
+.fg input:focus,.fg select:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:30px;padding:0 11px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);white-space:nowrap;transition:all .15s ease}
+.btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.bp{background:linear-gradient(135deg,var(--pr) 0%,#3b82f6 100%);color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(37,99,235,.3)}
+.bp:hover{background:linear-gradient(135deg,var(--ph) 0%,var(--pr) 100%);color:#fff;border-color:transparent}
+.bsm{height:26px;padding:0 9px;font-size:11px}
+.bdge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:12px;font-size:10px;font-weight:500}
+.bg-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+.bg-er{background:var(--er-bg);color:var(--er);border:1px solid var(--er-bd)}
+.bg-rg{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-family:"SF Mono",Consolas,monospace;font-size:10px}
+#ar{margin-top:2px;padding:8px 10px;background:var(--ok-bg);border:1px solid var(--ok-bd);border-radius:var(--r-sm)}
+#aid{font-weight:600;font-size:12px;color:var(--text);font-family:"SF Mono",Consolas,monospace}
+.fx{display:flex;align-items:center;gap:8px}
+.tw{max-height:540px;overflow-y:auto;border:1px solid var(--border);border-radius:0 0 var(--r-sm) var(--r-sm);scrollbar-width:thin;scrollbar-color:var(--border2) transparent}
+.tw::-webkit-scrollbar{width:4px}
+.tw::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+table{width:100%;border-collapse:collapse;font-size:11px}
+table th,table td{text-align:left;padding:5px 9px;border-bottom:1px solid var(--border)}
+table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t2);white-space:nowrap;position:sticky;top:0;z-index:1}
+table tbody tr:hover td{background:var(--pl)}
+table tbody tr:last-child td{border-bottom:none}
+.emp{padding:18px 14px;text-align:center;color:var(--t2);font-size:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px}
+.st{display:flex;align-items:center;gap:6px;padding:7px 10px;border-radius:var(--r-sm);font-size:11px;margin-top:8px;font-weight:500}
+.st.er{background:var(--er-bg);border:1px solid var(--er-bd);color:var(--er)}
+.st.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
+.st.wa{background:var(--wa-bg);border:1px solid var(--wa-bd);color:var(--wa)}
+.st.info{background:var(--pl);border:1px solid #bfdbfe;color:var(--pr)}
+.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--pr);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.mt8{margin-top:8px}.tc2{color:var(--t2)}
+.rgl{display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto;padding:6px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2);scrollbar-width:thin}
+.rgi{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:4px;font-size:11px;cursor:pointer;background:var(--surface);border:1px solid var(--border);transition:all .15s;user-select:none}
+.rgi:has(input:checked){background:var(--pl);border-color:#93c5fd;color:var(--pr)}
+.rgi input{accent-color:var(--pr);width:11px;height:11px;cursor:pointer;margin:0}
+.rg-bar{display:flex;align-items:center;gap:8px;margin-top:5px;font-size:11px;color:var(--t2)}
+.rg-bar label{cursor:pointer;display:flex;align-items:center;gap:4px}
+.qv-zero{color:var(--er);font-weight:600}
+.qv-low{color:var(--wa);font-weight:600}
+.qv-ok{color:var(--ok)}
+/* 模型列表 */
+.model-list{
+  display:flex;flex-direction:column;gap:2px;
+  max-height:200px;overflow-y:auto;
+  padding:4px;border:1px solid var(--border);
+  border-radius:var(--r-sm);background:var(--surface2);
+  scrollbar-width:thin;
+}
+.model-item{
+  display:flex;align-items:center;gap:8px;
+  padding:4px 8px;border-radius:4px;
+  font-size:12px;cursor:pointer;
+  transition:background .1s;
+}
+.model-item:hover{background:var(--surface)}
+.model-item input{accent-color:var(--pr);width:13px;height:13px;cursor:pointer;flex-shrink:0}
+/* 配额类型标签 */
+.qt-lbl{display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;padding:2px 0}
+.filter-bar{display:flex;flex-wrap:wrap;gap:8px;padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--border);align-items:center}
+.filter-bar input{height:28px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:11px;outline:none;background:var(--surface);color:var(--text);transition:border-color .15s}
+.filter-bar input:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.footer{text-align:center;color:var(--t3);font-size:10px;padding:4px 0 0}
+</style>
+</head>
+<body>
+<header class="h">
+  <div class="h-l">
+    <div class="h-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <path d="M9 19v-6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2z"/>
+        <path d="M15 13V7a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v6"/>
+        <path d="M21 9v10a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2z"/>
+      </svg>
+    </div>
+    <div class="h-text">
+      <h1>模型配额</h1>
+      <div class="s">查询各区域 bedrock service quotas</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <a href="/">profile 标签</a>
+    <a href="/model-tags">创建配置</a>
+    <a href="/delete-profiles">删除配置</a>
+    <a href="/test-profile">测试模型</a>
+    <a href="/quotas" class="act">模型配额</a>
+  </nav>
+</header>
+
+<div class="b">
+  <!-- 步骤1：凭证 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">1</span> aws 凭证<span class="sht-sub">验证后方可查询</span></div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:2"><label>access key id</label><input id="ak" type="text" placeholder="akia..." autocomplete="off"></div>
+        <div class="fg" style="flex:2"><label>secret access key</label><input id="sk" type="password" placeholder="..." autocomplete="off"></div>
+        <div class="fg" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn bp" id="btnv" onclick="vrf()">验证</button></div>
+      </div>
+      <div class="fr" id="ar" style="display:none">
+        <div class="fg" style="flex:1"><label>账号 id</label><div class="fx"><span id="aid"></span><span class="bdge bg-ok">✓ 已验证</span></div></div>
+      </div>
+      <div id="vrfMsg"></div>
+    </div>
+  </div>
+
+  <!-- 步骤2：查询配置 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">2</span> 查询配置<span class="sht-sub">选择区域、模型、配额类型后查询</span></div>
+    <div class="sb">
+      <!-- 区域下拉（单选，快速）-->
+      <div class="fr" style="margin-bottom:10px">
+        <div class="fg" style="flex:1;max-width:320px">
+          <label>地域</label>
+          <select id="selRegion" style="height:30px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;outline:none;background:var(--surface);color:var(--text)">
+            <option value="">请选择区域...</option>
+          </select>
+        </div>
+      </div>
+      <!-- 模型 + 配额类型 并排 -->
+      <div class="fr" style="align-items:flex-start;gap:12px">
+        <div class="fg" style="flex:1">
+          <label>模型（多选）</label>
+          <div class="model-list" id="modelList"></div>
+          <div class="rg-bar">
+            <label><input type="checkbox" id="saModel" onchange="taModel()"> 全选</label>
+          </div>
+        </div>
+        <div class="fg" style="flex:1">
+          <label>配额类型（多选）</label>
+          <div style="display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2)">
+            <label class="qt-lbl"><input type="checkbox" value="tpm" class="qt-cb" checked style="accent-color:var(--pr)"> TPM（每分钟 Token）</label>
+            <label class="qt-lbl"><input type="checkbox" value="tpd" class="qt-cb" checked style="accent-color:var(--pr)"> TPD（每天 Token）</label>
+            <label class="qt-lbl"><input type="checkbox" value="rpm" class="qt-cb" style="accent-color:var(--pr)"> RPM（每分钟请求数）</label>
+          </div>
+        </div>
+      </div>
+      <div class="fr mt8">
+        <button class="btn bp" id="btnQuery" onclick="queryQuotas()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          查询配额
+        </button>
+      </div>
+      <div id="queryMsg"></div>
+    </div>
+  </div>
+
+  <!-- 步骤3：配额结果 -->
+  <div class="card">
+    <div class="sht">
+      <span class="sht-step">3</span> 配额结果
+      <span class="sht-sub" id="totalInfo">暂无数据</span>
+    </div>
+    <div id="qEmp" class="emp">查询后将在此显示配额数据</div>
+    <div id="qLoading" class="emp" style="display:none"><span class="sp"></span> 查询中，请稍候...</div>
+    <!-- 按区域分组的结果 -->
+    <div id="qGroups" style="padding:12px;display:flex;flex-direction:column;gap:14px"></div>
+    <div id="errSummary"></div>
+  </div>
+
+  <div class="footer">模型配额 · aws bedrock service quotas</div>
+</div>
+
+<script src="/static/persist.js"></script>
+<script>
+var B="",_allRows=[],_persistReady=false;
+function $(i){return document.getElementById(i)}
+function es(s){if(!s)return"";var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+function sR(id,msg,type){var el=$(id);if(el)el.innerHTML='<div class="st '+type+'" style="white-space:pre-line">'+es(msg)+'</div>'}
+function creds(){return{access_key:$("ak").value.trim(),secret_key:$("sk").value.trim()}}
+
+function getSelRegions(){
+  var v=$("selRegion").value;
+  return v?[v]:[];
+}
+function upRR(){}
+function taRR(){}
+
+document.addEventListener("DOMContentLoaded",async function(){
+  var d=BedrockPersist.init();
+  await Promise.all([loadRegions(), loadModelList()]);
+  BedrockPersist.afterListsReady(d);
+  _persistReady=true;
+});
+
+// 从后端加载与"创建配置"完全一致的模型列表
+async function loadModelList(){
+  try{
+    var r=await fetch(B+"/api/claude_45_versions"),d=await r.json();
+    if(!d.ok)return;
+    var box=$("modelList");
+    (d.versions||[]).forEach(function(v){
+      var lbl=document.createElement("label");
+      lbl.className="model-item";
+      lbl.innerHTML='<input type="checkbox" class="model-cb" value="'+es(v.label)+'" data-id="'+es(v.id)+'"> '+es(v.label);
+      box.appendChild(lbl);
+    });
+  }catch(e){}
+}
+function getSelModels(){
+  var ms=[];
+  document.querySelectorAll(".model-cb:checked").forEach(function(cb){ms.push(cb.value)});
+  return ms;
+}
+function taModel(){
+  var c=$("saModel").checked;
+  document.querySelectorAll(".model-cb").forEach(function(cb){cb.checked=c});
+}
+
+async function loadRegions(){
+  try{
+    var r=await fetch(B+"/api/regions"),d=await r.json();
+    if(!d.ok)return;
+    var sel=$("selRegion");
+    d.regions.forEach(function(reg){
+      var opt=document.createElement("option");
+      opt.value=reg;opt.textContent=reg;
+      sel.appendChild(opt);
+    });
+    sel.value="us-east-1";
+  }catch(e){}
+}
+
+async function vrf(){
+  var c=creds();
+  if(!c.access_key||!c.secret_key){sR("vrfMsg","请填写 ak/sk","wa");return}
+  var btn=$("btnv");btn.disabled=true;btn.textContent="验证中...";
+  try{
+    var r=await fetch(B+"/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c)});
+    var d=await r.json();
+    if(d.ok){$("aid").textContent=d.account_id;$("ar").style.display="flex";BedrockPersist.onVerified(d.account_id);sR("vrfMsg","已验证","ok")}
+    else sR("vrfMsg",d.error,"er");
+  }catch(e){sR("vrfMsg","错误："+e.message,"er")}
+  finally{btn.disabled=false;btn.textContent="验证"}
+}
+
+async function queryQuotas(){
+  var c=creds();
+  if(!c.access_key||!c.secret_key){sR("queryMsg","请先验证凭证","wa");return}
+  var regions=getSelRegions();
+  if(!regions.length){sR("queryMsg","请选择区域","wa");return}
+  var region=regions[0];
+
+  // 收集配额类型
+  var quotaTypes=[];
+  document.querySelectorAll(".qt-cb:checked").forEach(function(cb){quotaTypes.push(cb.value)});
+
+  // 收集选中模型
+  var selModels=getSelModels();
+  if(!selModels.length){sR("queryMsg","请至少选择一个模型","wa");return}
+
+  var btn=$("btnQuery");
+  btn.disabled=true;
+  btn.innerHTML='<span class="sp"></span> 查询中...';
+  $("qEmp").style.display="none";
+  $("qLoading").style.display="flex";
+  $("qLoading").innerHTML='<span class="sp"></span> 查询 '+es(region)+'...';
+  $("qGroups").innerHTML="";
+  $("totalInfo").textContent="查询中...";
+  $("errSummary").innerHTML="";
+  _allRows=[];
+
+  try{
+    // 后端已并发处理，前端只需一次请求
+    var r=await fetch(B+"/api/query_quotas",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        access_key:c.access_key,
+        secret_key:c.secret_key,
+        region:region,
+        service_code:"bedrock",
+        quota_types:quotaTypes,
+        models:selModels
+      })
+    });
+    var d=await r.json();
+    $("qLoading").style.display="none";
+
+    if(!d.ok){sR("queryMsg",d.error,"er");$("qEmp").style.display="flex";$("totalInfo").textContent="暂无数据";return}
+
+    _allRows=d.quotas||[];
+
+    if(!_allRows.length){
+      $("qEmp").style.display="flex";
+      $("qEmp").textContent=(d.errors&&d.errors.length)?"部分区域查询失败，无配额数据":"未查到 Claude 相关配额";
+      $("totalInfo").textContent="暂无数据";
+    }else{
+      renderGroups(_allRows);
+      $("totalInfo").textContent="共 "+_allRows.length+" 条 · "+es(region);
+      sR("queryMsg","查询完成，共 "+_allRows.length+" 条","ok");
+    }
+
+    if(d.errors&&d.errors.length){
+      var errHtml='<div style="margin:8px 12px 12px"><div class="st wa" style="flex-direction:column;align-items:flex-start;gap:3px">';
+      errHtml+='<strong>'+d.errors.length+' 个区域查询失败：</strong>';
+      d.errors.forEach(function(e){errHtml+='<div style="font-weight:400;font-size:10px;color:var(--t2)">'+es(e.region)+'：'+es(e.error)+'</div>'});
+      errHtml+='</div></div>';
+      $("errSummary").innerHTML=errHtml;
+    }
+  }catch(e){
+    $("qLoading").style.display="none";
+    $("qEmp").style.display="flex";
+    $("qEmp").textContent="查询失败";
+    sR("queryMsg","错误："+e.message,"er");
+    $("totalInfo").textContent="暂无数据";
+  }finally{
+    btn.disabled=false;
+    btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 查询配额';
+  }
+}
+
+function parseQuotaName(name){
+  var n=name||"";
+  var modelMatch=n.match(/\bfor\s+(.+)$/i);
+  var model=modelMatch?modelMatch[1].trim():n;
+  model=model.replace(/^Anthropic\s+/i,"");
+  var nl=n.toLowerCase();
+  var type="";
+  if(/tokens per day/i.test(nl)) type="TPD";
+  else if(/tokens per minute/i.test(nl)) type="TPM";
+  else if(/requests per minute/i.test(nl)) type="RPM";
+  else type=n.replace(/for .+$/i,"").replace(/InvokeModel\s*/i,"").replace(/Model invocation\s*/i,"").trim();
+  return{model:model,type:type};
+}
+
+function fmtNum(v){
+  if(v===null||v===undefined)return'<span style="color:var(--t3)">—</span>';
+  var n=Number(v);
+  return n===0
+    ?'<span style="color:var(--er);font-weight:600">0</span>'
+    :n.toLocaleString();
+}
+
+function renderGroups(rows){
+  var grp=$("qGroups");
+  grp.innerHTML="";
+  if(!rows.length){$("qEmp").style.display="flex";$("qEmp").textContent="未查到相关配额";return}
+  $("qEmp").style.display="none";
+
+  var region=rows[0]?rows[0].region:"";
+  var div=document.createElement("div");
+  div.style.cssText="border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden";
+  div.innerHTML=
+    '<div style="padding:8px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:12px;font-weight:600">'
+    +'配额汇总 <span style="font-family:\'SF Mono\',Consolas,monospace;font-size:11px;font-weight:500;color:var(--t2)">('+es(region)+')</span>'
+    +'</div>';
+
+  var tbl=document.createElement("table");
+  tbl.style.cssText="width:100%;border-collapse:collapse;font-size:12px";
+  tbl.innerHTML=
+    '<thead><tr style="background:var(--surface2)">'
+    +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border)">模型</th>'
+    +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border);width:70px">指标</th>'
+    +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border)">当前配额</th>'
+    +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border)">默认配额</th>'
+    +'</tr></thead>';
+  var tb=document.createElement("tbody");
+  rows.forEach(function(q,i){
+    var parsed=parseQuotaName(q.name);
+    var tr=document.createElement("tr");
+    tr.style.borderBottom="1px solid var(--border)";
+    if(i%2===1)tr.style.background="var(--surface2)";
+    tr.innerHTML=
+      '<td style="padding:7px 14px">'+es(parsed.model)+'</td>'
+      +'<td style="padding:7px 14px;font-weight:600;color:var(--pr)">'+es(parsed.type)+'</td>'
+      +'<td style="padding:7px 14px;font-family:\'SF Mono\',Consolas,monospace">'+fmtNum(q.value)+'</td>'
+      +'<td style="padding:7px 14px;font-family:\'SF Mono\',Consolas,monospace;color:var(--t2)">'+fmtNum(q.default_value)+'</td>';
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb);
+  div.appendChild(tbl);
+  grp.appendChild(div);
+}
+
+
+</script>
+</body>
+</html>

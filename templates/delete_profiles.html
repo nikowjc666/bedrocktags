@@ -115,6 +115,7 @@ table tbody tr:last-child td{border-bottom:none}
     <a href="/model-tags">创建配置</a>
     <a href="/delete-profiles" class="act">删除配置</a>
     <a href="/test-profile">测试模型</a>
+    <a href="/quotas">模型配额</a>
   </nav>
 </header>
 
@@ -152,14 +153,14 @@ table tbody tr:last-child td{border-bottom:none}
     </div>
   </div>
 
-  <!-- 步骤3：按前缀扫描删除 -->
+  <!-- 步骤3：按关键词扫描删除 -->
   <div class="card">
-    <div class="sht"><span class="sht-step">3</span> 按前缀扫描删除<span class="sht-sub">按名称前缀 · 多区域</span></div>
+    <div class="sht"><span class="sht-step">3</span> 按关键词扫描删除<span class="sht-sub">名称包含关键词 · 多区域</span></div>
     <div class="sb">
       <div class="fr">
         <div class="fg" style="flex:1">
-          <label>名称前缀</label>
-          <input id="dname" type="text" placeholder="my-claude-profile" oninput="upDelPreview()">
+          <label>名称关键词（名称中包含即匹配）</label>
+          <input id="dname" type="text" placeholder="例如：sonnet、auto0617、myprefix" oninput="upDelPreview()">
         </div>
       </div>
       <div class="fr" style="align-items:flex-start;margin-top:4px">
@@ -226,7 +227,7 @@ function creds(){return{access_key:$("ak").value.trim(),secret_key:$("sk").value
 function getDelRegions(){var rs=[];document.querySelectorAll("#drgl input:checked").forEach(function(cb){rs.push(cb.value)});return rs}
 function upDR(){var n=document.querySelectorAll("#drgl input:checked").length,all=document.querySelectorAll("#drgl input").length;$("drc").textContent="（"+n+"）";$("saDR").checked=n===all&&all>0;upDelPreview();if(_persistReady)BedrockPersist.save()}
 function taDR(){var c=$("saDR").checked;document.querySelectorAll("#drgl input").forEach(function(cb){cb.checked=c});upDR()}
-function upDelPreview(){var r=getDelRegions().length,name=$("dname").value.trim();$("delPreview").innerHTML="将在 <strong>"+r+"</strong> 个区域搜索前缀 <strong>"+(name?es(name):"—")+"</strong> 的配置"}
+function upDelPreview(){var r=getDelRegions().length,name=$("dname").value.trim();$("delPreview").innerHTML="将在 <strong>"+r+"</strong> 个区域搜索名称包含 <strong>"+(name?es(name):"—")+"</strong> 的配置"}
 
 document.addEventListener("DOMContentLoaded",async function(){
   var d=BedrockPersist.init();
