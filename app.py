@@ -1176,7 +1176,7 @@ def export_excel():
       F  Secret Key ─ 全部数据行合并
       G  模型类型   ─ 同一模型的连续行合并
       H  区域       ─ 每行独立
-      I  模型QRN    ─ 每行独立
+      I  模型ARN    ─ 每行独立
       J  标签       ─ 连续相同标签的行合并
     """
     data = request.get_json() or {}
@@ -1217,7 +1217,7 @@ def export_excel():
             "secret_key":  secret_key,   # F
             "model_label": r.get("model_label", r.get("model_id", "")),
             "region":      r.get("region", ""),
-            "qrn":         r.get("inferenceProfileArn", "") if r.get("ok")
+            "arn":         r.get("inferenceProfileArn", "") if r.get("ok")
                            else r.get("error", ""),
             "tags":        _tags_str(r),
             "ok":          bool(r.get("ok")),
@@ -1231,12 +1231,14 @@ def export_excel():
     ws = wb.active
     ws.title = "Inference Profiles"
 
-    hdr_font  = Font(name="Calibri", size=11, bold=True)
+    # 表头：不加粗，居中
+    hdr_font  = Font(name="Calibri", size=11, bold=False)
     hdr_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
+    # 普通数据：左对齐
     val_align   = Alignment(horizontal="left",   vertical="center", wrap_text=False)
-    merge_align = Alignment(horizontal="center",  vertical="center", wrap_text=True)
-    todo_align  = Alignment(horizontal="center",  vertical="center", wrap_text=False)
+    # 居中对齐（合并列、账号密码、区域/模型/标签）
+    center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     def _border(top="thin", bottom="thin", left="thin", right="thin"):
         def _side(s):
@@ -1248,45 +1250,62 @@ def export_excel():
     err_font    = Font(name="Calibri", italic=True)
 
     # ── 表头（行 1） ─────────────────────────────────────────
-    headers    = ["AWS账户ID", "登录URL", "账号", "密码", "Access Key", "Secret Key",
-                  "模型类型", "区域", "模型QRN", "标签"]
-    col_widths = [18, 52, 18, 18, 22, 44, 26, 14, 72, 32]
+    headers = ["AWS账户ID", "登录URL", "账号", "密码", "Access Key", "Secret Key",
+               "模型类型", "区域", "模型ARN", "标签"]
 
     for ci, h in enumerate(headers, 1):
         cell = ws.cell(row=1, column=ci, value=h)
         cell.font      = hdr_font
         cell.alignment = hdr_align
         cell.border    = full_border
-    for ci, w in enumerate(col_widths, 1):
-        ws.column_dimensions[chr(64 + ci)].width = w
     ws.row_dimensions[1].height = 20
 
     # ── 写入数据（行 2 起） ──────────────────────────────────
     data_start = 2
     total_rows = len(rows)
 
+    # 居中列：C(3)账号  D(4)密码  G(7)模型类型  H(8)区域  J(10)标签
+    CENTER_COLS = {3, 4, 7, 8, 10}
+
     for ri, row in enumerate(rows):
         excel_row = data_start + ri
         values = [
-            row["account_id"],  # A
-            row["login_url"],   # B
-            row["username"],    # C
-            row["password"],    # D
-            row["access_key"],  # E
-            row["secret_key"],  # F
-            row["model_label"], # G
-            row["region"],      # H
-            row["qrn"],         # I
-            row["tags"],        # J
+            row["account_id"],  # A 1
+            row["login_url"],   # B 2
+            row["username"],    # C 3
+            row["password"],    # D 4
+            row["access_key"],  # E 5
+            row["secret_key"],  # F 6
+            row["model_label"], # G 7
+            row["region"],      # H 8
+            row["arn"],         # I 9
+            row["tags"],        # J 10
         ]
         for ci, val in enumerate(values, 1):
             cell = ws.cell(row=excel_row, column=ci, value=val)
             cell.border    = full_border
-            cell.alignment = val_align
-            if ci in (3, 4):
-                cell.alignment = todo_align
+            cell.alignment = center_align if ci in CENTER_COLS else val_align
             if ci == 9 and not row["ok"]:
                 cell.font = err_font
+
+    # ── 列宽：按内容自动计算，账号(C)/密码(D) 至少预留 20 ──────
+    # 固定最小宽度（保证空列可用）
+    MIN_WIDTHS = {3: 20, 4: 20}   # C=账号, D=密码
+
+    col_letters = [chr(64 + i) for i in range(1, len(headers) + 1)]
+    for ci, col_letter in enumerate(col_letters, 1):
+        max_len = len(headers[ci - 1])
+        for row in rows:
+            cell_values = [
+                row["account_id"], row["login_url"], row["username"],
+                row["password"],   row["access_key"], row["secret_key"],
+                row["model_label"], row["region"], row["arn"], row["tags"],
+            ]
+            cell_val = str(cell_values[ci - 1]) if cell_values[ci - 1] else ""
+            max_len = max(max_len, len(cell_val))
+        width = min(max_len + 4, 80)
+        width = max(width, MIN_WIDTHS.get(ci, 0))
+        ws.column_dimensions[col_letter].width = width
 
     # ── 合并辅助函数 ─────────────────────────────────────────
     def _apply_merge(ws, r1, r2, col, value, align, fill=None, font=None):
@@ -1315,18 +1334,12 @@ def export_excel():
     # ── A/B/C/D/E/F：全部数据行合并 ─────────────────────────
     last_data = data_start + total_rows - 1
     if total_rows > 1:
-        _apply_merge(ws, data_start, last_data, 1,
-                     account_id, merge_align)
-        _apply_merge(ws, data_start, last_data, 2,
-                     login_url,  merge_align)
-        _apply_merge(ws, data_start, last_data, 3,
-                     "",         todo_align)
-        _apply_merge(ws, data_start, last_data, 4,
-                     "",         todo_align)
-        _apply_merge(ws, data_start, last_data, 5,
-                     access_key, merge_align)
-        _apply_merge(ws, data_start, last_data, 6,
-                     secret_key, merge_align)
+        _apply_merge(ws, data_start, last_data, 1, account_id, center_align)
+        _apply_merge(ws, data_start, last_data, 2, login_url,  center_align)
+        _apply_merge(ws, data_start, last_data, 3, "",         center_align)
+        _apply_merge(ws, data_start, last_data, 4, "",         center_align)
+        _apply_merge(ws, data_start, last_data, 5, access_key, center_align)
+        _apply_merge(ws, data_start, last_data, 6, secret_key, center_align)
 
     # ── G（模型类型）：同一模型连续行合并 ────────────────────
     i = 0
@@ -1335,7 +1348,7 @@ def export_excel():
         while j < total_rows and rows[j]["model_label"] == rows[i]["model_label"]:
             j += 1
         r1, r2 = data_start + i, data_start + j - 1
-        _apply_merge(ws, r1, r2, 7, rows[i]["model_label"], merge_align)
+        _apply_merge(ws, r1, r2, 7, rows[i]["model_label"], center_align)
         i = j
 
     # ── J（标签）：连续相同标签行合并 ────────────────────────
@@ -1345,7 +1358,7 @@ def export_excel():
         while j < total_rows and rows[j]["tags"] == rows[i]["tags"]:
             j += 1
         r1, r2 = data_start + i, data_start + j - 1
-        _apply_merge(ws, r1, r2, 10, rows[i]["tags"], merge_align)
+        _apply_merge(ws, r1, r2, 10, rows[i]["tags"], center_align)
         i = j
 
     # ── 冻结首行 ─────────────────────────────────────────────
@@ -1434,6 +1447,7 @@ def query_quotas():
     region      = (data.get("region") or "").strip()
     quota_types = data.get("quota_types") or []
     sel_models  = data.get("models") or []
+    use_global  = bool(data.get("use_global", False))
     if not ak or not sk:
         return jsonify({"ok": False, "error": "请提供 access_key 和 secret_key"})
     if not region:
@@ -1449,8 +1463,8 @@ def query_quotas():
     type_filters = [TYPE_KEYWORDS[t.lower()] for t in quota_types if t.lower() in TYPE_KEYWORDS]
 
     # 始终只看 cross-region（Application Inference Profile 走的是这个配额）
-    # 过滤掉 on-demand（直接调用 foundation model 用的）和 doubled（TPD 双倍计算项）
-    EXCLUDE_KEYWORDS = ["on-demand", "doubled for cross-region"]
+    # 过滤掉 on-demand、doubled（TPD 双倍计算项）、bedrock-mantle endpoint（内部端点配额）
+    EXCLUDE_KEYWORDS = ["on-demand", "doubled for cross-region", "[bedrock-mantle endpoint]"]
 
     # ── 确保 code_map 已加载 ──────────────────────────────────
     _load_code_map_from_disk()
@@ -1470,10 +1484,24 @@ def query_quotas():
         # 过滤掉 on-demand 和 doubled（cross-region 翻倍计算项）
         if any(ex in nl for ex in EXCLUDE_KEYWORDS):
             continue
+        # 去重：TPM/RPM 同时存在 global 和非 global 版本时，根据 use_global 只保留一个
+        # TPD 只有 global 版本，两种情况都保留
+        if use_global:
+            # 保留 global，跳过对应的非 global 版本
+            if nl.startswith("cross-region "):
+                global_ver = "global " + nl
+                if global_ver in _quota_code_map:
+                    continue
+        else:
+            # 保留非 global，跳过 global 版本（但 TPD 的 global 没有非 global 对应项，不跳过）
+            if nl.startswith("global cross-region "):
+                non_global = nl[len("global "):]
+                if non_global in _quota_code_map:
+                    continue
         targets.append((nl, code))
 
     if not targets:
-        return jsonify({"ok": True, "quotas": [], "errors": [], "total": 0})
+        return jsonify({"ok": True, "quotas": [], "errors": [], "total": 0, "use_global": use_global})
 
     # ── 精准查：每个 code 两次 API 调用（applied + default）────
     # applied 不存在时只用 default
@@ -1509,7 +1537,7 @@ def query_quotas():
                 results.append(item)
 
     results.sort(key=lambda x: x["name"])
-    return jsonify({"ok": True, "quotas": results, "errors": [], "total": len(results)})
+    return jsonify({"ok": True, "quotas": results, "errors": [], "total": len(results), "use_global": use_global})
 
 query_quotas._cache = {}
 
@@ -1532,6 +1560,30 @@ def delete_profiles():
 @app.route("/test-profile")
 def test_profile_page():
     return render_template("test_profile.html")
+
+
+@app.route("/mfa")
+def mfa_page():
+    return render_template("mfa.html")
+
+
+# ── MFA / TOTP ──────────────────────────────────────────────────────────────
+
+@app.route("/api/mfa/totp", methods=["POST"])
+def mfa_totp():
+    """根据 Base32 密钥计算当前 TOTP 验证码及剩余秒数"""
+    import pyotp, time as _t
+    data   = request.get_json(force=True) or {}
+    secret = (data.get("secret") or "").strip().upper().replace(" ", "")
+    if not secret:
+        return jsonify({"ok": False, "error": "请提供密钥"})
+    try:
+        totp   = pyotp.TOTP(secret)
+        code   = totp.now()
+        remain = 30 - int(_t.time()) % 30
+        return jsonify({"ok": True, "code": code, "remain": remain})
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"密钥格式错误：{e}"})
 
 
 if __name__ == "__main__":

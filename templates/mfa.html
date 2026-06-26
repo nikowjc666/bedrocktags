@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>MFA 验证码 · aws bedrock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef2f7;--bg2:#e4eaf3;--surface:#fff;--surface2:#f8fafc;
+  --border:#e2e8f0;--border2:#cbd5e1;--text:#0f172a;--t2:#64748b;--t3:#94a3b8;
+  --pr:#2563eb;--ph:#1d4ed8;--pl:#eff6ff;
+  --ok:#16a34a;--ok-bg:#f0fdf4;--ok-bd:#bbf7d0;
+  --er:#dc2626;--er-bg:#fef2f2;--er-bd:#fecaca;
+  --wa:#d97706;--wa-bg:#fffbeb;--wa-bd:#fde68a;
+  --aws:#ff9900;--aws-dark:#232f3e;--r:7px;--r-sm:5px;
+  --shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde6f0 100%);background-attachment:fixed;color:var(--text);font-size:12px;line-height:1.45;min-height:100vh;text-transform:lowercase}
+input,textarea,select{font-family:inherit;text-transform:none}
+.h{background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 60%,#1e3a5f 100%);padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;height:44px;box-shadow:0 1px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
+.h-l{display:flex;align-items:center;gap:10px}
+.nav{display:flex;gap:4px}
+.nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:11px;padding:4px 10px;border-radius:4px;transition:all .15s}
+.nav a:hover,.nav a.act{color:#fff;background:rgba(255,255,255,.12)}
+.h-logo{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--aws) 0%,#ffb84d 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 6px rgba(255,153,0,.3);flex-shrink:0}
+.h-logo svg{color:#232f3e;width:16px;height:16px}
+.h-text h1{font-size:14px;font-weight:600;color:#fff}
+.h-text .s{color:rgba(255,255,255,.5);font-size:11px}
+.b{max-width:520px;margin:32px auto;padding:0 14px 40px;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;animation:fadeUp .35s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.sht{display:flex;align-items:center;gap:7px;padding:8px 12px;font-size:12px;font-weight:600;background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text)}
+.sb{padding:16px}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fg label{font-size:11px;color:var(--t2);font-weight:500}
+.fg input{height:34px;padding:0 10px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:13px;outline:none;background:var(--surface);color:var(--text);transition:border-color .15s,box-shadow .15s;font-family:"SF Mono",Consolas,monospace;letter-spacing:.05em}
+.fg input::placeholder{color:var(--t3);font-family:"Inter",-apple-system,sans-serif;letter-spacing:0;font-size:12px}
+.fg input:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.st{display:flex;align-items:center;gap:6px;padding:7px 10px;border-radius:var(--r-sm);font-size:11px;margin-top:8px}
+.st.er{background:var(--er-bg);border:1px solid var(--er-bd);color:var(--er)}
+
+/* 验证码展示 */
+.code-box{
+  display:flex;flex-direction:column;align-items:center;gap:14px;
+  padding:28px 20px 22px;
+  background:linear-gradient(135deg,#f8fafc 0%,var(--pl) 100%);
+  border:1px solid #bfdbfe;border-radius:var(--r);margin-top:14px;
+}
+.code-digits{
+  font-family:"SF Mono",Consolas,monospace;
+  font-size:48px;font-weight:700;letter-spacing:.2em;
+  color:var(--pr);cursor:pointer;user-select:all;
+  transition:color .2s,transform .1s;
+}
+.code-digits:active{transform:scale(.96)}
+.code-digits.copied{color:var(--ok)}
+.code-digits.error{color:var(--t3);font-size:18px;letter-spacing:.05em}
+
+/* 倒计时 */
+.timer-row{display:flex;align-items:center;gap:10px}
+.timer-ring{position:relative;width:38px;height:38px}
+.timer-ring svg{transform:rotate(-90deg)}
+.ring-bg{fill:none;stroke:#e2e8f0;stroke-width:3}
+.ring-fg{fill:none;stroke:var(--pr);stroke-width:3;stroke-linecap:round;transition:stroke-dashoffset .95s linear,stroke .3s}
+.ring-fg.urgent{stroke:#dc2626}
+.ring-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--t2)}
+.timer-text{font-size:11px;color:var(--t2)}
+.copy-hint{font-size:10px;color:var(--t3)}
+
+.footer{text-align:center;color:var(--t3);font-size:10px;padding:4px 0 0}
+</style>
+</head>
+<body>
+<header class="h">
+  <div class="h-l">
+    <div class="h-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <rect x="5" y="11" width="14" height="10" rx="2"/>
+        <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+      </svg>
+    </div>
+    <div class="h-text">
+      <h1>MFA 验证码</h1>
+      <div class="s">输入 Base32 密钥，实时生成 TOTP 验证码</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <a href="/">profile 标签</a>
+    <a href="/model-tags">创建配置</a>
+    <a href="/delete-profiles">删除配置</a>
+    <a href="/test-profile">测试模型</a>
+    <a href="/quotas">模型配额</a>
+    <a href="/mfa" class="act">MFA 验证码</a>
+  </nav>
+</header>
+
+<div class="b">
+  <div class="card">
+    <div class="sht">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:14px;height:14px;color:var(--pr)"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      MFA 密钥
+    </div>
+    <div class="sb">
+      <div class="fg">
+        <label>Base32 密钥（粘贴后自动生成验证码）</label>
+        <input id="secret" type="text" placeholder="例：JBSWY3DPEHPK3PXP..." autocomplete="off" spellcheck="false" oninput="onSecretInput()">
+      </div>
+      <div id="errMsg"></div>
+
+      <!-- 验证码区域，默认隐藏 -->
+      <div id="codeBox" class="code-box" style="display:none">
+        <div id="codeDigits" class="code-digits" onclick="copyCode()" title="点击复制">——————</div>
+        <div class="timer-row">
+          <div class="timer-ring">
+            <svg width="38" height="38" viewBox="0 0 38 38">
+              <circle class="ring-bg" cx="19" cy="19" r="16"/>
+              <circle class="ring-fg" id="ringFg" cx="19" cy="19" r="16"
+                stroke-dasharray="100.5" stroke-dashoffset="0"/>
+            </svg>
+            <div class="ring-num" id="ringNum">30</div>
+          </div>
+          <span class="timer-text" id="timerText">秒后刷新</span>
+        </div>
+        <div class="copy-hint">点击验证码复制到剪贴板</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">TOTP · RFC 6238 · 30s 周期</div>
+</div>
+
+<script>
+var B = "";
+var _timer = null;
+var _lastRemain = 30;
+var _circumference = 2 * Math.PI * 16; // ≈ 100.5
+var _debounce = null;
+
+function $(id){ return document.getElementById(id); }
+
+/* 输入时 debounce 300ms 再请求 */
+function onSecretInput(){
+  clearTimeout(_debounce);
+  var s = $("secret").value.trim();
+  if(!s){
+    stopTimer();
+    $("codeBox").style.display = "none";
+    $("errMsg").innerHTML = "";
+    return;
+  }
+  _debounce = setTimeout(fetchCode, 300);
+}
+
+async function fetchCode(){
+  var secret = $("secret").value.trim().toUpperCase().replace(/\s/g,"");
+  if(!secret) return;
+  try{
+    var r = await fetch(B+"/api/mfa/totp",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({secret: secret})
+    });
+    var d = await r.json();
+    if(d.ok){
+      $("errMsg").innerHTML = "";
+      $("codeBox").style.display = "flex";
+      showCode(d.code, d.remain);
+      startTimer();
+    } else {
+      stopTimer();
+      $("codeBox").style.display = "none";
+      $("errMsg").innerHTML = '<div class="st er">'+escHtml(d.error)+'</div>';
+    }
+  }catch(e){
+    stopTimer();
+    $("codeBox").style.display = "none";
+  }
+}
+
+function showCode(code, remain){
+  var el = $("codeDigits");
+  el.textContent = code;
+  el.className = "code-digits";
+  updateRing(remain);
+}
+
+/* 倒计时环 */
+function updateRing(remain){
+  _lastRemain = remain;
+  var offset = _circumference * (1 - remain / 30);
+  var fg = $("ringFg");
+  fg.style.strokeDashoffset = offset;
+  fg.className = "ring-fg" + (remain <= 5 ? " urgent" : "");
+  $("ringNum").textContent = remain;
+}
+
+function tick(){
+  var r = _lastRemain - 1;
+  if(r <= 0){
+    fetchCode();   // 到期重新请求
+    r = 30;
+  }
+  updateRing(r);
+}
+
+function startTimer(){
+  stopTimer();
+  _timer = setInterval(tick, 1000);
+}
+function stopTimer(){
+  if(_timer){ clearInterval(_timer); _timer = null; }
+}
+
+/* 复制 */
+function copyCode(){
+  var code = $("codeDigits").textContent.trim();
+  if(!code || code.includes("—")) return;
+  (navigator.clipboard
+    ? navigator.clipboard.writeText(code)
+    : Promise.reject()
+  ).catch(function(){
+    var ta = document.createElement("textarea");
+    ta.value = code; ta.style.cssText = "position:fixed;opacity:0";
+    document.body.appendChild(ta); ta.select();
+    document.execCommand("copy"); document.body.removeChild(ta);
+  }).finally(function(){
+    var el = $("codeDigits");
+    el.classList.add("copied");
+    setTimeout(function(){ el.classList.remove("copied"); }, 1000);
+  });
+}
+
+function escHtml(s){
+  var d = document.createElement("div"); d.textContent = s; return d.innerHTML;
+}
+</script>
+</body>
+</html>
