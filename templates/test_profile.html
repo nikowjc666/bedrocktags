@@ -22,6 +22,11 @@
 body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde6f0 100%);background-attachment:fixed;color:var(--text);font-size:12px;line-height:1.45;min-height:100vh;text-transform:lowercase}
 input,textarea,select{font-family:inherit;text-transform:none}
 
+/* 标签相关元素保持原始大小写 */
+.tgb, .tgb *, .tkv, .tkv *, .tgi .tkv, span[data-label]::before {
+  text-transform: none !important;
+}
+
 .h{background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 60%,#1e3a5f 100%);padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;height:44px;box-shadow:0 1px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
 .h-l{display:flex;align-items:center;gap:10px}
 .nav{display:flex;gap:4px}
@@ -172,7 +177,7 @@ table tbody tr:last-child td{border-bottom:none}
 
   <!-- 步骤2：单个测试 -->
   <div class="card">
-    <div class="sht"><span class="sht-step">2</span> 单个测试<span class="sht-sub">输入 arn 立即验证</span></div>
+    <div class="sht"><span class="sht-step">2</span> 单个测试<span class="sht-sub">输入 arn 立即验证 · 检查源类型</span></div>
     <div class="sb">
       <div class="fr">
         <div class="fg" style="min-width:120px;flex:0 0 auto">
@@ -189,6 +194,10 @@ table tbody tr:last-child td{border-bottom:none}
         <label style="font-size:11px;color:var(--t2);cursor:pointer;display:flex;align-items:center;gap:5px">
           <input type="checkbox" id="testInvoke" checked style="accent-color:var(--pr);width:12px;height:12px">
           实际调用（发送 "hi" 验证推理是否正常）
+        </label>
+        <label style="font-size:11px;color:var(--t2);cursor:pointer;display:flex;align-items:center;gap:5px;margin-left:15px">
+          <input type="checkbox" id="checkSource" checked style="accent-color:var(--pr);width:12px;height:12px">
+          检查源类型（显示是否为 global）
         </label>
       </div>
       <div id="singleResult"></div>
@@ -306,6 +315,7 @@ function autoRegion(){
 // ── 单个测试 ─────────────────────────────────────────────────
 async function testOne(){
   var c=creds(),arn=$("testArn").value.trim(),invoke=$("testInvoke").checked;
+  var checkSource=$("checkSource").checked;
   var region=$("testRegion").value;
   if(!c.access_key||!c.secret_key){sR("singleResult","请先填写凭证","wa");return}
   if(!arn){sR("singleResult","请输入 arn","wa");return}
@@ -315,7 +325,7 @@ async function testOne(){
   $("singleResult").innerHTML='<div class="st info"><span class="sp"></span> 测试中...</div>';
   try{
     var r=await fetch(B+"/api/test_profile",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,region:region,inference_profile_arn:arn,invoke:invoke})});
+      body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,region:region,inference_profile_arn:arn,invoke:invoke,check_source:checkSource})});
     var d=await r.json();
     renderSingleResult(d,arn,region);
   }catch(e){sR("singleResult","错误："+e.message,"er")}
@@ -330,6 +340,29 @@ function renderSingleResult(d,arn,region){
   var statusBadge=d.available
     ?'<span class="bdge bg-ok">✓ 可用</span>'
     :'<span class="bdge bg-er">✗ 不可用</span>';
+  
+  // 源类型显示
+  var sourceHtml = "";
+  if(d.hasOwnProperty('sourceType')){
+    var sourceClass = 'bg-rg';
+    var sourceText = d.sourceType || 'unknown';
+    if(d.isGlobal){
+      sourceClass = 'bg-ok';
+      sourceText = 'global ✓';
+    } else if(d.sourceType === 'us' || d.sourceType === 'eu'){
+      sourceClass = 'bg-wa';
+      sourceText = d.sourceType + ' (regional)';
+    } else if(d.sourceType === 'foundation'){
+      sourceClass = 'bg-wa';
+      sourceText = 'foundation model';
+    }
+    sourceHtml = '<div class="col"><div class="label">源类型</div><div class="val"><span class="bdge '+sourceClass+'">'+es(sourceText)+'</span></div></div>';
+    
+    if(d.copyFrom){
+      sourceHtml += '<div class="col" style="flex:2"><div class="label">源 ID</div><div class="val" style="font-family:\'SF Mono\',monospace;font-size:10px;color:var(--t2)">'+es(d.copyFrom)+'</div></div>';
+    }
+  }
+  
   var invokeHtml="";
   if(d.invoke_ok===true){
     invokeHtml='<div class="invoke-box"><div class="label">调用响应（前80字符）</div><pre>'+es(d.invoke_preview||"(空)")+'</pre></div>';
@@ -341,8 +374,9 @@ function renderSingleResult(d,arn,region){
       '<div class="row">'+
         '<div class="col"><div class="label">状态</div><div class="val">'+statusBadge+'</div></div>'+
         '<div class="col"><div class="label">区域</div><div class="val"><span class="bdge bg-rg">'+es(region)+'</span></div></div>'+
-        '<div class="col"><div class="label">profile 状态</div><div class="val">'+es((d.status||"").toLowerCase())+'</div></div>'+
+        '<div class="col"><div class="label">profile 状态</div><div class="val">'+es(d.status||"")+'</div></div>'+
       '</div>'+
+      (sourceHtml ? '<div class="row">'+sourceHtml+'</div>' : '')+
       '<div class="row">'+
         '<div class="col"><div class="label">名称</div><div class="val">'+es(d.name||"—")+'</div></div>'+
         '<div class="col" style="flex:2"><div class="label">profile id</div><div class="val">'+es(d.inferenceProfileId||"—")+
@@ -405,7 +439,7 @@ async function testBatch(){
         var d=await r.json();
         result.ok=d.ok!==false;
         result.available=!!d.available;
-        result.status=(d.status||"").toLowerCase();
+        result.status=d.status||"";
         result.name=d.name||"";
         result.inferenceProfileId=d.inferenceProfileId||"";
         result.invoke_ok=d.invoke_ok;

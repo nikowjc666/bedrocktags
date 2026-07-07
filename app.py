@@ -29,6 +29,14 @@ REGIONS = [
 # sources: 系统 Inference Profile ID，用于 copyFrom（新版模型不支持直接用 foundation model）
 CLAUDE_VERSIONS = [
     {
+        "id": "anthropic.claude-sonnet-5",
+        "label": "Claude Sonnet 5",
+        "sources": {
+            "us": "us.anthropic.claude-sonnet-5",
+            "global": "global.anthropic.claude-sonnet-5",
+        },
+    },
+    {
         "id": "anthropic.claude-fable-5",
         "label": "Claude Fable 5",
         "sources": {
@@ -220,12 +228,27 @@ def _build_model_source_index(br, region):
     return {k: v[1] for k, v in index.items()}
 
 
+def _get_source_type(source_id):
+    """根据源 ID 判断是否为 global 类型"""
+    if not source_id:
+        return "unknown"
+    if source_id.startswith("global."):
+        return "global"
+    elif source_id.startswith("us."):
+        return "us"
+    elif source_id.startswith("eu."):
+        return "eu"
+    else:
+        return "foundation"
+
+
 def _resolve_copy_from(br, region, ver, index=None):
     """解析 create_inference_profile 的 copyFrom 来源 ARN"""
     model_id = ver["id"]
     sources = ver.get("sources") or {}
     geo = _region_geo(region)
-    for key in (geo, "global"):
+    # 强制优先使用 global，然后才是地理区域
+    for key in ("global", geo):
         pid = sources.get(key)
         if pid:
             return _inference_profile_arn(region, pid), pid
@@ -583,10 +606,11 @@ def create_profile():
             if err:
                 return jsonify({"ok": False, "error": err}), 400
         br = _bedrock(ak, sk, region)
+        source_id = None
         if not model_source_arn and model_id:
             ver = CLAUDE_BY_ID.get(model_id)
             if ver:
-                model_source_arn, _ = _resolve_copy_from(br, region, ver)
+                model_source_arn, source_id = _resolve_copy_from(br, region, ver)
             else:
                 model_source_arn = _foundation_model_arn(region, model_id)
         if not model_source_arn:
@@ -603,10 +627,14 @@ def create_profile():
         if tags_raw:
             params["tags"] = [{"key": k, "value": v} for k, v in tags_raw.items()]
         resp = br.create_inference_profile(**params)
+        source_type = _get_source_type(source_id)
         return jsonify({"ok": True, "result": {
             "inferenceProfileArn": resp.get("inferenceProfileArn", ""),
             "inferenceProfileId": resp.get("inferenceProfileId", ""),
             "status": resp.get("status", ""),
+            "sourceType": source_type,
+            "isGlobal": source_type == "global",
+            "copyFrom": source_id or model_source_arn,
         }})
     except Exception as e:
         return jsonify({"ok": False, "error": _aws_error(e)}), 400
@@ -689,6 +717,7 @@ def batch_create_profiles():
                         params["tags"] = tag_list
                     resp = br.create_inference_profile(**params)
                     profile_arn = resp.get("inferenceProfileArn", "")
+                    source_type = _get_source_type(source_id)
                     results.append({
                         "region": region,
                         "model_id": model_id,
@@ -696,6 +725,8 @@ def batch_create_profiles():
                         "name": name,
                         "ok": True,
                         "copyFrom": source_id or arn,
+                        "sourceType": source_type,
+                        "isGlobal": source_type == "global",
                         "inferenceProfileArn": profile_arn,
                         "inferenceProfileId": resp.get("inferenceProfileId", ""),
                         "status": resp.get("status", ""),
@@ -836,11 +867,14 @@ def batch_create_stream():
                     params["tags"] = tag_list
                 resp        = br.create_inference_profile(**params)
                 profile_arn = resp.get("inferenceProfileArn", "")
+                source_type = _get_source_type(source_id)
                 rows.append({
                     "region": region, "model_id": model_id,
                     "model_label": ver["label"], "name": name,
                     "ok": True,
                     "copyFrom": source_id or arn,
+                    "sourceType": source_type,
+                    "isGlobal": source_type == "global",
                     "inferenceProfileArn": profile_arn,
                     "inferenceProfileId": resp.get("inferenceProfileId", ""),
                     "status": resp.get("status", ""),
@@ -1103,6 +1137,7 @@ def test_profile():
     region = (data.get("region") or "").strip()
     profile_arn = (data.get("inference_profile_arn") or "").strip()
     do_invoke = bool(data.get("invoke", True))
+    check_source = bool(data.get("check_source", False))
     if not all([ak, sk, region, profile_arn]):
         return jsonify({"ok": False, "error": "参数不完整"}), 400
     try:
@@ -1126,6 +1161,49 @@ def test_profile():
             "invoke_ok": None,
             "invoke_error": None,
         }
+        
+        # 检查源类型
+        if check_source:
+            try:
+                models = p.get("models", [])
+                source_info = None
+                if models:
+                    # 从 models 中获取 copyFrom 信息
+                    first_model = models[0]
+                    copy_from = first_model.get("modelArn", "")
+                    if "inference-profile" in copy_from:
+                        # 提取源 inference profile ID
+                        source_id = copy_from.split("/")[-1] if "/" in copy_from else copy_from
+                        source_type = _get_source_type(source_id)
+                        source_info = {
+                            "copyFrom": source_id,
+                            "sourceType": source_type,
+                            "isGlobal": source_type == "global"
+                        }
+                    else:
+                        # Foundation model
+                        source_info = {
+                            "copyFrom": copy_from,
+                            "sourceType": "foundation", 
+                            "isGlobal": False
+                        }
+                
+                if source_info:
+                    result.update(source_info)
+                else:
+                    result.update({
+                        "copyFrom": None,
+                        "sourceType": "unknown",
+                        "isGlobal": False
+                    })
+            except Exception as e:
+                result.update({
+                    "copyFrom": None,
+                    "sourceType": "error",
+                    "isGlobal": False,
+                    "sourceError": str(e)
+                })
+        
         if do_invoke:
             if status != "ACTIVE":
                 # Profile 本身不 ACTIVE，无需尝试调用

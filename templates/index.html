@@ -50,6 +50,11 @@ body{
 }
 input,textarea,select{font-family:inherit;text-transform:none}
 
+/* 标签相关元素保持原始大小写 */
+.tgb, .tgb *, .tkv, .tkv *, .tgi .tkv, span[data-label]::before {
+  text-transform: none !important;
+}
+
 /* Header */
 .h{
   background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 60%,#1e3a5f 100%);
@@ -645,9 +650,9 @@ function rP(ps){var w=$("pw"),tb=$("pt"),e=$("pe");if(!ps||ps.length===0){w.styl
 $("fName").value="";$("fRegion").value="";$("fTag").value="";$("fArn").value="";renderFilteredProfiles(ps)}
 
 function renderFilteredProfiles(ps){var tb=$("pt"),total=ap.length;var rc={};ps.forEach(function(p){rc[p.region||"?"]=1});$("pc").textContent=ps.length+(ps.length<total?" / "+total+" 个配置":" 个配置")+" · "+Object.keys(rc).length+" 个区域";tb.innerHTML="";ps.forEach(function(p,i){// 找到在 ap 中的真实 index（用于选择）
-var realIdx=ap.indexOf(p);var tr=document.createElement("tr");var tgs=p.tags||[];var tH="<div class=tgb>";if(tgs.length===0){tH+='<span style="color:var(--t2);font-size:11px;background:none;border:none;padding:0">—</span>'}else{tgs.forEach(function(t){tH+='<span data-label="'+es(t.key||"")+'='+es(t.value||"")+'" title="'+es(t.key)+'='+es(t.value)+'"></span>'})}tH+="</div>";var checked=sp.some(function(s){return s.arn===p.arn});tr.innerHTML='<td class=cc><input type=checkbox data-i="'+realIdx+'" '+(checked?"checked":"")+'onchange="us()"></td><td><span class="bdge bg-rg">'+es(p.region||"")+'</span></td><td>'+es(p.name)+'</td><td><span class="bdge bg-ok">'+es((p.status||"").toLowerCase())+'</span></td><td>'+tH+'</td><td><span class=tu title="'+es(p.arn)+'">'+es(p.arn)+'</span></td>';tb.appendChild(tr)});var allChecked=ps.length>0&&ps.every(function(p){return sp.some(function(s){return s.arn===p.arn})});$("sa").checked=allChecked;$("sa").indeterminate=!allChecked&&sp.length>0}
+var realIdx=ap.indexOf(p);var tr=document.createElement("tr");var tgs=p.tags||[];var tH="<div class=tgb>";if(tgs.length===0){tH+='<span style="color:var(--t2);font-size:11px;background:none;border:none;padding:0">—</span>'}else{tgs.forEach(function(t){tH+='<span data-label="'+es(t.key||"")+'='+es(t.value||"")+'" title="'+es(t.key)+'='+es(t.value)+'"></span>'})}tH+="</div>";var checked=sp.some(function(s){return s.arn===p.arn});tr.innerHTML='<td class=cc><input type=checkbox data-i="'+realIdx+'" '+(checked?"checked":"")+'onchange="us()"></td><td><span class="bdge bg-rg">'+es(p.region||"")+'</span></td><td>'+es(p.name)+'</td><td><span class="bdge bg-ok">'+es(p.status||"")+'</span></td><td>'+tH+'</td><td><span class=tu title="'+es(p.arn)+'">'+es(p.arn)+'</span></td>';tb.appendChild(tr)});var allChecked=ps.length>0&&ps.every(function(p){return sp.some(function(s){return s.arn===p.arn})});$("sa").checked=allChecked;$("sa").indeterminate=!allChecked&&sp.length>0}
 
-function filterProfiles(){var nameF=($("fName").value||"").toLowerCase();var regF=($("fRegion").value||"").toLowerCase();var tagF=($("fTag").value||"").toLowerCase();var arnF=($("fArn").value||"").toLowerCase();var filtered=ap.filter(function(p){var nameOk=!nameF||(p.name||"").toLowerCase().indexOf(nameF)!==-1;var regOk=!regF||(p.region||"").toLowerCase().indexOf(regF)!==-1;var arnOk=!arnF||(p.arn||"").toLowerCase().indexOf(arnF)!==-1;var tagOk=!tagF;if(!tagOk){var tgs=p.tags||[];tagOk=tgs.some(function(t){return(t.key+"="+t.value).toLowerCase().indexOf(tagF)!==-1})}return nameOk&&regOk&&arnOk&&tagOk});renderFilteredProfiles(filtered)}
+function filterProfiles(){var nameF=$("fName").value||"";var regF=$("fRegion").value||"";var tagF=$("fTag").value||"";var arnF=$("fArn").value||"";var filtered=ap.filter(function(p){var nameOk=!nameF||(p.name||"").indexOf(nameF)!==-1;var regOk=!regF||(p.region||"").indexOf(regF)!==-1;var arnOk=!arnF||(p.arn||"").indexOf(arnF)!==-1;var tagOk=!tagF;if(!tagOk){var tgs=p.tags||[];tagOk=tgs.some(function(t){return(t.key+"="+t.value).indexOf(tagF)!==-1})}return nameOk&&regOk&&arnOk&&tagOk});renderFilteredProfiles(filtered)}
 
 function clearFilter(){$("fName").value="";$("fRegion").value="";$("fTag").value="";$("fArn").value="";renderFilteredProfiles(ap)}
 function ta(){var c=$("sa").checked;document.querySelectorAll("#pt input[type=checkbox]").forEach(function(cb){cb.checked=c;var p=ap[parseInt(cb.dataset.i)];if(p){if(c&&!sp.some(function(s){return s.arn===p.arn}))sp.push({arn:p.arn,region:p.region});else if(!c)sp=sp.filter(function(s){return s.arn!==p.arn})}});$("sc").textContent=allSelArns().length;if(allSelArns().length){loadSelectedTags()}else{_tagMap=null;$("existingTagsList").innerHTML='<div class="emp">请先选择配置</div>'}updateTagBtnText()}

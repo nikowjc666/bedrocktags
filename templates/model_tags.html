@@ -50,6 +50,11 @@ body{
 }
 input,textarea,select{font-family:inherit;text-transform:none}
 
+/* 标签相关元素保持原始大小写 */
+.tgb, .tgb *, .tkv, .tkv *, .tgi .tkv, span[data-label]::before {
+  text-transform: none !important;
+}
+
 /* Header */
 .h{
   background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 60%,#1e3a5f 100%);
@@ -186,6 +191,7 @@ input,textarea,select{font-family:inherit;text-transform:none}
 .bg-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
 .bg-wa{background:var(--wa-bg);color:var(--wa);border:1px solid var(--wa-bd)}
 .bg-er{background:var(--er-bg);color:var(--er);border:1px solid var(--er-bd)}
+.bg-info{background:var(--pl);color:var(--pr);border:1px solid #bfdbfe}
 .bg-rg{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-family:"SF Mono",Consolas,monospace;font-size:10px}
 
 /* Verified account row */
@@ -568,7 +574,7 @@ table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t
           </button>
         </div>
         <div class="tw"><table>
-          <thead><tr><th>状态</th><th>区域</th><th>模型</th><th>名称</th><th>标签</th><th>arn</th><th></th></tr></thead>
+          <thead><tr><th>状态</th><th>区域</th><th>模型</th><th>源类型</th><th>名称</th><th>标签</th><th>arn</th><th></th></tr></thead>
           <tbody id="pt"></tbody>
         </table></div>
       </div>
@@ -768,10 +774,24 @@ function _appendResultRow(p,i){
       '<button class="copy-btn" onclick="copyArn(this,\''+es(arn)+'\')" title="复制 ARN">'+
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制</button>'
     :'<span class="tc2">'+es(p.error||"")+'</span>';
+  
+  // 源类型显示
+  var sourceTypeCell = '';
+  if(p.ok && p.sourceType) {
+    var sourceClass = p.isGlobal ? 'bg-ok' : (p.sourceType === 'foundation' ? 'bg-wa' : 'bg-info');
+    var sourceText = p.isGlobal ? 'global' : p.sourceType;
+    sourceTypeCell = '<span class="bdge ' + sourceClass + '">' + es(sourceText) + '</span>';
+  } else if(p.ok) {
+    sourceTypeCell = '<span class="tc2">—</span>';
+  } else {
+    sourceTypeCell = '<span class="tc2">—</span>';
+  }
+  
   var tr=document.createElement("tr");
   tr.innerHTML='<td><span class="bdge '+(p.ok?"bg-ok":"bg-er")+'">'+(p.ok?"成功":"失败")+'</span></td>'+
     '<td><span class="bdge bg-rg">'+es(p.region||"")+'</span></td>'+
     '<td>'+es(p.model_label||p.model_id||"")+'</td>'+
+    '<td>'+sourceTypeCell+'</td>'+
     '<td>'+es(p.name||"")+'</td>'+
     '<td>'+tH+'</td>'+
     '<td>'+arnCell+'</td>'+
@@ -813,7 +833,7 @@ function copyArn(btn,arn){
 function autoDetectRegion(){var arn=$("testArn").value.trim(),r=regionFromArn(arn);$("testRegion").textContent=r||"— 自动识别 —";$("testRegion").dataset.region=r||""}
 function fillTest(i){var p=results[i];if(!p||!p.ok)return;$("testArn").value=p.inferenceProfileArn||"";$("testRegion").textContent=p.region||"";$("testRegion").dataset.region=p.region||"";testArn()}
 
-async function testArn(){var c=creds(),arn=$("testArn").value.trim(),invoke=$("testInvoke").checked;var region=$("testRegion").dataset.region||regionFromArn(arn)||"";if(!c.access_key||!c.secret_key){sR("testResult","请先填写凭证","wa");return}if(!arn){sR("testResult","请输入 arn","wa");return}if(!region){sR("testResult","无法识别区域，请检查 arn 格式","wa");return}var btn=$("btnTest");btn.disabled=true;btn.textContent="测试中...";$("testResult").innerHTML='<div class="st info"><span class="sp"></span> 测试中...</div>';try{var r=await fetch(B+"/api/test_profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,region:region,inference_profile_arn:arn,invoke:invoke})}),d=await r.json();if(!d.ok){sR("testResult",d.error||"测试失败","er");return}var lines=[];lines.push("状态: "+(d.status||"unknown").toLowerCase());lines.push("profile id: "+(d.inferenceProfileId||"—"));lines.push("名称: "+(d.name||"—"));if(d.available)lines.push("✓ profile 可用");else if(d.status==="NOT_FOUND")lines.push("✗ arn 不存在或无权限");else lines.push("✗ profile 不可用");if(invoke&&d.invoke_ok===true)lines.push("✓ 调用成功 — "+(d.invoke_preview||"(空)"));else if(invoke&&d.invoke_ok===false)lines.push("✗ 调用失败: "+(d.invoke_error||""));sR("testResult",lines.join("\n"),d.available?"ok":"er")}catch(e){sR("testResult","错误："+e.message,"er")}finally{btn.disabled=false;btn.textContent="测试"}}
+async function testArn(){var c=creds(),arn=$("testArn").value.trim(),invoke=$("testInvoke").checked;var region=$("testRegion").dataset.region||regionFromArn(arn)||"";if(!c.access_key||!c.secret_key){sR("testResult","请先填写凭证","wa");return}if(!arn){sR("testResult","请输入 arn","wa");return}if(!region){sR("testResult","无法识别区域，请检查 arn 格式","wa");return}var btn=$("btnTest");btn.disabled=true;btn.textContent="测试中...";$("testResult").innerHTML='<div class="st info"><span class="sp"></span> 测试中...</div>';try{var r=await fetch(B+"/api/test_profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,region:region,inference_profile_arn:arn,invoke:invoke})}),d=await r.json();if(!d.ok){sR("testResult",d.error||"测试失败","er");return}var lines=[];lines.push("状态: "+(d.status||"unknown"));lines.push("profile id: "+(d.inferenceProfileId||"—"));lines.push("名称: "+(d.name||"—"));if(d.available)lines.push("✓ profile 可用");else if(d.status==="NOT_FOUND")lines.push("✗ arn 不存在或无权限");else lines.push("✗ profile 不可用");if(invoke&&d.invoke_ok===true)lines.push("✓ 调用成功 — "+(d.invoke_preview||"(空)"));else if(invoke&&d.invoke_ok===false)lines.push("✗ 调用失败: "+(d.invoke_error||""));sR("testResult",lines.join("\n"),d.available?"ok":"er")}catch(e){sR("testResult","错误："+e.message,"er")}finally{btn.disabled=false;btn.textContent="测试"}}
 
 async function exportExcel(){
   if(!results||!results.length){sR("createMsg","暂无可导出的结果","wa");return}

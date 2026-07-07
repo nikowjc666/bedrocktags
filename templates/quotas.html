@@ -21,6 +21,11 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde6f0 100%);background-attachment:fixed;color:var(--text);font-size:12px;line-height:1.45;min-height:100vh;text-transform:lowercase}
 input,textarea,select{font-family:inherit;text-transform:none}
+
+/* 标签相关元素保持原始大小写 */
+.tgb, .tgb *, .tkv, .tkv *, .tgi .tkv, span[data-label]::before {
+  text-transform: none !important;
+}
 .h{background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 60%,#1e3a5f 100%);padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;height:44px;box-shadow:0 1px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
 .h-l{display:flex;align-items:center;gap:10px}
 .nav{display:flex;gap:4px}
@@ -368,7 +373,7 @@ function parseQuotaName(name){
   var modelMatch=n.match(/\bfor\s+(.+)$/i);
   var model=modelMatch?modelMatch[1].trim():n;
   model=model.replace(/^Anthropic\s+/i,"");
-  var nl=n.toLowerCase();
+  var nl=n;
   var isGlobal=/^global cross-region/.test(nl);
   var type="";
   if(/tokens per day/i.test(nl)) type="TPD";
