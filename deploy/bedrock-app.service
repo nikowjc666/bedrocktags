@@ -1,0 +1,23 @@
+[Unit]
+Description=Bedrock Inference Profile Manager
+After=network.target
+
+[Service]
+User=ec2-user
+WorkingDirectory=/home/ec2-user/app
+ExecStart=/usr/local/bin/gunicorn \
+    --workers 2 \
+    --bind 127.0.0.1:5001 \
+    --timeout 120 \
+    --keep-alive 5 \
+    --log-level info \
+    --access-logfile /var/log/bedrock-app/access.log \
+    --error-logfile  /var/log/bedrock-app/error.log \
+    app:app
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

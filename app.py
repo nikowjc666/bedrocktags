@@ -2,6 +2,7 @@
 import re
 import json
 import threading
+import requests
 import boto3
 import botocore
 from flask import Flask, render_template, request, jsonify, send_file, Response, stream_with_context
@@ -1633,6 +1634,136 @@ def model_tags():
 @app.route("/delete-profiles")
 def delete_profiles():
     return render_template("delete_profiles.html")
+
+
+@app.route("/data-retention")
+def data_retention_page():
+    return render_template("data_retention.html")
+
+
+@app.route("/api/get_data_retention", methods=["POST"])
+def get_data_retention():
+    """获取当前数据驻留设置"""
+    data = request.get_json() or {}
+    ak, sk, user_id = _creds(data)
+    region = (data.get("region") or "us-east-1").strip()
+    
+    if not all([ak, sk, region]):
+        return jsonify({"ok": False, "error": "请填写必要参数"}), 400
+        
+    try:
+        if user_id:
+            _, err = _verify_account(ak, sk, user_id)
+            if err:
+                return jsonify({"ok": False, "error": err}), 400
+                
+        # 使用 requests 库调用 Bedrock 数据驻留 API
+        import requests
+        from botocore.auth import SigV4Auth
+        from botocore.awsrequest import AWSRequest
+        
+        # 构建请求
+        endpoint = f"https://bedrock.{region}.amazonaws.com/data-retention"
+        request_obj = AWSRequest(method="GET", url=endpoint)
+        
+        # 签名请求
+        credentials = boto3.Session(
+            aws_access_key_id=ak,
+            aws_secret_access_key=sk
+        ).get_credentials()
+        
+        SigV4Auth(credentials, "bedrock", region).add_auth(request_obj)
+        
+        # 发送请求
+        response = requests.get(
+            endpoint,
+            headers=dict(request_obj.headers)
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            return jsonify({
+                "ok": True,
+                "mode": result.get("mode", "unknown"),
+                "updatedAt": result.get("updatedAt", "")
+            })
+        else:
+            return jsonify({
+                "ok": False, 
+                "error": f"API 调用失败: {response.status_code} - {response.text}"
+            }), 400
+            
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+
+@app.route("/api/set_data_retention", methods=["POST"])
+def set_data_retention():
+    """设置数据驻留模式"""
+    data = request.get_json() or {}
+    ak, sk, user_id = _creds(data)
+    region = (data.get("region") or "us-east-1").strip()
+    mode = (data.get("mode") or "").strip()
+    
+    if not all([ak, sk, region, mode]):
+        return jsonify({"ok": False, "error": "请填写必要参数"}), 400
+        
+    if mode not in ["provider_data_share", "no_data_share"]:
+        return jsonify({"ok": False, "error": "无效的数据驻留模式"}), 400
+        
+    try:
+        if user_id:
+            _, err = _verify_account(ak, sk, user_id)
+            if err:
+                return jsonify({"ok": False, "error": err}), 400
+                
+        # 使用 requests 库调用 Bedrock 数据驻留 API
+        import requests
+        from botocore.auth import SigV4Auth
+        from botocore.awsrequest import AWSRequest
+        import json as json_lib
+        
+        # 构建请求
+        endpoint = f"https://bedrock.{region}.amazonaws.com/data-retention"
+        payload = json_lib.dumps({"mode": mode})
+        
+        request_obj = AWSRequest(
+            method="PUT", 
+            url=endpoint,
+            data=payload,
+            headers={"Content-Type": "application/json"}
+        )
+        
+        # 签名请求
+        credentials = boto3.Session(
+            aws_access_key_id=ak,
+            aws_secret_access_key=sk
+        ).get_credentials()
+        
+        SigV4Auth(credentials, "bedrock", region).add_auth(request_obj)
+        
+        # 发送请求
+        response = requests.put(
+            endpoint,
+            data=payload,
+            headers=dict(request_obj.headers)
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            return jsonify({
+                "ok": True,
+                "mode": result.get("mode"),
+                "updatedAt": result.get("updatedAt", "")
+            })
+        else:
+            return jsonify({
+                "ok": False, 
+                "error": f"API 调用失败: {response.status_code} - {response.text}"
+            }), 400
+            
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
 
 
 @app.route("/test-profile")

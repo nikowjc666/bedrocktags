@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>数据驻留设置 · aws bedrock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef2f7;--bg2:#e4eaf3;--surface:#fff;--surface2:#f8fafc;
+  --border:#e2e8f0;--border2:#cbd5e1;--text:#0f172a;--t2:#64748b;--t3:#94a3b8;
+  --pr:#2563eb;--ph:#1d4ed8;--pl:#eff6ff;
+  --ok:#16a34a;--ok-bg:#f0fdf4;--ok-bd:#bbf7d0;
+  --er:#dc2626;--er-bg:#fef2f2;--er-bd:#fecaca;
+  --wa:#d97706;--wa-bg:#fffbeb;--wa-bd:#fde68a;
+  --aws:#ff9900;--aws-dark:#232f3e;--r:7px;--r-sm:5px;
+  --shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde6f0 100%);background-attachment:fixed;color:var(--text);font-size:12px;line-height:1.45;min-height:100vh;text-transform:lowercase}
+input,textarea,select{font-family:inherit;text-transform:none}
+.h{background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 60%,#1e3a5f 100%);padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;height:44px;box-shadow:0 1px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
+.h-l{display:flex;align-items:center;gap:10px}
+.nav{display:flex;gap:4px}
+.nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:11px;padding:4px 10px;border-radius:4px;transition:all .15s}
+.nav a:hover,.nav a.act{color:#fff;background:rgba(255,255,255,.12)}
+.h-logo{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--aws) 0%,#ffb84d 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 1px 6px rgba(255,153,0,.3);flex-shrink:0}
+.h-logo svg{color:#232f3e;width:16px;height:16px}
+.h-text h1{font-size:14px;font-weight:600;color:#fff}
+.h-text .s{color:rgba(255,255,255,.5);font-size:11px}
+.b{max-width:880px;margin:16px auto;padding:0 14px 28px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;animation:fadeUp .4s ease both}
+.card:nth-child(1){animation-delay:.05s}.card:nth-child(2){animation-delay:.12s}.card:nth-child(3){animation-delay:.19s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.sht{display:flex;align-items:center;gap:7px;padding:8px 12px;font-size:12px;font-weight:600;background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text)}
+.sht-step{width:18px;height:18px;border-radius:50%;background:var(--pr);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sht-sub{font-weight:400;color:var(--t2);font-size:11px;margin-left:auto}
+.sb{padding:12px}
+.fr{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px}
+.fr:last-child{margin-bottom:0}
+.fg{display:flex;flex-direction:column;gap:3px;min-width:140px;flex:1}
+.fg label{font-size:11px;color:var(--t2);font-weight:500}
+.fg input,.fg select{height:30px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;outline:none;background:var(--surface);color:var(--text);transition:border-color .15s,box-shadow .15s}
+.fg input:focus,.fg select:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:30px;padding:0 11px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);white-space:nowrap;transition:all .15s ease}
+.btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.bp{background:linear-gradient(135deg,var(--pr) 0%,#3b82f6 100%);color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(37,99,235,.3)}
+.bp:hover{background:linear-gradient(135deg,var(--ph) 0%,var(--pr) 100%);color:#fff;border-color:transparent}
+.bsm{height:26px;padding:0 9px;font-size:11px}
+.bdge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:12px;font-size:10px;font-weight:500}
+.bg-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+.bg-er{background:var(--er-bg);color:var(--er);border:1px solid var(--er-bd)}
+.fx{display:flex;align-items:center;gap:8px}
+.mt8{margin-top:8px}
+.st{display:flex;align-items:flex-start;gap:6px;padding:7px 10px;border-radius:var(--r-sm);font-size:11px;margin-top:8px;font-weight:500}
+.st.er{background:var(--er-bg);border:1px solid var(--er-bd);color:var(--er)}
+.st.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
+.st.wa{background:var(--wa-bg);border:1px solid var(--wa-bd);color:var(--wa)}
+.st.info{background:var(--pl);border:1px solid #bfdbfe;color:var(--pr)}
+.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--pr);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* 模式选择 */
+.mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+.mode-option{padding:12px;border:2px solid var(--border);border-radius:var(--r);cursor:pointer;transition:all .15s;background:var(--surface)}
+.mode-option:hover{border-color:var(--pr);background:var(--pl)}
+.mode-option.sel{border-color:var(--pr);background:var(--pl)}
+.mode-option input[type=radio]{display:none}
+.mode-title{font-weight:600;color:var(--text);margin-bottom:4px}
+.mode-desc{font-size:11px;color:var(--t2);line-height:1.4}
+/* 区域选择 */
+.region-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:5px;padding:8px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2);margin-bottom:7px}
+.rgi{display:flex;align-items:center;gap:5px;font-size:11px;font-family:"SF Mono",Consolas,monospace;cursor:pointer;padding:3px 5px;border-radius:var(--r-sm);transition:background .12s}
+.rgi:hover{background:var(--pl)}
+.rgi input{accent-color:var(--pr)}
+.shortcuts{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+/* 进度 */
+.prog{margin-top:10px;padding:9px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm)}
+.prog-hd{display:flex;justify-content:space-between;font-size:11px;color:var(--t2);margin-bottom:5px}
+.prog-track{height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--pr),#3b82f6);border-radius:3px;width:0%;transition:width .25s ease}
+.prog-cur{font-size:10px;color:var(--t3);margin-top:4px}
+/* 结果表格 */
+.res-wrap{margin-top:10px;border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden}
+.res-hd{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:11px;font-weight:600}
+.res-ok{color:var(--ok)}.res-er{color:var(--er)}
+.res-list{max-height:300px;overflow-y:auto}
+.res-row{display:grid;grid-template-columns:148px 1fr auto;gap:10px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--border);font-size:11px}
+.res-row:last-child{border-bottom:none}
+.res-row.err{background:var(--er-bg)}
+.res-region{font-family:"SF Mono",Consolas,monospace;font-weight:600;color:var(--text)}
+.res-mode{color:var(--pr);font-weight:500}
+.res-err-msg{color:var(--er);font-size:10px}
+.res-time{font-family:"SF Mono",Consolas,monospace;color:var(--t2);font-size:10px;text-align:right}
+.status-ok{padding:1px 7px;border-radius:10px;font-size:10px;font-weight:500;background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+.status-er{padding:1px 7px;border-radius:10px;font-size:10px;font-weight:500;background:var(--er-bg);color:var(--er);border:1px solid var(--er-bd)}
+.footer{text-align:center;color:var(--t3);font-size:10px;padding:4px 0 0}
+#ar{margin-top:2px;padding:8px 10px;background:var(--ok-bg);border:1px solid var(--ok-bd);border-radius:var(--r-sm)}
+#aid{font-weight:600;font-size:12px;color:var(--text);font-family:"SF Mono",Consolas,monospace}
+</style>
+</head>
+<body>
+<header class="h">
+  <div class="h-l">
+    <div class="h-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+      </svg>
+    </div>
+    <div class="h-text">
+      <h1>数据驻留设置</h1>
+      <div class="s">管理 AWS Bedrock 数据驻留和共享政策</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <a href="/">profile 标签</a>
+    <a href="/model-tags">创建配置</a>
+    <a href="/delete-profiles">删除配置</a>
+    <a href="/test-profile">测试模型</a>
+    <a href="/quotas">模型配额</a>
+    <a href="/data-retention" class="act">数据驻留</a>
+    <a href="/mfa">MFA 验证码</a>
+  </nav>
+</header>
+
+<div class="b">
+
+<!-- 步骤1：凭证 -->
+<div class="card">
+  <div class="sht"><span class="sht-step">1</span> aws 凭证<span class="sht-sub">验证后方可操作</span></div>
+  <div class="sb">
+    <div class="fr">
+      <div class="fg" style="flex:2"><label>access key id</label><input id="ak" type="text" placeholder="AKIA..." autocomplete="off"></div>
+      <div class="fg" style="flex:2"><label>secret access key</label><input id="sk" type="password" placeholder="..." autocomplete="off"></div>
+      <div class="fg" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn bp" id="btnv" onclick="vrf()">验证</button></div>
+    </div>
+    <div id="ar" style="display:none">
+      <div class="fg"><label>账号 id</label><div class="fx"><span id="aid"></span><span class="bdge bg-ok" style="margin-left:6px">✓ 已验证</span></div></div>
+    </div>
+    <div id="vrfMsg"></div>
+  </div>
+</div>
+
+<!-- 步骤2：查看当前设置 -->
+<div class="card">
+  <div class="sht"><span class="sht-step">2</span> 查看当前设置<span class="sht-sub">查询所选区域的数据驻留配置</span></div>
+  <div class="sb">
+    <label style="font-size:11px;color:var(--t2);font-weight:500;display:block;margin-bottom:5px">选择区域</label>
+    <div id="checkGrid" class="region-grid"></div>
+    <div class="shortcuts" id="checkShortcuts"></div>
+    <div class="fr">
+      <button class="btn" id="btnCheck" onclick="doCheck()">查看设置</button>
+    </div>
+    <div id="checkProg" class="prog" style="display:none">
+      <div class="prog-hd"><span>查询进度</span><span id="checkProgTxt">0/0</span></div>
+      <div class="prog-track"><div class="prog-fill" id="checkProgFill"></div></div>
+    </div>
+    <div id="checkRes" class="res-wrap" style="display:none">
+      <div class="res-hd"><span>查询结果</span><span id="checkResSumm"></span></div>
+      <div class="res-list" id="checkResList"></div>
+    </div>
+    <div id="checkMsg"></div>
+  </div>
+</div>
+
+<!-- 步骤3：设置数据驻留 -->
+<div class="card">
+  <div class="sht"><span class="sht-step">3</span> 设置数据驻留<span class="sht-sub">选择区域和模式，支持单个或批量</span></div>
+  <div class="sb">
+    <label style="font-size:11px;color:var(--t2);font-weight:500;display:block;margin-bottom:5px">选择区域</label>
+    <div id="setGrid" class="region-grid"></div>
+    <div class="shortcuts" id="setShortcuts"></div>
+    <div class="mode-grid">
+      <div class="mode-option" onclick="selMode('provider_data_share')">
+        <input type="radio" name="mode" value="provider_data_share">
+        <div class="mode-title">Provider Data Share</div>
+        <div class="mode-desc">允许与模型提供商共享数据以改进服务质量</div>
+      </div>
+      <div class="mode-option" onclick="selMode('no_data_share')">
+        <input type="radio" name="mode" value="no_data_share">
+        <div class="mode-title">No Data Share</div>
+        <div class="mode-desc">不与模型提供商共享任何数据</div>
+      </div>
+    </div>
+    <div class="fr mt8">
+      <button class="btn bp" id="btnSet" onclick="doSet()" disabled>应用设置</button>
+    </div>
+    <div id="setProg" class="prog" style="display:none">
+      <div class="prog-hd"><span>设置进度</span><span id="setProgTxt">0/0</span></div>
+      <div class="prog-track"><div class="prog-fill" id="setProgFill"></div></div>
+      <div class="prog-cur" id="setProgCur"></div>
+    </div>
+    <div id="setRes" class="res-wrap" style="display:none">
+      <div class="res-hd"><span>设置结果</span><span id="setResSumm"></span></div>
+      <div class="res-list" id="setResList"></div>
+    </div>
+    <div id="setMsg"></div>
+  </div>
+</div>
+
+</div>
+<div class="footer">aws bedrock data retention policy manager</div>
+<script src="/static/persist.js"></script>
+<script>
+var B="";
+function $(i){return document.getElementById(i)}
+function es(s){if(!s)return"";var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+function sR(id,msg,t){var el=$(id);if(el)el.innerHTML=msg?'<div class="st '+t+'" style="white-space:pre-line">'+es(msg)+'</div>':""}
+
+var REGIONS=[
+  {v:"us-east-1",     l:"us-east-1"},
+  {v:"us-east-2",     l:"us-east-2"},
+  {v:"us-west-1",     l:"us-west-1"},
+  {v:"us-west-2",     l:"us-west-2"},
+  {v:"ap-southeast-1",l:"ap-southeast-1"},
+  {v:"ap-southeast-2",l:"ap-southeast-2"},
+  {v:"ap-northeast-1",l:"ap-northeast-1"},
+  {v:"ap-south-1",    l:"ap-south-1"},
+  {v:"eu-west-1",     l:"eu-west-1"},
+  {v:"eu-west-2",     l:"eu-west-2"},
+  {v:"eu-west-3",     l:"eu-west-3"},
+  {v:"eu-central-1",  l:"eu-central-1"},
+  {v:"eu-north-1",    l:"eu-north-1"},
+  {v:"ca-central-1",  l:"ca-central-1"},
+  {v:"sa-east-1",     l:"sa-east-1"}
+];
+
+// 快捷组
+var SETS={
+  common:["us-east-1","us-east-2","us-west-1","us-west-2","ap-southeast-1"],
+  us:    ["us-east-1","us-east-2","us-west-1","us-west-2"],
+  ap:    ["ap-southeast-1","ap-southeast-2","ap-northeast-1","ap-south-1"],
+  eu:    ["eu-west-1","eu-west-2","eu-west-3","eu-central-1","eu-north-1"]
+};
+
+var SHORTCUTS=[
+  {k:"common", l:"美东+美西+新加坡"},
+  {k:"us",     l:"美国区域"},
+  {k:"ap",     l:"亚太区域"},
+  {k:"eu",     l:"欧洲区域"},
+  {k:"all",    l:"全选"},
+  {k:"none",   l:"清空"}
+];
+
+// ── 初始化区域网格 ──────────────────────────────────────────
+function buildGrid(gridId, shortcutsId, defaultSet){
+  var grid=$(gridId), sc=$(shortcutsId);
+  REGIONS.forEach(function(r){
+    var lbl=document.createElement("label");
+    lbl.className="rgi";
+    var checked=defaultSet.indexOf(r.v)!==-1?" checked":"";
+    lbl.innerHTML='<input type="checkbox" value="'+r.v+'"'+checked+'> '+r.l;
+    grid.appendChild(lbl);
+  });
+  SHORTCUTS.forEach(function(s){
+    var btn=document.createElement("button");
+    btn.type="button";btn.className="btn bsm";
+    btn.textContent=s.l;
+    btn.onclick=function(){applySet(gridId,s.k)};
+    sc.appendChild(btn);
+  });
+  // 设置面板：选择变化时更新按钮
+  if(gridId==="setGrid") grid.addEventListener("change",updateSetBtn);
+}
+
+function applySet(gridId, key){
+  var cbs=document.querySelectorAll("#"+gridId+" input[type=checkbox]");
+  cbs.forEach(function(cb){cb.checked=false});
+  if(key==="all"){cbs.forEach(function(cb){cb.checked=true});}
+  else if(key!=="none"&&SETS[key]){
+    SETS[key].forEach(function(v){
+      var cb=document.querySelector("#"+gridId+' input[value="'+v+'"]');
+      if(cb)cb.checked=true;
+    });
+  }
+  if(gridId==="setGrid") updateSetBtn();
+}
+
+function getChecked(gridId){
+  var rs=[];
+  document.querySelectorAll("#"+gridId+" input:checked").forEach(function(cb){rs.push(cb.value)});
+  return rs;
+}
+
+function updateSetBtn(){
+  var rs=getChecked("setGrid");
+  var mode=document.querySelector('input[name="mode"]:checked');
+  $("btnSet").disabled=!(rs.length&&mode);
+}
+
+document.addEventListener("DOMContentLoaded",function(){
+  buildGrid("checkGrid","checkShortcuts",SETS.common);
+  buildGrid("setGrid","setShortcuts",SETS.common);
+  // 从 sessionStorage 恢复 AK/SK
+  BedrockPersist.init();
+});
+
+// ── 验证凭证 ────────────────────────────────────────────────
+function creds(){return{access_key:$("ak").value.trim(),secret_key:$("sk").value.trim()}}
+
+async function vrf(){
+  var c=creds();
+  if(!c.access_key||!c.secret_key){sR("vrfMsg","请填写 AK/SK","wa");return}
+  var btn=$("btnv");btn.disabled=true;btn.textContent="验证中...";
+  try{
+    var r=await fetch(B+"/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c)});
+    var d=await r.json();
+    if(d.ok){
+      $("aid").textContent=d.account_id;
+      $("ar").style.display="block";
+      BedrockPersist.onVerified(d.account_id);
+      sR("vrfMsg","已验证","ok");
+    }else sR("vrfMsg",d.error,"er");
+  }catch(e){sR("vrfMsg","错误："+e.message,"er")}
+  finally{btn.disabled=false;btn.textContent="验证"}
+}
+
+// ── 模式选择 ────────────────────────────────────────────────
+function selMode(val){
+  document.querySelectorAll(".mode-option").forEach(function(el){el.classList.remove("sel")});
+  var radio=document.querySelector('input[name="mode"][value="'+val+'"]');
+  radio.checked=true;
+  radio.closest(".mode-option").classList.add("sel");
+  updateSetBtn();
+}
+
+// ── 通用并发请求 ────────────────────────────────────────────
+async function runConcurrent(regions, fn, progFill, progTxt, CONC){
+  var total=regions.length, done=0, idx=0, results=[];
+  async function worker(){
+    while(idx<regions.length){
+      var i=idx++, region=regions[i];
+      var res=await fn(region);
+      results.push(res);
+      done++;
+      if(progFill){progFill.style.width=((done/total)*100)+"%"; progTxt.textContent=done+"/"+total;}
+    }
+  }
+  var ws=[];for(var w=0;w<Math.min(CONC,regions.length);w++)ws.push(worker());
+  await Promise.all(ws);
+  return results;
+}
+
+// ── 查看当前设置 ────────────────────────────────────────────
+async function doCheck(){
+  var c=creds();
+  if(!c.access_key||!c.secret_key){sR("checkMsg","请先填写凭证","wa");return}
+  var regions=getChecked("checkGrid");
+  if(!regions.length){sR("checkMsg","请选择区域","wa");return}
+
+  var btn=$("btnCheck");btn.disabled=true;btn.textContent="查询中...";
+  $("checkProg").style.display="block";
+  $("checkRes").style.display="none";
+  $("checkMsg").innerHTML="";
+
+  var fill=$("checkProgFill"),txt=$("checkProgTxt");
+  fill.style.width="0%"; txt.textContent="0/"+regions.length;
+
+  var results=await runConcurrent(regions,async function(region){
+    try{
+      var r=await fetch(B+"/api/get_data_retention",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,region:region})});
+      var d=await r.json();
+      return d.ok?{region:region,ok:true,mode:d.mode,updatedAt:d.updatedAt}:{region:region,ok:false,error:d.error};
+    }catch(e){return{region:region,ok:false,error:e.message}}
+  },fill,txt,5);
+
+  $("checkProg").style.display="none";
+  $("checkRes").style.display="block";
+
+  var ok=results.filter(function(r){return r.ok}).length;
+  var fail=results.length-ok;
+  $("checkResSumm").innerHTML='<span class="res-ok">'+ok+' 成功</span>'+(fail?' / <span class="res-er">'+fail+' 失败</span>':"");
+
+  var list=$("checkResList");list.innerHTML="";
+  results.forEach(function(r){
+    var row=document.createElement("div");
+    row.className="res-row"+(r.ok?"":" err");
+    row.innerHTML='<div class="res-region">'+r.region+'</div>'
+      +(r.ok?'<div class="res-mode">'+es(r.mode)+'</div>':'<div class="res-err-msg">'+es(r.error)+'</div>')
+      +'<div class="res-time">'+(r.ok?es(r.updatedAt||"—"):"—")+'</div>';
+    list.appendChild(row);
+  });
+
+  btn.disabled=false;btn.textContent="查看设置";
+  sR("checkMsg",fail?"部分区域查询失败":"查询完成","ok");
+}
+
+// ── 应用数据驻留设置 ────────────────────────────────────────
+async function doSet(){
+  var c=creds();
+  if(!c.access_key||!c.secret_key){sR("setMsg","请先填写凭证","wa");return}
+  var regions=getChecked("setGrid");
+  var modeEl=document.querySelector('input[name="mode"]:checked');
+  if(!regions.length||!modeEl){sR("setMsg","请选择区域和模式","wa");return}
+
+  var mode=modeEl.value;
+  var modeLabel=modeEl.closest(".mode-option").querySelector(".mode-title").textContent;
+  if(!confirm("确认在以下 "+regions.length+" 个区域设置数据驻留模式为：\n\n"+modeLabel+"\n\n区域："+regions.join("  ")+"\n\n此操作立即生效，是否继续？")){return}
+
+  var btn=$("btnSet");btn.disabled=true;btn.textContent="设置中...";
+  $("setProg").style.display="block";
+  $("setRes").style.display="none";
+  $("setMsg").innerHTML="";
+
+  var fill=$("setProgFill"),txt=$("setProgTxt"),cur=$("setProgCur");
+  fill.style.width="0%";txt.textContent="0/"+regions.length;cur.textContent="";
+
+  var results=await runConcurrent(regions,async function(region){
+    cur.textContent="正在设置 "+region+"...";
+    try{
+      var r=await fetch(B+"/api/set_data_retention",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,region:region,mode:mode})});
+      var d=await r.json();
+      return d.ok?{region:region,ok:true,mode:d.mode,updatedAt:d.updatedAt}:{region:region,ok:false,error:d.error};
+    }catch(e){return{region:region,ok:false,error:e.message}}
+  },fill,txt,3);
+
+  $("setProg").style.display="none";
+  $("setRes").style.display="block";
+
+  var ok=results.filter(function(r){return r.ok}).length;
+  var fail=results.length-ok;
+  $("setResSumm").innerHTML='<span class="res-ok">'+ok+' 成功</span>'+(fail?' / <span class="res-er">'+fail+' 失败</span>':"");
+
+  var list=$("setResList");list.innerHTML="";
+  results.forEach(function(r){
+    var row=document.createElement("div");
+    row.className="res-row"+(r.ok?"":" err");
+    row.innerHTML='<div class="res-region">'+r.region+'</div>'
+      +(r.ok?'<div class="res-mode">'+es(r.mode)+'</div>':'<div class="res-err-msg">'+es(r.error)+'</div>')
+      +'<div class="res-time">'+(r.ok?es(r.updatedAt||"—"):"—")+'</div>';
+    list.appendChild(row);
+  });
+
+  var t=fail>0?(ok>0?"wa":"er"):"ok";
+  sR("setMsg","设置完成："+ok+" 成功 / "+fail+" 失败",t);
+  btn.disabled=false;btn.textContent="应用设置";
+}
+</script>
+</body>
+</html>
