@@ -81,8 +81,9 @@ table tbody tr:last-child td{border-bottom:none}
 .sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--pr);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .mt8{margin-top:8px}.tc2{color:var(--t2)}
-.rgl{display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto;padding:6px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2);scrollbar-width:thin}
-.rgi{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:4px;font-size:11px;cursor:pointer;background:var(--surface);border:1px solid var(--border);transition:all .15s;user-select:none}
+/* 区域多选 */
+.region-grid{display:flex;flex-wrap:wrap;gap:5px;padding:7px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2)}
+.rgi{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-family:"SF Mono",Consolas,monospace;cursor:pointer;background:var(--surface);border:1px solid var(--border);transition:all .15s;user-select:none}
 .rgi:has(input:checked){background:var(--pl);border-color:#93c5fd;color:var(--pr)}
 .rgi input{accent-color:var(--pr);width:11px;height:11px;cursor:pointer;margin:0}
 .rg-bar{display:flex;align-items:center;gap:8px;margin-top:5px;font-size:11px;color:var(--t2)}
@@ -161,13 +162,18 @@ table tbody tr:last-child td{border-bottom:none}
   <div class="card">
     <div class="sht"><span class="sht-step">2</span> 查询配置<span class="sht-sub">选择区域、模型、配额类型后查询</span></div>
     <div class="sb">
-      <!-- 区域下拉（单选，快速）-->
+      <!-- 区域多选 -->
       <div class="fr" style="margin-bottom:10px">
-        <div class="fg" style="flex:1;max-width:320px">
-          <label>地域</label>
-          <select id="selRegion" style="height:30px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;outline:none;background:var(--surface);color:var(--text)">
-            <option value="">请选择区域...</option>
-          </select>
+        <div class="fg" style="flex:1">
+          <label>地域（多选）</label>
+          <div class="region-grid" id="rgl"></div>
+          <div class="rg-bar">
+            <label><input type="checkbox" id="saR" onchange="taR()"> 全选</label>
+            <span id="rc" style="color:var(--t3)">（已选 0）</span>
+            <button type="button" class="btn bsm" onclick="selRegionSet(['us-east-1','us-east-2','us-west-1','us-west-2'])">美国</button>
+            <button type="button" class="btn bsm" onclick="selRegionSet(['ap-southeast-1','ap-northeast-1'])">亚太</button>
+            <button type="button" class="btn bsm" onclick="selRegionSet(['eu-west-1','eu-central-1'])">欧洲</button>
+          </div>
         </div>
       </div>
       <!-- 模型 + 配额类型 并排 -->
@@ -197,6 +203,10 @@ table tbody tr:last-child td{border-bottom:none}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           查询配额
         </button>
+        <button class="btn" id="btnRefresh" onclick="queryQuotas(true)" title="从 AWS 重新拉取最新配额代码（新模型上线时使用）">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          刷新配额代码
+        </button>
       </div>
       <div id="queryMsg"></div>
     </div>
@@ -207,6 +217,10 @@ table tbody tr:last-child td{border-bottom:none}
     <div class="sht">
       <span class="sht-step">3</span> 配额结果
       <span class="sht-sub" id="totalInfo">暂无数据</span>
+      <button class="btn bsm" id="btnExport" onclick="exportExcel()" style="margin-left:auto;display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:11px;height:11px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        下载 Excel
+      </button>
     </div>
     <div id="qEmp" class="emp">查询后将在此显示配额数据</div>
     <div id="qLoading" class="emp" style="display:none"><span class="sp"></span> 查询中，请稍候...</div>
@@ -227,11 +241,28 @@ function sR(id,msg,type){var el=$(id);if(el)el.innerHTML='<div class="st '+type+
 function creds(){return{access_key:$("ak").value.trim(),secret_key:$("sk").value.trim()}}
 
 function getSelRegions(){
-  var v=$("selRegion").value;
-  return v?[v]:[];
+  var rs=[];
+  document.querySelectorAll("#rgl input:checked").forEach(function(cb){rs.push(cb.value)});
+  return rs;
 }
-function upRR(){}
-function taRR(){}
+function upRC(){
+  var n=document.querySelectorAll("#rgl input:checked").length,all=document.querySelectorAll("#rgl input").length;
+  $("rc").textContent="（已选 "+n+"）";
+  $("saR").checked=n===all&&all>0;
+  $("saR").indeterminate=n>0&&n<all;
+  if(_persistReady)BedrockPersist.save();
+}
+function taR(){
+  var c=$("saR").checked;
+  document.querySelectorAll("#rgl input").forEach(function(cb){cb.checked=c});
+  upRC();
+}
+function selRegionSet(arr){
+  document.querySelectorAll("#rgl input").forEach(function(cb){
+    cb.checked=arr.indexOf(cb.value)!==-1;
+  });
+  upRC();
+}
 
 document.addEventListener("DOMContentLoaded",async function(){
   var d=BedrockPersist.init();
@@ -240,7 +271,6 @@ document.addEventListener("DOMContentLoaded",async function(){
   _persistReady=true;
 });
 
-// 从后端加载与"创建配置"完全一致的模型列表
 async function loadModelList(){
   try{
     var r=await fetch(B+"/api/claude_45_versions"),d=await r.json();
@@ -268,13 +298,17 @@ async function loadRegions(){
   try{
     var r=await fetch(B+"/api/regions"),d=await r.json();
     if(!d.ok)return;
-    var sel=$("selRegion");
+    var box=$("rgl");
     d.regions.forEach(function(reg){
-      var opt=document.createElement("option");
-      opt.value=reg;opt.textContent=reg;
-      sel.appendChild(opt);
+      var lbl=document.createElement("label");
+      lbl.className="rgi";
+      lbl.innerHTML='<input type="checkbox" value="'+es(reg)+'" onchange="upRC()"> '+es(reg);
+      box.appendChild(lbl);
     });
-    sel.value="us-east-1";
+    // 默认选中 us-east-1
+    var first=box.querySelector('input[value="us-east-1"]');
+    if(first)first.checked=true;
+    upRC();
   }catch(e){}
 }
 
@@ -291,45 +325,44 @@ async function vrf(){
   finally{btn.disabled=false;btn.textContent="验证"}
 }
 
-async function queryQuotas(){
+async function queryQuotas(forceRefresh){
   var c=creds();
   if(!c.access_key||!c.secret_key){sR("queryMsg","请先验证凭证","wa");return}
   var regions=getSelRegions();
   if(!regions.length){sR("queryMsg","请选择区域","wa");return}
-  var region=regions[0];
 
-  // 收集配额类型
   var quotaTypes=[];
   document.querySelectorAll(".qt-cb:checked").forEach(function(cb){quotaTypes.push(cb.value)});
-
-  // 收集选中模型
   var selModels=getSelModels();
   if(!selModels.length){sR("queryMsg","请至少选择一个模型","wa");return}
 
-  var btn=$("btnQuery");
-  btn.disabled=true;
+  var btn=$("btnQuery"), btnR=$("btnRefresh");
+  btn.disabled=true; btnR.disabled=true;
   btn.innerHTML='<span class="sp"></span> 查询中...';
+  if(forceRefresh)btnR.innerHTML='<span class="sp"></span> 刷新中...';
   $("qEmp").style.display="none";
   $("qLoading").style.display="flex";
-  $("qLoading").innerHTML='<span class="sp"></span> 查询 '+es(region)+'...';
+  $("qLoading").innerHTML='<span class="sp"></span> '+(forceRefresh?"正在刷新配额代码...":"正在查询 "+regions.length+" 个区域...");
   $("qGroups").innerHTML="";
   $("totalInfo").textContent="查询中...";
   $("errSummary").innerHTML="";
+  $("queryMsg").innerHTML="";
+  $("btnExport").style.display="none";
   _allRows=[];
 
   try{
-    // 后端已并发处理，前端只需一次请求
     var r=await fetch(B+"/api/query_quotas",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
         access_key:c.access_key,
         secret_key:c.secret_key,
-        region:region,
+        regions:regions,
         service_code:"bedrock",
         quota_types:quotaTypes,
         models:selModels,
-        use_global:$("cbGlobal").checked
+        use_global:$("cbGlobal").checked,
+        force_refresh:!!forceRefresh
       })
     });
     var d=await r.json();
@@ -341,31 +374,53 @@ async function queryQuotas(){
 
     if(!_allRows.length){
       $("qEmp").style.display="flex";
-      $("qEmp").textContent=(d.errors&&d.errors.length)?"部分区域查询失败，无配额数据":"未查到 Claude 相关配额";
+      $("qEmp").innerHTML='<div>未查到相关配额</div>'
+        +(d.debug_model_kws?'<div style="font-size:10px;color:var(--t3);margin-top:4px">匹配关键词: '+es(d.debug_model_kws.join(", "))+'</div>':"")
+        +(d.debug_map_size?'<div style="font-size:10px;color:var(--t3)">配额代码库共 '+d.debug_map_size+' 条</div>':"");
       $("totalInfo").textContent="暂无数据";
+      if(d.debug_map_size){
+        sR("queryMsg","未匹配到配额，可以点击「刷新配额代码」拉取最新数据后重试","wa");
+      }
     }else{
-      renderGroups(_allRows, d.use_global);
-      var modeLabel=d.use_global?" · global模式":" · cross-region模式";
-      $("totalInfo").textContent="共 "+_allRows.length+" 条 · "+es(region)+modeLabel;
-      sR("queryMsg","查询完成，共 "+_allRows.length+" 条"+(d.use_global?" [global]":" [cross-region]"),"ok");
+      renderGroups(_allRows, d.use_global, d.regions||regions);
+      var modeLabel=d.use_global?" · global 模式":" · cross-region 模式";
+      $("totalInfo").textContent="共 "+_allRows.length+" 条 · "+regions.length+" 个区域"+modeLabel;
+      var refreshHint=forceRefresh?" [已刷新配额代码]":"";
+      sR("queryMsg","查询完成，"+regions.length+" 个区域，共 "+_allRows.length+" 条"+refreshHint,"ok");
+      $("btnExport").style.display="inline-flex";
     }
 
     if(d.errors&&d.errors.length){
-      var errHtml='<div style="margin:8px 12px 12px"><div class="st wa" style="flex-direction:column;align-items:flex-start;gap:3px">';
-      errHtml+='<strong>'+d.errors.length+' 个区域查询失败：</strong>';
-      d.errors.forEach(function(e){errHtml+='<div style="font-weight:400;font-size:10px;color:var(--t2)">'+es(e.region)+'：'+es(e.error)+'</div>'});
-      errHtml+='</div></div>';
+      var permErrors=d.errors.filter(function(e){return e.type==="permission"});
+      var otherErrors=d.errors.filter(function(e){return e.type!=="permission"});
+      var errHtml='<div style="margin:8px 12px 12px">';
+      if(permErrors.length){
+        errHtml+='<div class="st er" style="flex-direction:column;align-items:flex-start;gap:4px;margin-bottom:6px">';
+        errHtml+='<strong>⚠️ 权限不足，无法查询以下区域的配额：</strong>';
+        errHtml+='<div style="font-weight:400;font-size:11px">请检查 IAM 权限是否包含 <code>servicequotas:GetServiceQuota</code> 和 <code>servicequotas:GetAWSDefaultServiceQuota</code></div>';
+        permErrors.forEach(function(e){
+          errHtml+='<div style="font-weight:400;font-size:11px;font-family:\'SF Mono\',monospace">'+es(e.region)+'</div>';
+        });
+        errHtml+='</div>';
+      }
+      if(otherErrors.length){
+        errHtml+='<div class="st wa" style="flex-direction:column;align-items:flex-start;gap:3px">';
+        errHtml+='<strong>'+otherErrors.length+' 个区域查询失败：</strong>';
+        otherErrors.forEach(function(e){errHtml+='<div style="font-weight:400;font-size:10px;color:var(--t2)">'+es(e.region)+'：'+es(e.error)+'</div>'});
+        errHtml+='</div>';
+      }
+      errHtml+='</div>';
       $("errSummary").innerHTML=errHtml;
     }
   }catch(e){
     $("qLoading").style.display="none";
     $("qEmp").style.display="flex";
-    $("qEmp").textContent="查询失败";
     sR("queryMsg","错误："+e.message,"er");
     $("totalInfo").textContent="暂无数据";
   }finally{
-    btn.disabled=false;
+    btn.disabled=false; btnR.disabled=false;
     btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 查询配额';
+    btnR.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> 刷新配额代码';
   }
 }
 
@@ -392,59 +447,107 @@ function fmtNum(v){
     :n.toLocaleString();
 }
 
-function renderGroups(rows, useGlobal){
+function renderGroups(rows, useGlobal, regions){
   var grp=$("qGroups");
   grp.innerHTML="";
   if(!rows.length){$("qEmp").style.display="flex";$("qEmp").textContent="未查到相关配额";return}
   $("qEmp").style.display="none";
 
-  var region=rows[0]?rows[0].region:"";
-  var div=document.createElement("div");
-  div.style.cssText="border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden";
   var modeTag=useGlobal
     ?'<span style="margin-left:6px;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:600;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe">global</span>'
     :'<span style="margin-left:6px;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:600;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1">cross-region</span>';
-  div.innerHTML=
-    '<div style="padding:8px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:12px;font-weight:600;display:flex;align-items:center">'
-    +'配额汇总 <span style="font-family:\'SF Mono\',Consolas,monospace;font-size:11px;font-weight:500;color:var(--t2);margin-left:4px">('+es(region)+')</span>'
-    +modeTag
-    +'</div>';
 
-  var tbl=document.createElement("table");
-  tbl.style.cssText="width:100%;border-collapse:collapse;font-size:12px";
-  tbl.innerHTML=
-    '<thead><tr style="background:var(--surface2)">'
-    +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border)">模型</th>'
-    +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border);width:100px">指标</th>'
-    +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border)">当前配额</th>'
-    +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border)">默认配额</th>'
-    +'</tr></thead>';
-  // 按模型名排序，同模型内再按指标类型排序
-  var sorted=rows.slice().sort(function(a,b){
-    var pa=parseQuotaName(a.name), pb=parseQuotaName(b.name);
-    var mc=pa.model.localeCompare(pb.model);
-    if(mc!==0)return mc;
-    return pa.type.localeCompare(pb.type);
+  // 按区域分组
+  var byRegion={};
+  rows.forEach(function(q){
+    if(!byRegion[q.region])byRegion[q.region]=[];
+    byRegion[q.region].push(q);
   });
 
-  var tb=document.createElement("tbody");
-  sorted.forEach(function(q,i){
-    var parsed=parseQuotaName(q.name);
-    var tr=document.createElement("tr");
-    tr.style.borderBottom="1px solid var(--border)";
-    if(i%2===1)tr.style.background="var(--surface2)";
-    // 指标列只显示类型名，global 标识已在表头体现
-    var typeCell='<span style="color:var(--pr);font-weight:600">'+es(parsed.type)+'</span>';
-    tr.innerHTML=
-      '<td style="padding:7px 14px">'+es(parsed.model)+'</td>'
-      +'<td style="padding:7px 14px">'+typeCell+'</td>'
-      +'<td style="padding:7px 14px;font-family:\'SF Mono\',Consolas,monospace">'+fmtNum(q.value)+'</td>'
-      +'<td style="padding:7px 14px;font-family:\'SF Mono\',Consolas,monospace;color:var(--t2)">'+fmtNum(q.default_value)+'</td>';
-    tb.appendChild(tr);
+  // 按传入 regions 顺序展示
+  var orderedRegions=regions||Object.keys(byRegion);
+  orderedRegions.forEach(function(region){
+    var regionRows=byRegion[region];
+    if(!regionRows||!regionRows.length)return;
+
+    var div=document.createElement("div");
+    div.style.cssText="border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden";
+
+    div.innerHTML=
+      '<div style="padding:8px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:12px;font-weight:600;display:flex;align-items:center">'
+      +'<span style="font-family:\'SF Mono\',Consolas,monospace;font-size:12px;font-weight:700;color:var(--text)">'+es(region)+'</span>'
+      +modeTag
+      +'<span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--t2)">'+regionRows.length+' 条</span>'
+      +'</div>';
+
+    var tbl=document.createElement("table");
+    tbl.style.cssText="width:100%;border-collapse:collapse;font-size:12px";
+    tbl.innerHTML=
+      '<thead><tr style="background:var(--surface2)">'
+      +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border)">模型</th>'
+      +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border);width:100px">指标</th>'
+      +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border)">当前配额</th>'
+      +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border)">默认配额</th>'
+      +'</tr></thead>';
+
+    var sorted=regionRows.slice().sort(function(a,b){
+      var pa=parseQuotaName(a.name), pb=parseQuotaName(b.name);
+      var mc=pa.model.localeCompare(pb.model);
+      return mc!==0?mc:pa.type.localeCompare(pb.type);
+    });
+
+    var tb=document.createElement("tbody");
+    sorted.forEach(function(q,i){
+      var parsed=parseQuotaName(q.name);
+      var tr=document.createElement("tr");
+      tr.style.borderBottom="1px solid var(--border)";
+      if(i%2===1)tr.style.background="var(--surface2)";
+      tr.innerHTML=
+        '<td style="padding:7px 14px">'+es(parsed.model)+'</td>'
+        +'<td style="padding:7px 14px"><span style="color:var(--pr);font-weight:600">'+es(parsed.type)+'</span></td>'
+        +'<td style="padding:7px 14px;font-family:\'SF Mono\',Consolas,monospace">'+fmtNum(q.value)+'</td>'
+        +'<td style="padding:7px 14px;font-family:\'SF Mono\',Consolas,monospace;color:var(--t2)">'+fmtNum(q.default_value)+'</td>';
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb);
+    div.appendChild(tbl);
+    grp.appendChild(div);
   });
-  tbl.appendChild(tb);
-  div.appendChild(tbl);
-  grp.appendChild(div);
+}
+
+function exportExcel(){
+  if(!_allRows||!_allRows.length){return}
+  var accountId=$("aid").textContent.trim()||"unknown";
+  var useGlobal=$("cbGlobal").checked;
+  var btn=$("btnExport");
+  btn.disabled=true;btn.textContent="生成中...";
+
+  fetch(B+"/api/export_quotas_excel",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      rows:_allRows,
+      account_id:accountId,
+      use_global:useGlobal
+    })
+  }).then(function(r){
+    if(!r.ok){return r.json().then(function(d){throw new Error(d.error||"导出失败")})}
+    return r.blob();
+  }).then(function(blob){
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    var ts=new Date().toISOString().slice(0,10).replace(/-/g,"");
+    a.href=url;
+    a.download="bedrock-quotas-"+accountId+"-"+ts+".xlsx";
+    document.body.appendChild(a);a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }).catch(function(e){
+    alert("导出失败："+e.message);
+  }).finally(function(){
+    btn.disabled=false;
+    btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:11px;height:11px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下载 Excel';
+  });
 }
 
 

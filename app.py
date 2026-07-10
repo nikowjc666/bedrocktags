@@ -1466,6 +1466,156 @@ def quotas_page():
     return render_template("quotas.html")
 
 
+@app.route("/api/export_quotas_excel", methods=["POST"])
+def export_quotas_excel():
+    """将配额查询结果导出为格式化 Excel"""
+    data       = request.get_json(force=True) or {}
+    rows       = data.get("rows") or []
+    account_id = (data.get("account_id") or "").strip()
+    use_global = bool(data.get("use_global", False))
+
+    if not rows:
+        return jsonify({"ok": False, "error": "无数据"}), 400
+
+    # ── 解析并聚合：(region, model) → {tpd, tpm} ──────────────
+    def _parse_name(name):
+        n = name or ""
+        m = re.search(r"\bfor\s+(.+)$", n, re.I)
+        model = m.group(1).strip() if m else n
+        model = re.sub(r"(?i)^anthropic\s+", "", model).strip()
+        nl = n.lower()
+        if   re.search(r"tokens per day",      nl): qtype = "TPD"
+        elif re.search(r"tokens per minute",   nl): qtype = "TPM"
+        elif re.search(r"requests per minute", nl): qtype = "RPM"
+        else: qtype = "OTHER"
+        return model, qtype
+
+    agg = {}
+    region_order = []
+    for row in rows:
+        region = row.get("region", "")
+        model, qtype = _parse_name(row.get("name", ""))
+        key = (region, model)
+        if key not in agg:
+            agg[key] = {"tpd": None, "tpm": None}
+            if region not in region_order:
+                region_order.append(region)
+        if qtype == "TPD":
+            agg[key]["tpd"] = row.get("value")
+        elif qtype == "TPM":
+            agg[key]["tpm"] = row.get("value")
+
+    sorted_keys = []
+    for region in region_order:
+        region_keys = sorted([k for k in agg if k[0] == region], key=lambda x: x[1])
+        sorted_keys.extend(region_keys)
+
+    # ── 构建 Excel ────────────────────────────────────────────
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "配额汇总"
+
+    from openpyxl.styles import Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    thin   = Side(style="thin", color="000000")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    center = Alignment(horizontal="center", vertical="center")
+    left   = Alignment(horizontal="left",   vertical="center")
+    num_fmt = '#,##0'
+
+    # ── 第1行：列标题 ─────────────────────────────────────────
+    headers = ["AWS ID", "区域", "模型名称", "TPD", "TPM"]
+    for col, h in enumerate(headers, start=1):
+        c = ws.cell(row=1, column=col, value=h)
+        c.font      = Font(bold=True)
+        c.alignment = center
+        c.border    = border
+    ws.row_dimensions[1].height = 18
+
+    # ── 数据行 ────────────────────────────────────────────────
+    for i, key in enumerate(sorted_keys):
+        region, model = key
+        vals = agg[key]
+        r = i + 2  # 数据从第2行开始
+
+        # AWS ID 每行都写值，最后统一合并
+        ws.cell(row=r, column=1, value=account_id).border = border
+        ws.cell(row=r, column=1).alignment = center
+
+        # 区域只在该区域第一条显示
+        region_first = (i == 0 or sorted_keys[i-1][0] != region)
+        ws.cell(row=r, column=2, value=region if region_first else "").border = border
+        ws.cell(row=r, column=2).alignment = left
+
+        ws.cell(row=r, column=3, value=model).border = border
+        ws.cell(row=r, column=3).alignment = left
+
+        for col, val in [(4, vals["tpd"]), (5, vals["tpm"])]:
+            c = ws.cell(row=r, column=col)
+            c.value = val if val is not None else "—"
+            c.alignment = center
+            c.border = border
+            if val is not None:
+                c.number_format = num_fmt
+
+        ws.row_dimensions[r].height = 16
+
+    # ── 合并 AWS ID 列（全部数据行合并为一格）────────────────
+    total_data = len(sorted_keys)
+    if total_data > 1:
+        ws.merge_cells(start_row=2, start_column=1,
+                       end_row=1 + total_data, end_column=1)
+        merged = ws["A2"]
+        merged.alignment = center
+        merged.border    = border
+
+    # ── 合并区域列（相同区域的行合并）───────────────────────
+    if sorted_keys:
+        merge_start = 2
+        cur_region  = sorted_keys[0][0]
+        for i in range(1, len(sorted_keys)):
+            if sorted_keys[i][0] != cur_region:
+                end_row = i + 1        # excel row = i(0-based)+2-1 = i+1
+                if end_row >= merge_start:
+                    ws.merge_cells(start_row=merge_start, start_column=2,
+                                   end_row=end_row,        end_column=2)
+                    c = ws.cell(row=merge_start, column=2)
+                    c.alignment = left
+                    c.border    = border
+                merge_start = i + 2
+                cur_region  = sorted_keys[i][0]
+        # 最后一组
+        last_row = len(sorted_keys) + 1
+        if last_row >= merge_start:
+            ws.merge_cells(start_row=merge_start, start_column=2,
+                           end_row=last_row,      end_column=2)
+            c = ws.cell(row=merge_start, column=2)
+            c.alignment = left
+            c.border    = border
+
+    # ── 列宽 ─────────────────────────────────────────────────
+    for i, w in enumerate([16, 16, 38, 16, 16], start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    ws.freeze_panes = "A2"
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    from datetime import datetime as _dt
+    ts = _dt.now().strftime("%Y%m%d")
+    fname = f"bedrock-quotas-{account_id}-{ts}.xlsx"
+
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=fname,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 # ── 持久化 code_map（写到 outputs/quota_codes.json，跨重启复用）────
 import json as _json
 import os as _os
@@ -1514,111 +1664,188 @@ def _build_code_map(ak, sk):
         _quota_code_map = new_map
         _save_code_map_to_disk()
 
+
+def _refresh_code_map(ak, sk):
+    """强制重新从 AWS 拉取最新配额代码（忽略缓存）"""
+    global _quota_code_map, _quota_code_loaded
+    _quota_code_loaded = False
+    _quota_code_map = {}
+    _build_code_map(ak, sk)
+
 # 应用启动时从磁盘加载
 _load_code_map_from_disk()
 
 
 @app.route("/api/query_quotas", methods=["POST"])
 def query_quotas():
-    """查询单区域 Bedrock Claude 配额 — 用已知 QuotaCode 精准查，极快"""
+    """查询 Bedrock Claude 配额 — 支持多区域并发"""
+    import concurrent.futures as _cf2
     data        = request.get_json(force=True) or {}
     ak, sk, _   = _creds(data)
-    region      = (data.get("region") or "").strip()
+    regions_raw = data.get("regions") or ([data.get("region")] if data.get("region") else [])
+    regions     = [r.strip() for r in regions_raw if r and r.strip()]
     quota_types = data.get("quota_types") or []
     sel_models  = data.get("models") or []
     use_global  = bool(data.get("use_global", False))
+    force_refresh = bool(data.get("force_refresh", False))
+
     if not ak or not sk:
         return jsonify({"ok": False, "error": "请提供 access_key 和 secret_key"})
-    if not region:
+    if not regions:
         return jsonify({"ok": False, "error": "请选择区域"})
 
-    # 配额类型关键词（只保留图片里的三种）
-    # 你创建的是 Cross-Region Inference Profile，所以只看 cross-region 配额
     TYPE_KEYWORDS = {
         "tpm": "tokens per minute",
         "tpd": "tokens per day",
         "rpm": "requests per minute",
     }
     type_filters = [TYPE_KEYWORDS[t.lower()] for t in quota_types if t.lower() in TYPE_KEYWORDS]
+    EXCLUDE_KEYWORDS = ["on-demand", "doubled for cross-region", "[bedrock-mantle endpoint]",
+                        "latency-optimized", "provisioned", "batch inference", "customization",
+                        "minimum number", "records per", "sum of in-progress"]
 
-    # 始终只看 cross-region（Application Inference Profile 走的是这个配额）
-    # 过滤掉 on-demand、doubled（TPD 双倍计算项）、bedrock-mantle endpoint（内部端点配额）
-    EXCLUDE_KEYWORDS = ["on-demand", "doubled for cross-region", "[bedrock-mantle endpoint]"]
-
-    # ── 确保 code_map 已加载 ──────────────────────────────────
-    _load_code_map_from_disk()
-    if not _quota_code_map:
-        # 磁盘没有，实时建（只发生一次）
-        _build_code_map(ak, sk)
+    # 强制刷新或按需加载 code_map
+    if force_refresh:
+        _refresh_code_map(ak, sk)
+    else:
+        _load_code_map_from_disk()
         if not _quota_code_map:
-            return jsonify({"ok": False, "error": "无法获取配额代码映射，请稍后重试"})
+            _build_code_map(ak, sk)
+            if not _quota_code_map:
+                return jsonify({"ok": False, "error": "无法获取配额代码映射，请稍后重试"})
 
-    # ── 筛选目标配额代码 ──────────────────────────────────────
-    targets = []   # [(display_name, code), ...]
+    # 把模型 label 转成更宽泛的关键词进行匹配
+    # 例如 "Claude Sonnet 5" → ["sonnet 5"]
+    # 例如 "Claude Sonnet 4.5" → ["sonnet 4.5"]
+    def _model_keywords(label):
+        """从 label 提取 quota name 里会出现的关键词"""
+        s = label.lower().replace("claude ", "").strip()  # "sonnet 5", "haiku 4.5", ...
+        return [s]
+
+    model_kws = []
+    for m in sel_models:
+        model_kws.extend(_model_keywords(m))
+
+    # 筛选目标配额代码
+    targets = []
     for nl, code in _quota_code_map.items():
-        if sel_models and not any(m.lower() in nl for m in sel_models):
-            continue
-        if type_filters and not any(kw in nl for kw in type_filters):
-            continue
-        # 过滤掉 on-demand 和 doubled（cross-region 翻倍计算项）
+        # 基础过滤：排除不需要的配额类型
         if any(ex in nl for ex in EXCLUDE_KEYWORDS):
             continue
-        # 去重：TPM/RPM 同时存在 global 和非 global 版本时，根据 use_global 只保留一个
-        # TPD 只有 global 版本，两种情况都保留
+        # 模型过滤：任一关键词匹配即可
+        if model_kws and not any(kw in nl for kw in model_kws):
+            continue
+        # 配额类型过滤
+        if type_filters and not any(kw in nl for kw in type_filters):
+            continue
+        # global/cross-region 去重
         if use_global:
-            # 保留 global，跳过对应的非 global 版本
             if nl.startswith("cross-region "):
-                global_ver = "global " + nl
-                if global_ver in _quota_code_map:
+                if ("global " + nl) in _quota_code_map:
                     continue
         else:
-            # 保留非 global，跳过 global 版本（但 TPD 的 global 没有非 global 对应项，不跳过）
             if nl.startswith("global cross-region "):
-                non_global = nl[len("global "):]
-                if non_global in _quota_code_map:
+                if nl[len("global "):] in _quota_code_map:
                     continue
         targets.append((nl, code))
 
     if not targets:
-        return jsonify({"ok": True, "quotas": [], "errors": [], "total": 0, "use_global": use_global})
+        # 返回当前 code_map 里所有 claude 相关的配额名，方便调试
+        sample = [k for k in list(_quota_code_map.keys())[:10]]
+        return jsonify({
+            "ok": True, "quotas": [], "errors": [],
+            "total": 0, "use_global": use_global,
+            "debug_model_kws": model_kws,
+            "debug_map_sample": sample,
+            "debug_map_size": len(_quota_code_map),
+        })
 
-    # ── 精准查：每个 code 两次 API 调用（applied + default）────
-    # applied 不存在时只用 default
-    sc     = "bedrock"
-    client = _get_client("service-quotas", ak, sk, region)
+    sc = "bedrock"
+    all_results = []
+    all_errors  = []
 
-    def _fetch_one(nl_code):
-        nl, code = nl_code
-        aq, dq = {}, {}
-        try:
-            aq = client.get_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})
-        except Exception:
-            pass
-        try:
-            dq = client.get_aws_default_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})
-        except Exception:
-            pass
-        if not aq and not dq:
-            return None
-        return {
-            "region":        region,
-            "name":          (aq or dq).get("QuotaName", ""),
-            "value":         aq.get("Value"),
-            "default_value": dq.get("Value"),
-            "quota_code":    code,
-        }
+    def _query_region(region):
+        client = _get_client("service-quotas", ak, sk, region)
+        region_results = []
 
-    results = []
-    max_w   = min(30, len(targets))
-    with _cf.ThreadPoolExecutor(max_workers=max_w) as pool:
-        for item in pool.map(_fetch_one, targets):
-            if item:
-                results.append(item)
+        # 先用第一个 code 试探权限
+        if targets:
+            test_nl, test_code = targets[0]
+            try:
+                client.get_aws_default_service_quota(ServiceCode=sc, QuotaCode=test_code)
+            except botocore.exceptions.ClientError as e:
+                code = e.response.get("Error", {}).get("Code", "")
+                if code in ("AccessDeniedException", "AccessDenied", "AuthorizationError"):
+                    raise PermissionError(f"账号无权限查询 Service Quotas（{region}），请确认 IAM 权限包含 servicequotas:GetServiceQuota")
+            except Exception:
+                pass  # 其他错误继续尝试
 
-    results.sort(key=lambda x: x["name"])
-    return jsonify({"ok": True, "quotas": results, "errors": [], "total": len(results), "use_global": use_global})
+        def _fetch_one(nl_code):
+            nl, code = nl_code
+            aq, dq = {}, {}
+            try:
+                aq = client.get_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})
+            except botocore.exceptions.ClientError as e:
+                err_code = e.response.get("Error", {}).get("Code", "")
+                if err_code in ("AccessDeniedException", "AccessDenied", "AuthorizationError"):
+                    raise PermissionError(f"无权限: {e.response['Error']['Message']}")
+            except Exception:
+                pass
+            try:
+                dq = client.get_aws_default_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})
+            except Exception:
+                pass
+            if not aq and not dq:
+                return None
+            return {
+                "region":        region,
+                "name":          (aq or dq).get("QuotaName", ""),
+                "value":         aq.get("Value"),
+                "default_value": dq.get("Value"),
+                "quota_code":    code,
+            }
 
-query_quotas._cache = {}
+        max_w = min(30, len(targets))
+        with _cf.ThreadPoolExecutor(max_workers=max_w) as pool:
+            futures = {pool.submit(_fetch_one, t): t for t in targets}
+            for future in _cf.as_completed(futures):
+                try:
+                    item = future.result()
+                    if item:
+                        region_results.append(item)
+                except PermissionError:
+                    raise   # 权限错误向上传递
+                except Exception:
+                    pass
+        region_results.sort(key=lambda x: x["name"])
+        return region_results
+
+    max_region_workers = min(10, len(regions))
+    with _cf.ThreadPoolExecutor(max_workers=max_region_workers) as pool:
+        future_map = {pool.submit(_query_region, r): r for r in regions}
+        for future in _cf.as_completed(future_map):
+            region = future_map[future]
+            try:
+                rows = future.result()
+                all_results.extend(rows)
+            except PermissionError as e:
+                all_errors.append({
+                    "region": region,
+                    "error": str(e),
+                    "type": "permission"   # 前端用于区分展示
+                })
+            except Exception as e:
+                all_errors.append({"region": region, "error": str(e), "type": "error"})
+
+    all_results.sort(key=lambda x: (x["region"], x["name"]))
+    return jsonify({
+        "ok":         True,
+        "quotas":     all_results,
+        "errors":     all_errors,
+        "total":      len(all_results),
+        "use_global": use_global,
+        "regions":    regions,
+    })
 
 
 @app.route("/")
