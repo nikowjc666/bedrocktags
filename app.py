@@ -230,17 +230,30 @@ def _build_model_source_index(br, region):
 
 
 def _get_source_type(source_id):
-    """根据源 ID 判断是否为 global 类型"""
+    """根据源 ID 或 ARN 判断来源类型"""
     if not source_id:
         return "unknown"
-    if source_id.startswith("global."):
-        return "global"
-    elif source_id.startswith("us."):
-        return "us"
-    elif source_id.startswith("eu."):
-        return "eu"
-    else:
+    # 如果是完整 ARN，提取最后的 ID 部分
+    # arn:aws:bedrock:us-east-1::inference-profile/global.anthropic.claude-fable-5
+    # arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-fable-5
+    sid = source_id
+    if "/foundation-model/" in sid:
         return "foundation"
+    if "/inference-profile/" in sid:
+        sid = sid.split("/inference-profile/", 1)[1]
+    # 现在 sid 是短 ID，如 global.anthropic.xxx 或 us.anthropic.xxx
+    if sid.startswith("global."):
+        return "global"
+    elif sid.startswith("us."):
+        return "us"
+    elif sid.startswith("eu."):
+        return "eu"
+    elif sid.startswith("ap."):
+        return "ap"
+    elif "foundation-model" in sid:
+        return "foundation"
+    else:
+        return "unknown"
 
 
 def _resolve_copy_from(br, region, ver, index=None):
@@ -1169,25 +1182,15 @@ def test_profile():
                 models = p.get("models", [])
                 source_info = None
                 if models:
-                    # 从 models 中获取 copyFrom 信息
                     first_model = models[0]
                     copy_from = first_model.get("modelArn", "")
-                    if "inference-profile" in copy_from:
-                        # 提取源 inference profile ID
-                        source_id = copy_from.split("/")[-1] if "/" in copy_from else copy_from
-                        source_type = _get_source_type(source_id)
-                        source_info = {
-                            "copyFrom": source_id,
-                            "sourceType": source_type,
-                            "isGlobal": source_type == "global"
-                        }
-                    else:
-                        # Foundation model
-                        source_info = {
-                            "copyFrom": copy_from,
-                            "sourceType": "foundation", 
-                            "isGlobal": False
-                        }
+                    # 直接把完整 ARN 传给 _get_source_type，它内部会处理
+                    source_type = _get_source_type(copy_from)
+                    source_info = {
+                        "copyFrom": copy_from,
+                        "sourceType": source_type,
+                        "isGlobal": source_type == "global"
+                    }
                 
                 if source_info:
                     result.update(source_info)
@@ -1497,18 +1500,23 @@ def export_quotas_excel():
         model, qtype = _parse_name(row.get("name", ""))
         key = (region, model)
         if key not in agg:
-            agg[key] = {"tpd": None, "tpm": None}
+            agg[key] = {"tpd": None, "tpm": None, "rpm": None}
             if region not in region_order:
                 region_order.append(region)
         if qtype == "TPD":
             agg[key]["tpd"] = row.get("value")
         elif qtype == "TPM":
             agg[key]["tpm"] = row.get("value")
+        elif qtype == "RPM":
+            agg[key]["rpm"] = row.get("value")
 
     sorted_keys = []
     for region in region_order:
         region_keys = sorted([k for k in agg if k[0] == region], key=lambda x: x[1])
         sorted_keys.extend(region_keys)
+
+    # 判断是否有任何 RPM 数据
+    has_rpm = any(v["rpm"] is not None for v in agg.values())
 
     # ── 构建 Excel ────────────────────────────────────────────
     wb = Workbook()
@@ -1526,6 +1534,8 @@ def export_quotas_excel():
 
     # ── 第1行：列标题 ─────────────────────────────────────────
     headers = ["AWS ID", "区域", "模型名称", "TPD", "TPM"]
+    if has_rpm:
+        headers.append("RPM")
     for col, h in enumerate(headers, start=1):
         c = ws.cell(row=1, column=col, value=h)
         c.font      = Font(bold=True)
@@ -1539,11 +1549,9 @@ def export_quotas_excel():
         vals = agg[key]
         r = i + 2  # 数据从第2行开始
 
-        # AWS ID 每行都写值，最后统一合并
         ws.cell(row=r, column=1, value=account_id).border = border
         ws.cell(row=r, column=1).alignment = center
 
-        # 区域只在该区域第一条显示
         region_first = (i == 0 or sorted_keys[i-1][0] != region)
         ws.cell(row=r, column=2, value=region if region_first else "").border = border
         ws.cell(row=r, column=2).alignment = left
@@ -1551,7 +1559,10 @@ def export_quotas_excel():
         ws.cell(row=r, column=3, value=model).border = border
         ws.cell(row=r, column=3).alignment = left
 
-        for col, val in [(4, vals["tpd"]), (5, vals["tpm"])]:
+        num_cols = [(4, vals["tpd"]), (5, vals["tpm"])]
+        if has_rpm:
+            num_cols.append((6, vals["rpm"]))
+        for col, val in num_cols:
             c = ws.cell(row=r, column=col)
             c.value = val if val is not None else "—"
             c.alignment = center
@@ -1595,7 +1606,10 @@ def export_quotas_excel():
             c.border    = border
 
     # ── 列宽 ─────────────────────────────────────────────────
-    for i, w in enumerate([16, 16, 38, 16, 16], start=1):
+    col_widths = [16, 16, 38, 16, 16]
+    if has_rpm:
+        col_widths.append(16)
+    for i, w in enumerate(col_widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
     ws.freeze_panes = "A2"
@@ -1935,7 +1949,7 @@ def set_data_retention():
     if not all([ak, sk, region, mode]):
         return jsonify({"ok": False, "error": "请填写必要参数"}), 400
         
-    if mode not in ["provider_data_share", "no_data_share"]:
+    if mode not in ["provider_data_share", "none", "default", "inherit"]:
         return jsonify({"ok": False, "error": "无效的数据驻留模式"}), 400
         
     try:

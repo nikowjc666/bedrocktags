@@ -173,16 +173,26 @@ input,textarea,select{font-family:inherit;text-transform:none}
     <label style="font-size:11px;color:var(--t2);font-weight:500;display:block;margin-bottom:5px">选择区域</label>
     <div id="setGrid" class="region-grid"></div>
     <div class="shortcuts" id="setShortcuts"></div>
-    <div class="mode-grid">
+    <div class="mode-grid" style="grid-template-columns:1fr 1fr 1fr 1fr">
       <div class="mode-option" onclick="selMode('provider_data_share')">
         <input type="radio" name="mode" value="provider_data_share">
-        <div class="mode-title">Provider Data Share</div>
+        <div class="mode-title">provider_data_share</div>
         <div class="mode-desc">允许与模型提供商共享数据以改进服务质量</div>
       </div>
-      <div class="mode-option" onclick="selMode('no_data_share')">
-        <input type="radio" name="mode" value="no_data_share">
-        <div class="mode-title">No Data Share</div>
-        <div class="mode-desc">不与模型提供商共享任何数据</div>
+      <div class="mode-option" onclick="selMode('none')">
+        <input type="radio" name="mode" value="none">
+        <div class="mode-title">none（不共享）</div>
+        <div class="mode-desc">不与任何方共享数据，最严格的隐私保护</div>
+      </div>
+      <div class="mode-option" onclick="selMode('default')">
+        <input type="radio" name="mode" value="default">
+        <div class="mode-title">default</div>
+        <div class="mode-desc">使用 AWS 账号的默认数据驻留策略</div>
+      </div>
+      <div class="mode-option" onclick="selMode('inherit')">
+        <input type="radio" name="mode" value="inherit">
+        <div class="mode-title">inherit</div>
+        <div class="mode-desc">继承父级账号或组织的数据驻留策略</div>
       </div>
     </div>
     <div class="fr mt8">

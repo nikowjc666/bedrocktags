@@ -656,7 +656,7 @@ var realIdx=ap.indexOf(p);var tr=document.createElement("tr");var tgs=p.tags||[]
 function filterProfiles(){var nameF=$("fName").value||"";var regF=$("fRegion").value||"";var tagF=$("fTag").value||"";var arnF=$("fArn").value||"";var filtered=ap.filter(function(p){var nameOk=!nameF||(p.name||"").indexOf(nameF)!==-1;var regOk=!regF||(p.region||"").indexOf(regF)!==-1;var arnOk=!arnF||(p.arn||"").indexOf(arnF)!==-1;var tagOk=!tagF;if(!tagOk){var tgs=p.tags||[];tagOk=tgs.some(function(t){return(t.key+"="+t.value).indexOf(tagF)!==-1})}return nameOk&&regOk&&arnOk&&tagOk});renderFilteredProfiles(filtered)}
 
 function clearFilter(){$("fName").value="";$("fRegion").value="";$("fTag").value="";$("fArn").value="";renderFilteredProfiles(ap)}
-function ta(){var c=$("sa").checked;document.querySelectorAll("#pt input[type=checkbox]").forEach(function(cb){cb.checked=c;var p=ap[parseInt(cb.dataset.i)];if(p){if(c&&!sp.some(function(s){return s.arn===p.arn}))sp.push({arn:p.arn,region:p.region});else if(!c)sp=sp.filter(function(s){return s.arn!==p.arn})}});$("sc").textContent=allSelArns().length;if(allSelArns().length){loadSelectedTags()}else{_tagMap=null;$("existingTagsList").innerHTML='<div class="emp">请先选择配置</div>'}updateTagBtnText()}
+function ta(){var c=$("sa").checked;var visibleArns=new Set();document.querySelectorAll("#pt input[type=checkbox]").forEach(function(cb){var p=ap[parseInt(cb.dataset.i)];if(p)visibleArns.add(p.arn)});sp=sp.filter(function(s){return!visibleArns.has(s.arn)});document.querySelectorAll("#pt input[type=checkbox]").forEach(function(cb){cb.checked=c;var p=ap[parseInt(cb.dataset.i)];if(p&&c)sp.push({arn:p.arn,region:p.region})});$("sc").textContent=allSelArns().length;if(allSelArns().length){loadSelectedTags()}else{_tagMap=null;$("existingTagsList").innerHTML='<div class="emp">请先选择配置</div>'}updateTagBtnText()}
 function us(){sp=[];document.querySelectorAll("#pt input[type=checkbox]:checked").forEach(function(cb){var p=ap[parseInt(cb.dataset.i)];if(p)sp.push({arn:p.arn,region:p.region})});$("sc").textContent=allSelArns().length;if(allSelArns().length){loadSelectedTags()}else{_tagMap=null;$("existingTagsList").innerHTML='<div class="emp">请先选择配置</div>'}updateTagBtnText()}
 function updateTagBtnText(){var btn=$("btntg");if(_tagMode==="remove"&&$("existingTagsList").querySelectorAll("input[type=checkbox]:checked").length>0){btn.textContent="删除（"+$("existingTagsList").querySelectorAll("input[type=checkbox]:checked").length+"）"}else if(_tagMode==="add"){var k=document.querySelectorAll("#tgg .tr input.tk");var c=0;for(var i=0;i<k.length;i++){if(k[i].value.trim())c++}btn.textContent=c>0?"应用（"+c+"）":"应用"}else{btn.textContent="应用"}}
 
@@ -686,18 +686,35 @@ function renderTagView(){
   var total=_profileTagData.length;
 
   if(_tagView==="sum"){
-    // ── 汇总视图：原来的合并展示 ─────────────────────────────
+    // ── 汇总视图：相同 key+value 才合并，key 相同但 value 不同的分开显示 ─
     var tagMap={};
-    _profileTagData.forEach(function(p){(p.tags||[]).forEach(function(t){var key=t.key||"";if(key){if(!tagMap[key])tagMap[key]={count:0,label:key+"="+(t.value||"")};tagMap[key].count++}})});
-    var keys=Object.keys(tagMap);
-    if(!keys.length){list.innerHTML='<div class="tgi"><span class="tc2">所选配置暂无标签</span></div>';updateTagBtnText();return}
+    _profileTagData.forEach(function(p){(p.tags||[]).forEach(function(t){
+      var key=t.key||"";var val=t.value||"";
+      if(key){
+        var kv=key+"="+val;   // 用 key=value 作为唯一索引
+        if(!tagMap[kv])tagMap[kv]={count:0,label:kv,key:key,value:val};
+        tagMap[kv].count++;
+      }
+    })});
+    var kvs=Object.keys(tagMap);
+    var loadedWithTags=_profileTagData.filter(function(p){return p.tags&&p.tags.length>0}).length;
+    if(!kvs.length){
+      list.innerHTML='<div class="tgi"><span class="tc2">所选配置暂无标签'+(loadedWithTags>0?"":""+'（'+_profileTagData.length+' 个配置标签均为空）')+'</span></div>';
+      updateTagBtnText();return;
+    }
+    // 按 key 字母序排，key 相同再按 value 排
+    kvs.sort(function(a,b){var ta=tagMap[a],tb=tagMap[b];return ta.key!==tb.key?ta.key.localeCompare(tb.key):ta.value.localeCompare(tb.value)});
     if(_tagMode==="add"){
       var h='<div class="tgb" style="max-width:none;padding:2px 4px">';
-      keys.sort().forEach(function(key){var tm=tagMap[key],suffix=tm.count<total?" ("+tm.count+"/"+total+")":"";h+='<span data-label="'+es(tm.label+suffix)+'" title="'+es(tm.label+(suffix?" — 仅部分配置有此标签":""))+'"></span>'});
+      kvs.forEach(function(kv){
+        var tm=tagMap[kv];
+        var suffix=tm.count<total?" ("+tm.count+"/"+total+")":"";
+        h+='<span data-label="'+es(tm.label+suffix)+'" title="'+es(tm.label+(suffix?" — 仅部分配置有此标签":""))+'"></span>';
+      });
       h+="</div>";list.innerHTML=h;
     } else {
       var h2="";
-      keys.sort().forEach(function(key){var tm=tagMap[key],suffix=tm.count<total?" ("+tm.count+"/"+total+")":"";h2+='<div class="tgi"><input type="checkbox" value="'+es(tm.key||key)+'" data-kv="'+es(key)+'" onchange="updateTagBtnText()"><span class="tkv">'+es(tm.label+suffix)+'</span></div>'});
+      kvs.forEach(function(kv){var tm=tagMap[kv],suffix=tm.count<total?" ("+tm.count+"/"+total+")":"";h2+='<div class="tgi"><input type="checkbox" value="'+es(tm.key)+'" data-kv="'+es(kv)+'" onchange="updateTagBtnText()"><span class="tkv">'+es(tm.label+suffix)+'</span></div>'});
       list.innerHTML=h2;
     }
 
