@@ -644,8 +644,35 @@ async function lR(){try{var r=await fetch(B+"/api/regions"),d=await r.json();if(
 
 async function vrf(){var ak=$("ak").value.trim(),sk=$("sk").value.trim();if(!ak||!sk){sR("tgr","请填写 AK/SK","wa");return}var btn=$("btnv");btn.disabled=true;btn.textContent="验证中...";try{var r=await fetch(B+"/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk})}),d=await r.json();if(d.ok){$("aid").textContent=d.account_id;$("ar").style.display="flex";BedrockPersist.onVerified(d.account_id);sR("tgr","已验证，账号 ID："+d.account_id,"ok")}else sR("tgr",d.error,"er")}finally{btn.disabled=false;btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> 验证'}}
 
-async function loadP(){var ak=$("ak").value.trim(),sk=$("sk").value.trim(),regions=getSelRegions();if(!ak||!sk){sR("tgr","请先填写凭证","wa");return}if(!regions.length){sR("tgr","请至少选择一个区域","wa");return}$("pw").style.display="none";$("pe").style.display="none";$("pl").style.display="flex";$("pl").innerHTML='<span class="sp"></span> 加载中 (0/'+regions.length+')...';$("btnld").disabled=true;var allProfiles=[],errors=[],done=0;try{// 并发加载所有区域
-var CONCURRENCY=8,idx=0;async function worker(){while(idx<regions.length){var i=idx++;var region=regions[i];try{var r=await fetch(B+"/api/list_profiles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk,region:region})});var d=await r.json();if(d.ok){(d.profiles||[]).forEach(function(p){p.region=region;allProfiles.push(p)})}else errors.push(region+": "+d.error)}catch(e){errors.push(region+": "+e.message)}done++;$("pl").innerHTML='<span class="sp"></span> 加载中 ('+done+'/'+regions.length+')...'}}var workers=[];for(var w=0;w<Math.min(CONCURRENCY,regions.length);w++)workers.push(worker());await Promise.all(workers);$("pl").style.display="none";ap=allProfiles;if(allProfiles.length){rP(allProfiles);if(errors.length)sR("tgr","已加载 "+allProfiles.length+" 个配置，部分区域失败："+errors.join("; "),"wa")}else{$("pe").style.display="flex";$("pe").textContent=errors.length?errors.join("; "):"未找到配置";if(errors.length)sR("tgr",errors.join("; "),"er")}}catch(e){$("pl").style.display="none";$("pe").style.display="flex";$("pe").textContent="加载失败";sR("tgr","错误："+e.message,"er")}finally{$("btnld").disabled=false}}
+async function loadP(){var ak=$("ak").value.trim(),sk=$("sk").value.trim(),regions=getSelRegions();if(!ak||!sk){sR("tgr","请先填写凭证","wa");return}if(!regions.length){sR("tgr","请至少选择一个区域","wa");return}$("pw").style.display="none";$("pe").style.display="none";$("pl").style.display="flex";$("pl").innerHTML='<span class="sp"></span> 加载中 (0/'+regions.length+')...';$("btnld").disabled=true;var allProfiles=[],errors=[],done=0;try{var CONCURRENCY=8,idx=0;async function worker(){while(idx<regions.length){var i=idx++;var region=regions[i];try{var r=await fetch(B+"/api/list_profiles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:ak,secret_key:sk,region:region})});var d=await r.json();if(d.ok){(d.profiles||[]).forEach(function(p){p.region=region;p.tags=p.tags||[];allProfiles.push(p)})}else errors.push(region+": "+d.error)}catch(e){errors.push(region+": "+e.message)}done++;$("pl").innerHTML='<span class="sp"></span> 加载中 ('+done+'/'+regions.length+')...'}}var workers=[];for(var w=0;w<Math.min(CONCURRENCY,regions.length);w++)workers.push(worker());await Promise.all(workers);$("pl").style.display="none";ap=allProfiles;if(allProfiles.length){rP(allProfiles);if(errors.length)sR("tgr","已加载 "+allProfiles.length+" 个配置，部分区域失败："+errors.join("; "),"wa");// 后台静默加载所有配置的 tags（供标签搜索使用）
+_loadTagsForAll(ak,sk,allProfiles);}else{$("pe").style.display="flex";$("pe").textContent=errors.length?errors.join("; "):"未找到配置";if(errors.length)sR("tgr",errors.join("; "),"er")}}catch(e){$("pl").style.display="none";$("pe").style.display="flex";$("pe").textContent="加载失败";sR("tgr","错误："+e.message,"er")}finally{$("btnld").disabled=false}}
+
+// 后台批量拉取所有配置的 tags，填充到 ap，供标签搜索使用
+async function _loadTagsForAll(ak,sk,profiles){
+  var CONC=10,idx=0,loaded=0;
+  async function worker(){
+    while(idx<profiles.length){
+      var i=idx++;var p=profiles[i];
+      var region=p.region||regionFromArn(p.arn)||"us-east-1";
+      try{
+        var r=await fetch(B+"/api/get_profile",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({access_key:ak,secret_key:sk,region:region,inference_profile_arn:p.arn})});
+        var d=await r.json();
+        if(d.ok&&Array.isArray(d.tags)){p.tags=d.tags;}
+      }catch(e){}
+      loaded++;
+      // 每加载完 20 个刷新一次表格，让搜索逐步生效
+      if(loaded%20===0||loaded===profiles.length){
+        var cur=$("fTag").value;
+        if(cur) filterProfiles();  // 如果正在搜索标签，刷新结果
+      }
+    }
+  }
+  var ws=[];for(var w=0;w<Math.min(CONC,profiles.length);w++)ws.push(worker());
+  await Promise.all(ws);
+  // 全部加载完，如果有标签筛选条件则刷新
+  if($("fTag").value) filterProfiles();
+}
 
 function rP(ps){var w=$("pw"),tb=$("pt"),e=$("pe");if(!ps||ps.length===0){w.style.display="none";e.style.display="flex";e.textContent="未找到配置";return}w.style.display="block";e.style.display="none";// 重置筛选框
 $("fName").value="";$("fRegion").value="";$("fTag").value="";$("fArn").value="";renderFilteredProfiles(ps)}
