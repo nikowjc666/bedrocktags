@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 User=ec2-user
-WorkingDirectory=/home/ec2-user/app
+WorkingDirectory=/home/ec2-user/bedrocktags
 ExecStart=/usr/local/bin/gunicorn \
     --workers 2 \
     --bind 127.0.0.1:5001 \

@@ -3,7 +3,7 @@
 set -e
 
 CF_SECRET="${1:-REPLACE_WITH_YOUR_SECRET}"   # 第一个参数传入自定义密钥
-APP_DIR="/home/ec2-user/app"
+APP_DIR="/home/ec2-user/bedrocktags"
 
 echo ""
 echo "========================================="
