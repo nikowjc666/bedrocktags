@@ -3,9 +3,9 @@
 #  使用前修改下面 3 个变量
 # ============================================================
 param(
-    [string]$KeyFile  = "C:\Users\你的用户名\Downloads\your-key.pem",
-    [string]$EC2IP    = "1.2.3.4",
-    [string]$CFSecret = "my-super-secret-2024"   # 自定义，和 CloudFront 里填的一致
+    [string]$KeyFile  = "D:\wjc-bedrock-key.pem",
+    [string]$EC2IP    = "13.50.16.232",
+    [string]$CFSecret = "bedrock20260709"
 )
 
 $EC2User = "ec2-user"
