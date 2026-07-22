@@ -1,19 +1,29 @@
 """AWS Bedrock Inference Profile 管理工具"""
 import re
 import json
+import sqlite3
 import threading
 import requests
 import boto3
 import botocore
-from flask import Flask, render_template, request, jsonify, send_file, Response, stream_with_context
+from flask import Flask, render_template, request, jsonify, send_file, Response, stream_with_context, redirect, url_for, session
 from flask_cors import CORS
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timedelta
+import auth
 
 app = Flask(__name__)
+app.secret_key = auth.get_secret_key()
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
 CORS(app)
+
+# 初始化数据库
+auth.init_db()
+
+# 全局登录拦截
+app.before_request(auth.require_login_for_all)
 
 REGIONS = [
     "us-east-1", "us-east-2", "us-west-2", "us-west-1",
@@ -2034,6 +2044,59 @@ def mfa_totp():
         return jsonify({"ok": True, "code": code, "remain": remain})
     except Exception as e:
         return jsonify({"ok": False, "error": f"密钥格式错误：{e}"})
+
+
+# ── 登录 / 登出 ──────────────────────────────────────────────────────────────
+
+@app.route("/login", methods=["GET"])
+def login_page():
+    if session.get("logged_in"):
+        return redirect(url_for("index"))
+    return render_template("login.html")
+
+@app.route("/login", methods=["POST"])
+def do_login():
+    data = request.get_json() or {}
+    username = (data.get("username") or "").strip()
+    password = (data.get("password") or "").strip()
+    ip = auth._client_ip()
+    if not username or not password:
+        return jsonify({"ok": False, "error": "请填写用户名和密码"}), 400
+    if auth._is_locked(username, ip):
+        return jsonify({"ok": False, "error": "登录失败次数过多，请 15 分钟后再试"}), 429
+    if auth._check_login(username, password):
+        auth._clear_attempts(username, ip)
+        session["logged_in"] = True
+        session["username"] = username
+        return jsonify({"ok": True})
+    auth._record_attempt(username, ip)
+    remaining = auth._remaining_attempts(username, ip)
+    if remaining == 0:
+        return jsonify({"ok": False, "error": "账号已锁定 15 分钟"}), 429
+    return jsonify({"ok": False, "error": f"用户名或密码错误，还可尝试 {remaining} 次"}), 401
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login_page"))
+
+@app.route("/api/admin/change_password", methods=["POST"])
+def change_password():
+    data = request.get_json() or {}
+    old_pw = (data.get("old_password") or "").strip()
+    new_pw = (data.get("new_password") or "").strip()
+    username = session.get("username", "")
+    if not old_pw or not new_pw:
+        return jsonify({"ok": False, "error": "请填写旧密码和新密码"}), 400
+    if not auth._check_login(username, old_pw):
+        return jsonify({"ok": False, "error": "旧密码错误"}), 401
+    conn = sqlite3.connect(auth.DB_PATH)
+    c = conn.cursor()
+    c.execute("UPDATE users SET password_hash=? WHERE username=?",
+              (auth._hash_pw(new_pw), username))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":

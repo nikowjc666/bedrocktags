@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>登录 · AWS Bedrock 管理工具</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef2f7;--bg2:#e4eaf3;--surface:#fff;--border:#e2e8f0;
+  --text:#0f172a;--t2:#64748b;--t3:#94a3b8;
+  --pr:#2563eb;--ph:#1d4ed8;
+  --er:#dc2626;--er-bg:#fef2f2;--er-bd:#fecaca;
+  --aws:#ff9900;--aws-dark:#232f3e;--r:10px;--r-sm:6px;
+  --shadow:0 4px 6px rgba(15,23,42,.04),0 12px 32px rgba(15,23,42,.08);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Inter",-apple-system,BlinkMacSystemFont,sans-serif;
+  background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde6f0 100%);
+  background-attachment:fixed;min-height:100vh;
+  display:flex;align-items:center;justify-content:center;color:var(--text);font-size:13px}
+.wrap{width:100%;max-width:380px;padding:0 16px;animation:fadeUp .4s ease both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.logo-area{display:flex;flex-direction:column;align-items:center;margin-bottom:28px;gap:12px}
+.logo{width:52px;height:52px;border-radius:14px;
+  background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 100%);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 16px rgba(35,47,62,.25)}
+.logo-inner{width:30px;height:30px;border-radius:8px;
+  background:linear-gradient(135deg,var(--aws) 0%,#ffb84d 100%);
+  display:flex;align-items:center;justify-content:center}
+.logo-inner svg{color:#232f3e;width:18px;height:18px}
+.logo-title{font-size:18px;font-weight:700;color:var(--text)}
+.logo-sub{font-size:12px;color:var(--t2)}
+.card{background:#fff;border:1px solid var(--border);border-radius:var(--r);
+  box-shadow:var(--shadow);padding:28px 24px}
+.card-title{font-size:15px;font-weight:600;margin-bottom:20px}
+.fg{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.fg label{font-size:11px;color:var(--t2);font-weight:500}
+.fg input{height:38px;padding:0 12px;border:1px solid var(--border);
+  border-radius:var(--r-sm);font-size:13px;outline:none;font-family:inherit;
+  transition:border-color .15s,box-shadow .15s}
+.fg input:focus{border-color:var(--pr);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.fg input::placeholder{color:var(--t3)}
+.btn-login{width:100%;height:40px;
+  background:linear-gradient(135deg,var(--pr) 0%,#3b82f6 100%);
+  color:#fff;border:none;border-radius:var(--r-sm);
+  font-size:13px;font-weight:600;cursor:pointer;margin-top:6px;
+  box-shadow:0 2px 8px rgba(37,99,235,.3);transition:all .15s;font-family:inherit}
+.btn-login:hover{background:linear-gradient(135deg,var(--ph) 0%,var(--pr) 100%)}
+.btn-login:active{transform:scale(.98)}
+.btn-login:disabled{opacity:.6;cursor:not-allowed;transform:none}
+.err{display:none;align-items:center;gap:6px;padding:8px 10px;
+  background:var(--er-bg);border:1px solid var(--er-bd);
+  border-radius:var(--r-sm);color:var(--er);font-size:12px;margin-top:10px}
+.err.show{display:flex}
+.footer{text-align:center;color:var(--t3);font-size:11px;margin-top:16px}
+.sp{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);
+  border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo-area">
+    <div class="logo">
+      <div class="logo-inner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+          <path d="M7 7h.01"/>
+        </svg>
+      </div>
+    </div>
+    <div>
+      <div class="logo-title">AWS Bedrock 管理工具</div>
+      <div class="logo-sub">Inference Profile Manager</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">登录账号</div>
+    <div class="fg">
+      <label>用户名</label>
+      <input id="username" type="text" placeholder="请输入用户名" autocomplete="username" autofocus>
+    </div>
+    <div class="fg">
+      <label>密码</label>
+      <input id="password" type="password" placeholder="请输入密码" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" id="btnLogin" onclick="doLogin()">登录</button>
+    <div class="err" id="errMsg">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+           style="width:14px;height:14px;flex-shrink:0">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span id="errText"></span>
+    </div>
+  </div>
+  <div class="footer">登录后方可使用全部功能</div>
+</div>
+<script>
+async function doLogin(){
+  var u=document.getElementById("username").value.trim();
+  var p=document.getElementById("password").value.trim();
+  var btn=document.getElementById("btnLogin");
+  document.getElementById("errMsg").classList.remove("show");
+  if(!u||!p){showErr("请填写用户名和密码");return}
+  btn.disabled=true;btn.innerHTML='<span class="sp"></span> 登录中...';
+  try{
+    var r=await fetch("/login",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({username:u,password:p})});
+    var d=await r.json();
+    if(d.ok){window.location.href="/"}
+    else showErr(d.error||"登录失败");
+  }catch(e){showErr("网络错误，请重试")}
+  finally{btn.disabled=false;btn.textContent="登录"}
+}
+function showErr(msg){document.getElementById("errText").textContent=msg;
+  document.getElementById("errMsg").classList.add("show")}
+</script>
+</body>
+</html>
