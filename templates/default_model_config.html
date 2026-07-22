@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>默认模型配置 · aws bedrock</title>
+<!-- v2.0 force refresh -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef2f7;--bg2:#e4eaf3;--surface:#fff;--surface2:#f8fafc;
+  --border:#e2e8f0;--border2:#cbd5e1;--text:#0f172a;--t2:#64748b;--t3:#94a3b8;
+  --pr:#2563eb;--ph:#1d4ed8;--pl:#eff6ff;
+  --ok:#16a34a;--ok-bg:#f0fdf4;--ok-bd:#bbf7d0;
+  --er:#dc2626;--er-bg:#fef2f2;--er-bd:#fecaca;
+  --wa:#d97706;--wa-bg:#fffbeb;--wa-bd:#fde68a;
+  --aws:#ff9900;--aws-dark:#232f3e;--r:7px;--r-sm:5px;
+  --shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde6f0 100%);
+  background-attachment:fixed;color:var(--text);font-size:12px;line-height:1.45;
+  min-height:100vh;text-transform:lowercase}
+input,textarea,select{font-family:inherit;text-transform:none}
+.h{background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 60%,#1e3a5f 100%);
+  padding:0 16px;display:flex;align-items:center;justify-content:space-between;
+  gap:10px;height:44px;box-shadow:0 1px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
+.h-l{display:flex;align-items:center;gap:10px}
+.nav{display:flex;gap:4px}
+.nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:11px;
+  padding:4px 10px;border-radius:4px;transition:all .15s}
+.nav a:hover,.nav a.act{color:#fff;background:rgba(255,255,255,.12)}
+.h-logo{width:28px;height:28px;border-radius:6px;
+  background:linear-gradient(135deg,var(--aws) 0%,#ffb84d 100%);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  box-shadow:0 1px 6px rgba(255,153,0,.3)}
+.h-logo svg{color:#232f3e;width:16px;height:16px}
+.h-text h1{font-size:14px;font-weight:600;color:#fff;letter-spacing:0}
+.h-text .s{color:rgba(255,255,255,.5);font-size:11px;margin-top:0}
+.b{max-width:900px;margin:14px auto;padding:0 14px 28px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  box-shadow:var(--shadow);overflow:hidden;animation:fadeUp .4s ease both}
+.card:nth-child(1){animation-delay:.05s}.card:nth-child(2){animation-delay:.12s}
+.card:nth-child(3){animation-delay:.19s}.card:nth-child(4){animation-delay:.26s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.sht{display:flex;align-items:center;gap:7px;padding:8px 12px;font-size:12px;font-weight:600;
+  background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text)}
+.sht-step{width:18px;height:18px;border-radius:50%;background:var(--pr);color:#fff;
+  font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sht-sub{font-weight:400;color:var(--t2);font-size:11px;margin-left:auto}
+.sb{padding:12px}
+.fr{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px}
+.fr:last-child{margin-bottom:0}
+.fg{display:flex;flex-direction:column;gap:3px;min-width:140px;flex:1}
+.fg label{font-size:11px;color:var(--t2);font-weight:500;letter-spacing:0}
+.fg input,.fg select{height:30px;padding:0 9px;border:1px solid var(--border);
+  border-radius:var(--r-sm);font-size:12px;outline:none;background:var(--surface);
+  color:var(--text);transition:border-color .15s,box-shadow .15s}
+.fg input::placeholder{color:var(--t3)}
+.fg input:focus,.fg select:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;
+  height:30px;padding:0 11px;border:1px solid var(--border);border-radius:var(--r-sm);
+  font-size:12px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);
+  white-space:nowrap;transition:all .15s ease}
+.btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.bp{background:linear-gradient(135deg,var(--pr) 0%,#3b82f6 100%);color:#fff;
+  border-color:transparent;box-shadow:0 2px 8px rgba(37,99,235,.3)}
+.bp:hover{background:linear-gradient(135deg,var(--ph) 0%,var(--pr) 100%);
+  color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(37,99,235,.4)}
+.bs{background:linear-gradient(135deg,var(--ok) 0%,#22c55e 100%);color:#fff;
+  border-color:transparent;box-shadow:0 2px 8px rgba(22,163,74,.3)}
+.bs:hover{background:linear-gradient(135deg,#15803d 0%,var(--ok) 100%);
+  color:#fff;border-color:transparent}
+.bsm{height:26px;padding:0 9px;font-size:11px}
+.btn svg{width:12px;height:12px}
+.bdge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;
+  border-radius:12px;font-size:10px;font-weight:500;letter-spacing:0}
+.bg-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+.bg-wa{background:var(--wa-bg);color:var(--wa);border:1px solid var(--wa-bd)}
+.bg-er{background:var(--er-bg);color:var(--er);border:1px solid var(--er-bd)}
+.bg-info{background:var(--pl);color:var(--pr);border:1px solid #bfdbfe}
+#ar{margin-top:2px;padding:8px 10px;background:var(--ok-bg);
+  border:1px solid var(--ok-bd);border-radius:var(--r-sm)}
+#aid{font-weight:600;font-size:12px;color:var(--text);font-family:"SF Mono",Consolas,monospace}
+.mgl{display:flex;flex-wrap:wrap;gap:4px;max-height:180px;overflow-y:auto;
+  padding:6px;border:1px solid var(--border);border-radius:var(--r-sm);
+  background:var(--surface2);scrollbar-width:thin}
+.mgi{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;
+  border-radius:4px;font-size:11px;cursor:pointer;background:var(--surface);
+  border:1px solid var(--border);transition:all .15s;user-select:none}
+.mgi:has(input:checked){background:var(--pl);border-color:#93c5fd;color:var(--pr)}
+.mgi input{accent-color:var(--pr);width:11px;height:11px;cursor:pointer;margin:0}
+.mg-bar{display:flex;align-items:center;justify-content:space-between;margin-top:5px;font-size:11px}
+.mg-bar label{cursor:pointer;display:flex;align-items:center;gap:4px;font-weight:400;color:var(--t2)}
+.tw{max-height:280px;overflow-y:auto;border:1px solid var(--border);
+  border-radius:var(--r-sm);scrollbar-width:thin}
+.tw::-webkit-scrollbar{width:4px}.tw::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+table{width:100%;border-collapse:collapse;font-size:11px}
+table th,table td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--border)}
+table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t2);
+  white-space:nowrap;letter-spacing:0;position:sticky;top:0;z-index:1}
+table tbody tr{transition:background .1s}
+table tbody tr:hover td{background:var(--pl)}
+table tbody tr:last-child td{border-bottom:none}
+.rgl{display:flex;flex-wrap:wrap;gap:4px;max-height:110px;overflow-y:auto;
+  padding:6px;border:1px solid var(--border);border-radius:var(--r-sm);
+  background:var(--surface2);scrollbar-width:thin}
+.rgi{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:4px;
+  font-size:11px;cursor:pointer;background:var(--surface);border:1px solid var(--border);
+  transition:all .15s;user-select:none}
+.rgi:has(input:checked){background:var(--pl);border-color:#93c5fd;color:var(--pr)}
+.rgi input{accent-color:var(--pr);width:11px;height:11px;cursor:pointer;margin:0}
+.rg-bar{display:flex;align-items:center;gap:8px;margin-top:5px;font-size:11px;color:var(--t2)}
+.rg-bar label{cursor:pointer;display:flex;align-items:center;gap:4px;font-weight:400}
+.preview-bar{padding:7px 10px;background:var(--pl);border:1px solid #bfdbfe;
+  border-radius:var(--r-sm);font-size:11px;color:var(--pr);margin-top:8px}
+.preview-bar strong{font-size:13px}
+.emp{padding:18px 14px;text-align:center;color:var(--t2);font-size:11px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px}
+.st{display:flex;align-items:center;gap:6px;padding:7px 10px;border-radius:var(--r-sm);
+  font-size:11px;margin-top:8px;font-weight:500}
+.st.er{background:var(--er-bg);border:1px solid var(--er-bd);color:var(--er)}
+.st.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
+.st.wa{background:var(--wa-bg);border:1px solid var(--wa-bd);color:var(--wa)}
+.st.info{background:var(--pl);border:1px solid #bfdbfe;color:var(--pr)}
+.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border);
+  border-top-color:var(--pr);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fx{display:flex;align-items:center;gap:8px}
+.fb{display:flex;align-items:center;justify-content:space-between}
+.mt8{margin-top:8px}.mb8{margin-bottom:8px}.tc2{color:var(--t2)}
+.hint{font-size:10px;color:var(--t3);margin-top:3px}
+.footer{text-align:center;color:var(--t3);font-size:10px;padding:4px 0 0}
+.id-mono{font-family:"SF Mono","Cascadia Code",Consolas,monospace;font-size:10px;color:var(--t2)}
+.tg{display:flex;flex-direction:column;gap:5px}
+.tr{display:flex;gap:5px;align-items:center}
+.tr input{height:28px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);
+  font-size:12px;outline:none;flex:1;transition:border-color .15s,box-shadow .15s}
+.tr input:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.tk{max-width:160px}.tv{max-width:220px}
+.rm{background:none;border:none;color:var(--er);cursor:pointer;padding:4px;
+  font-size:13px;line-height:1;border-radius:4px;transition:background .15s}
+.rm:hover{background:var(--er-bg)}
+.tgb{display:inline-flex;gap:3px;flex-wrap:wrap;max-width:200px}
+.tgb>span{display:inline-flex;padding:1px 6px;border-radius:10px;font-size:10px;
+  background:var(--pl);color:var(--pr);border:1px solid #bfdbfe;max-width:100px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-transform:none}
+.tgb>span::before{content:attr(data-label)}
+.status-ok{color:var(--ok);font-weight:600}
+.status-er{color:var(--er);font-size:10px;font-style:italic}
+.status-pend{color:var(--t3)}
+.copy-btn{display:inline-flex;align-items:center;gap:2px;padding:1px 5px;height:18px;
+  border:1px solid var(--border);border-radius:3px;font-size:10px;cursor:pointer;
+  background:var(--surface);color:var(--t2);transition:all .15s;white-space:nowrap;
+  vertical-align:middle;margin-left:3px}
+.copy-btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.copy-btn.copied{border-color:var(--ok);color:var(--ok);background:var(--ok-bg)}
+.prog-wrap{margin-top:8px;padding:10px 12px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--r-sm);display:none}
+.prog-wrap.show{display:block}
+.prog-label{font-size:11px;color:var(--t2);margin-bottom:5px;
+  display:flex;justify-content:space-between}
+.prog-bar-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.prog-bar-fill{height:100%;background:linear-gradient(90deg,var(--pr),#3b82f6);
+  border-radius:3px;width:0%;transition:width .3s ease}
+.prog-cur{font-size:10px;color:var(--t3);margin-top:4px}
+</style>
+</head>
+<body>
+<header class="h">
+  <div class="h-l">
+    <div class="h-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+      </svg>
+    </div>
+    <div class="h-text">
+      <h1>默认模型配置</h1>
+      <div class="s">直接使用默认 model id · 无需创建 inference profile · 导出配置 excel</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <a href="/">profile 标签</a>
+    <a href="/model-tags">创建配置</a>
+    <a href="/delete-profiles">删除配置</a>
+    <a href="/test-profile">测试模型</a>
+    <a href="/quotas">模型配额</a>
+    <a href="/data-retention">数据驻留</a>
+    <a href="/default-model-config" class="act">默认模型</a>
+    <a href="/mfa">MFA 验证码</a>
+  </nav>
+</header>
+
+<div class="b">
+  <!-- step 1: 凭证 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">1</span> aws 凭证</div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:2">
+          <label>access key id</label>
+          <input id="ak" type="text" placeholder="akia..." autocomplete="off">
+        </div>
+        <div class="fg" style="flex:2">
+          <label>secret access key</label>
+          <input id="sk" type="password" placeholder="..." autocomplete="off">
+        </div>
+        <div class="fg" style="flex:0 0 auto">
+          <label>&nbsp;</label>
+          <button class="btn bp" id="btnV" onclick="vrf()">验证</button>
+        </div>
+      </div>
+      <div class="fr" id="ar" style="display:none">
+        <div class="fg" style="flex:1">
+          <label>账号 id</label>
+          <div class="fx"><span id="aid"></span><span class="bdge bg-ok">✓ 已验证</span></div>
+        </div>
+      </div>
+      <div id="verifyMsg"></div>
+    </div>
+  </div>
+
+  <!-- step 2: 选模型 & 区域 & 标签 -->
+  <div class="card">
+    <div class="sht">
+      <span class="sht-step">2</span> 选择模型 &amp; 区域 &amp; 标签
+      <span class="sht-sub">区域 × 模型 → 每个组合生成一条配置记录</span>
+    </div>
+    <div class="sb">
+      <div class="fr" style="align-items:flex-start;margin-top:4px">
+        <div class="fg" style="flex:1">
+          <label>模型 <span id="mc" style="color:var(--t3)">（0）</span></label>
+          <div class="mgl" id="mgl"></div>
+          <div class="mg-bar">
+            <label><input type="checkbox" id="saM" onchange="taM()"> 全选</label>
+          </div>
+        </div>
+        <div class="fg" style="flex:1">
+          <label>区域 <span id="rc" style="color:var(--t3)">（0）</span></label>
+          <div class="rgl" id="rgl"></div>
+          <div class="rg-bar">
+            <label><input type="checkbox" id="saR" onchange="taR()"> 全选</label>
+          </div>
+        </div>
+      </div>
+      <!-- 标签 -->
+      <div class="fg" style="margin-top:10px;margin-bottom:5px"><label>配置标签（将写入 excel）</label></div>
+      <div class="tg" id="tgg">
+        <div class="tr">
+          <input class="tk" placeholder="key">
+          <input class="tv" placeholder="value">
+          <button class="btn bsm" onclick="addTg()">+ 添加行</button>
+        </div>
+      </div>
+      <div class="preview-bar" id="preview">将生成 <strong id="previewN">0</strong> 条配置记录</div>
+      <div class="fr mt8">
+        <button class="btn bs" id="btnBuild" onclick="buildConfig()" disabled>生成配置列表并查询配额</button>
+        <button class="btn" onclick="clrForm()">清空</button>
+      </div>
+      <!-- 配额查询进度 -->
+      <div class="prog-wrap" id="quotaProgWrap">
+        <div class="prog-label">
+          <span>查询配额</span><span id="quotaPct">0%</span>
+        </div>
+        <div class="prog-bar-track"><div class="prog-bar-fill" id="quotaFill"></div></div>
+        <div class="prog-cur" id="quotaCur">等待开始...</div>
+      </div>
+      <!-- 测试进度条 -->
+      <div class="prog-wrap" id="testProgWrap">
+        <div class="prog-label">
+          <span>测试模型</span><span id="testPct">0%</span>
+        </div>
+        <div class="prog-bar-track"><div class="prog-bar-fill" id="testFill"></div></div>
+        <div class="prog-cur" id="testCur">等待开始...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- step 3: 配置列表 & 测试 -->
+  <div class="card">
+    <div class="sht">
+      <span class="sht-step">3</span> 配置列表
+      <span class="sht-sub">可逐行测试可用性，测试后导出 excel</span>
+    </div>
+    <div class="sb">
+      <!-- 工具栏 -->
+      <div id="cfgToolbar" style="display:none" class="fb mb8">
+        <span class="tc2" id="cfgCount">0 条记录</span>
+        <div style="display:flex;gap:6px">
+          <button class="btn bsm" id="btnTestAll" onclick="testAll()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:11px;height:11px"><circle cx="12" cy="12" r="10"/><polyline points="10 8 16 12 10 16 10 8"/></svg>
+            全部测试
+          </button>
+          <button class="btn bsm bs" id="btnExport" onclick="exportExcel()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            导出 excel
+          </button>
+        </div>
+      </div>
+      <!-- 表格 -->
+      <div id="cfgTableWrap" style="display:none">
+        <div class="tw">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:110px">区域</th>
+                <th style="width:140px">模型类型</th>
+                <th>默认 model id</th>
+                <th style="width:80px">TPD</th>
+                <th style="width:80px">TPM</th>
+                <th style="width:140px">标签</th>
+                <th style="width:80px">可用性</th>
+              </tr>
+            </thead>
+            <tbody id="cfgTbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="cfgEmpty" class="emp">生成配置后将在此显示</div>
+    </div>
+  </div>
+
+  <!-- step 4: 说明 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">4</span> 使用说明</div>
+    <div class="sb" style="font-size:11px;color:var(--t2);line-height:1.8">
+      <p>默认 model id 可直接用于 bedrock-runtime 的 <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-family:monospace">converse</code> / <code style="background:var(--surface2);padding:1px 5px;border-radius:3px;font-family:monospace">invoke_model</code> API，无需提前创建 inference profile。</p>
+      <br>
+      <p><strong style="color:var(--text)">适用场景：</strong>直接测试模型、低并发调用、不需要跨区域路由。</p>
+      <p><strong style="color:var(--text)">inference profile 优势：</strong>跨区域自动路由、更高配额、支持企业标签管理。</p>
+      <br>
+      <p><strong style="color:var(--text)">excel 列说明：</strong>AWS账户ID · 登录URL · 账号（留空）· 密码（留空）· Access Key · Secret Key · 区域 · 模型类型 · 默认 Model ID · TPD · TPM · 标签</p>
+    </div>
+  </div>
+
+  <div class="footer">默认模型配置 · aws bedrock · 直接调用无需 inference profile</div>
+</div>
+
+<script src="/static/persist.js"></script>
+<script>
+var AID="", AK="", SK="";
+var configEntries=[];   // [{region,model_id,model_label,tpd,tpm,tags}]
+var allModels=[];
+var REGIONS=[
+  "us-east-1","us-east-2","us-west-2","us-west-1",
+  "eu-west-1","eu-west-2","eu-west-3","eu-central-1",
+  "eu-central-2","eu-north-1","eu-south-1","eu-south-2",
+  "ap-east-1","ap-south-1","ap-south-2",
+  "ap-southeast-1","ap-southeast-2","ap-southeast-3","ap-southeast-4",
+  "ap-northeast-1","ap-northeast-2","ap-northeast-3",
+  "sa-east-1","ca-central-1","me-south-1","me-central-1",
+  "af-south-1","il-central-1"
+];
+
+function $(id){return document.getElementById(id)}
+
+function es(s){
+  if(!s)return"";
+  var d=document.createElement("div");d.textContent=s;return d.innerHTML;
+}
+
+function sR(id,msg,type){
+  var el=$(id);
+  if(el)el.innerHTML='<div class="st '+type+'" style="white-space:pre-line">'+es(msg)+'</div>';
+}
+
+// ── 标签管理（与 model_tags.html 一致） ─────────────────────────
+function addTg(){
+  var g=$("tgg");
+  var r=document.createElement("div");
+  r.className="tr";
+  r.innerHTML='<input class="tk" placeholder="key"><input class="tv" placeholder="value"><button class="btn bsm" onclick="addTg()">+</button><button class="rm" onclick="this.parentElement.remove();BedrockPersist.save()">✕</button>';
+  g.appendChild(r);
+  r.querySelectorAll("input").forEach(function(inp){
+    inp.addEventListener("input", function(){BedrockPersist.save()});
+  });
+  BedrockPersist.save();
+}
+
+function collectTags(){
+  var tags={};
+  document.querySelectorAll("#tgg .tr").forEach(function(r){
+    var k=r.querySelector(".tk"), v=r.querySelector(".tv");
+    if(k && k.value.trim()){
+      tags[k.value.trim()]=v?v.value.trim():"";
+    }
+  });
+  return tags;
+}
+
+// ── 初始化：加载模型列表 & 区域 & 恢复状态 ─────────────────────
+async function init(){
+  var saved=BedrockPersist.init();  // 初始化 persist.js 并返回保存的偏好
+  try{
+    var r=await fetch("/api/default_model_list");
+    var j=await r.json();
+    if(j.ok){allModels=j.versions||[];}
+  }catch(e){}
+  renderModels();
+  renderRegions();
+  BedrockPersist.afterListsReady(saved);  // 恢复勾选状态
+  upCount();
+}
+
+function renderModels(){
+  var gl=$("mgl");gl.innerHTML="";
+  allModels.forEach(function(m){
+    var lbl=document.createElement("label");
+    lbl.className="mgi";
+    lbl.title=m.id;
+    lbl.innerHTML='<input type="checkbox" name="mid" value="'+es(m.id)+'" onchange="upCount();BedrockPersist.save()"> '+es(m.label);
+    gl.appendChild(lbl);
+  });
+}
+
+function renderRegions(){
+  var gl=$("rgl");gl.innerHTML="";
+  REGIONS.forEach(function(r){
+    var lbl=document.createElement("label");
+    lbl.className="rgi";
+    lbl.innerHTML='<input type="checkbox" name="rid" value="'+r+'" onchange="upCount();BedrockPersist.save()"><span>'+r+'</span>';
+    gl.appendChild(lbl);
+  });
+}
+
+function selModels(){return Array.from(document.querySelectorAll('input[name="mid"]:checked')).map(function(e){return e.value})}
+function selRegions(){return Array.from(document.querySelectorAll('input[name="rid"]:checked')).map(function(e){return e.value})}
+
+function upCount(){
+  var ms=selModels(),rs=selRegions();
+  $("mc").textContent="（"+ms.length+"）";
+  $("rc").textContent="（"+rs.length+"）";
+  var n=ms.length*rs.length;
+  $("previewN").textContent=n;
+  $("btnBuild").disabled=(n===0||!AID);
+}
+
+function taM(){
+  var chk=$("saM").checked;
+  document.querySelectorAll('input[name="mid"]').forEach(function(e){e.checked=chk});
+  upCount();
+  BedrockPersist.save();
+}
+function taR(){
+  var chk=$("saR").checked;
+  document.querySelectorAll('input[name="rid"]').forEach(function(e){e.checked=chk});
+  upCount();
+  BedrockPersist.save();
+}
+</script>
+<script>
+// ── 验证凭证 ─────────────────────────────────────────────────────
+async function vrf(){
+  var btn=$("btnV");
+  AK=$("ak").value.trim();SK=$("sk").value.trim();
+  if(!AK||!SK){sR("verifyMsg","请填写 AK/SK","er");return}
+  btn.disabled=true;btn.textContent="验证中...";
+  try{
+    var r=await fetch("/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({access_key:AK,secret_key:SK})});
+    var j=await r.json();
+    if(j.ok){
+      AID=j.account_id||"";
+      $("aid").textContent=AID;
+      $("ar").style.display="";
+      BedrockPersist.onVerified(AID);
+      upCount();
+    }else{
+      $("ar").style.display="none";AID="";
+      sR("verifyMsg",j.error||"验证失败","er");
+    }
+  }catch(e){sR("verifyMsg","网络错误: "+e.message,"er")}
+  btn.disabled=false;btn.textContent="验证";
+}
+
+// ── 生成配置列表并查询配额 ────────────────────────────────────────
+async function buildConfig(){
+  var ms=selModels(),rs=selRegions();
+  if(!ms.length||!rs.length)return;
+  var tags=collectTags();
+  configEntries=[];
+  var modelMap={};
+  allModels.forEach(function(m){modelMap[m.id]=m});
+  rs.forEach(function(region){
+    ms.forEach(function(mid){
+      var m=modelMap[mid]||{id:mid,label:mid};
+      configEntries.push({
+        region:region,
+        model_id:mid,
+        model_label:m.label,
+        tpm:"",
+        tpd:"",
+        tags:tags,
+        testStatus:"未测试",
+      });
+    });
+  });
+  configEntries.sort(function(a,b){
+    return a.model_label.localeCompare(b.model_label)||a.region.localeCompare(b.region);
+  });
+  renderTable();
+  await queryQuotas();
+}
+
+// ── 查询配额（并发，带进度） ────────────────────────────────────────
+async function queryQuotas(){
+  var btn=$("btnBuild");btn.disabled=true;btn.textContent="查询配额中...";
+  var pw=$("quotaProgWrap");pw.classList.add("show");
+  var fill=$("quotaFill"),pct=$("quotaPct"),cur=$("quotaCur");
+  fill.style.width="0%";pct.textContent="0%";cur.textContent="正在查询配额...";
+
+  var entries=configEntries.map(function(e){
+    return {region:e.region,model_id:e.model_id};
+  });
+
+  try{
+    var r=await fetch("/api/query_model_quotas",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({access_key:AK,secret_key:SK,entries:entries})});
+    var j=await r.json();
+    if(!j.ok){
+      cur.textContent="查询失败: "+(j.error||"未知错误");
+      setTimeout(function(){pw.classList.remove("show")},3000);
+      btn.disabled=false;btn.textContent="生成配置列表并查询配额";
+      return;
+    }
+
+    var resMap={};
+    j.results.forEach(function(res){
+      var key=res.region+"|"+res.model_id;
+      resMap[key]=res;
+    });
+
+    configEntries.forEach(function(e){
+      var key=e.region+"|"+e.model_id;
+      var res=resMap[key];
+      if(res){
+        e.tpm=res.tpm||"—";
+        e.tpd=res.tpd||"—";
+      }
+    });
+
+    fill.style.width="100%";pct.textContent="100%";
+    cur.textContent="配额查询完成";
+    renderTable();
+    setTimeout(function(){pw.classList.remove("show")},2000);
+  }catch(err){
+    cur.textContent="网络错误: "+err.message;
+    setTimeout(function(){pw.classList.remove("show")},3000);
+  }
+  btn.disabled=false;btn.textContent="生成配置列表并查询配额";
+}
+
+// ── 渲染表格 ──────────────────────────────────────────────────────
+function renderTable(){
+  var tbody=$("cfgTbody");tbody.innerHTML="";
+  if(!configEntries.length){
+    $("cfgEmpty").style.display="";
+    $("cfgTableWrap").style.display="none";
+    $("cfgToolbar").style.display="none";
+    return;
+  }
+  $("cfgEmpty").style.display="none";
+  $("cfgTableWrap").style.display="";
+  $("cfgToolbar").style.display="";
+  $("cfgCount").textContent=configEntries.length+" 条记录";
+
+  configEntries.forEach(function(e,idx){
+    var tagsHtml='<span class="tc2" style="font-size:10px">—</span>';
+    if(e.tags && Object.keys(e.tags).length){
+      tagsHtml='<div class="tgb">';
+      Object.entries(e.tags).forEach(function(kv){
+        tagsHtml+='<span data-label="'+es(kv[0])+'='+es(kv[1])+'"></span>';
+      });
+      tagsHtml+='</div>';
+    }
+    var statusClass=e.testStatus==="✓ 可用"?"status-ok":e.testStatus==="✗ 失败"?"status-er":"status-pend";
+    var tr=document.createElement("tr");
+    tr.id="row-"+idx;
+    var escapedId=e.model_id.replace(/'/g,"\\'");
+    tr.innerHTML=
+      '<td class="id-mono">'+es(e.region)+'</td>'+
+      '<td>'+es(e.model_label)+'</td>'+
+      '<td><span class="id-mono" style="font-size:10px">'+es(e.model_id)+'</span>'+
+      '<button class="copy-btn" onclick="cpText(\''+escapedId+'\',this)">'+
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:9px;height:9px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制</button>'+
+      '</td>'+
+      '<td class="id-mono">'+es(e.tpd||'—')+'</td>'+
+      '<td class="id-mono">'+es(e.tpm||'—')+'</td>'+
+      '<td>'+tagsHtml+'</td>'+
+      '<td><span id="testStatus-'+idx+'" class="'+statusClass+'" style="font-size:10px">'+es(e.testStatus)+'</span>'+
+      '<button class="btn bsm" style="margin-left:4px;height:22px;padding:0 7px;font-size:10px" onclick="testOne('+idx+')">测试</button></td>';
+    tbody.appendChild(tr);
+  });
+}
+
+// ── 复制文本 ──────────────────────────────────────────────────────
+function cpText(text,btn){
+  navigator.clipboard.writeText(text).then(function(){
+    btn.classList.add("copied");btn.textContent="已复制";
+    setTimeout(function(){
+      btn.classList.remove("copied");
+      btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:9px;height:9px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制';
+    },1500);
+  }).catch(function(){});
+}
+</script>
+<script>
+// ── 导出 Excel ────────────────────────────────────────────────────
+async function exportExcel(){
+  if(!configEntries.length)return;
+  try{
+    var r=await fetch("/api/export_default_config_excel",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({entries:configEntries,account_id:AID,access_key:AK,secret_key:SK})});
+    if(!r.ok){alert("导出失败");return}
+    var blob=await r.blob();
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");a.href=url;
+    var dt=new Date();
+    var ds=dt.getFullYear()+("0"+(dt.getMonth()+1)).slice(-2)+("0"+dt.getDate()).slice(-2);
+    a.download="AWS-Bedrock-Default-"+AID+"-"+ds+".xlsx";
+    a.click();URL.revokeObjectURL(url);
+  }catch(e){alert("导出失败: "+e.message)}
+}
+
+// ── 单条测试 ──────────────────────────────────────────────────────
+async function testOne(idx){
+  var e=configEntries[idx];
+  var stEl=$("testStatus-"+idx);
+  if(!stEl)return;
+  stEl.textContent="测试中...";stEl.className="status-pend";
+  try{
+    var r=await fetch("/api/verify_default_model",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({access_key:AK,secret_key:SK,region:e.region,model_id:e.model_id})});
+    var j=await r.json();
+    if(j.ok){
+      e.testStatus="✓ 可用";
+      stEl.textContent="✓ 可用";stEl.className="status-ok";
+    }else{
+      e.testStatus="✗ 失败";
+      stEl.textContent="✗ 失败";stEl.className="status-er";
+    }
+  }catch(err){
+    e.testStatus="✗ 网络错误";
+    stEl.textContent="✗ 网络错误";stEl.className="status-er";
+  }
+}
+
+// ── 全部测试（并发） ────────────────────────────────────────────
+async function testAll(){
+  var btn=$("btnTestAll");btn.disabled=true;btn.textContent="测试中...";
+  var pw=$("testProgWrap");pw.classList.add("show");
+  var fill=$("testFill"),pct=$("testPct"),cur=$("testCur");
+  fill.style.width="0%";pct.textContent="0%";cur.textContent="正在测试...";
+
+  var total=configEntries.length,done=0,ok=0,fail=0;
+
+  function upProg(){
+    done++;
+    var p=Math.round((done/total)*100);
+    fill.style.width=p+"%";pct.textContent=p+"%";
+    cur.textContent=done+" / "+total+" 已完成 · "+ok+" 成功 · "+fail+" 失败";
+  }
+
+  var promises=configEntries.map(function(e,idx){
+    return (async function(){
+      var stEl=$("testStatus-"+idx);
+      if(stEl){
+        stEl.textContent="测试中...";stEl.className="status-pend";
+      }
+      try{
+        var r=await fetch("/api/verify_default_model",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({access_key:AK,secret_key:SK,region:e.region,model_id:e.model_id})});
+        var j=await r.json();
+        if(j.ok){
+          e.testStatus="✓ 可用";ok++;
+          if(stEl){stEl.textContent="✓ 可用";stEl.className="status-ok";}
+        }else{
+          e.testStatus="✗ 失败";fail++;
+          if(stEl){stEl.textContent="✗ 失败";stEl.className="status-er";}
+        }
+      }catch(err){
+        e.testStatus="✗ 网络错误";fail++;
+        if(stEl){stEl.textContent="✗ 网络错误";stEl.className="status-er";}
+      }
+      upProg();
+    })();
+  });
+
+  await Promise.all(promises);
+  cur.textContent="测试完成！"+ok+" 成功 · "+fail+" 失败";
+  btn.disabled=false;btn.textContent="全部测试";
+  setTimeout(function(){pw.classList.remove("show")},3000);
+}
+
+// ── 清空 ──────────────────────────────────────────────────────────
+function clrForm(){
+  document.querySelectorAll('input[name="mid"]').forEach(function(e){e.checked=false});
+  document.querySelectorAll('input[name="rid"]').forEach(function(e){e.checked=false});
+  // 重置标签区
+  $("tgg").innerHTML='<div class="tr"><input class="tk" placeholder="key"><input class="tv" placeholder="value"><button class="btn bsm" onclick="addTg()">+ 添加行</button></div>';
+  configEntries=[];
+  renderTable();
+  upCount();
+  BedrockPersist.save();
+}
+
+init();
+</script>
+</body>
+</html>

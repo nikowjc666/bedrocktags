@@ -137,6 +137,9 @@ CLAUDE_40_IDS = {
 CLAUDE_45_PLUS_VERSIONS = [v for v in CLAUDE_VERSIONS if v["id"] not in CLAUDE_40_IDS]
 CLAUDE_45_BY_ID = {v["id"]: v for v in CLAUDE_45_PLUS_VERSIONS}
 
+# 复用与创建配置页完全一致的模型列表（CLAUDE_VERSIONS）— 去掉初代 Claude 4
+DEFAULT_MODEL_BY_ID = {v["id"]: v for v in CLAUDE_45_PLUS_VERSIONS}
+
 
 def _is_claude_45_plus(model_id):
     return model_id in CLAUDE_45_BY_ID
@@ -1255,6 +1258,434 @@ def test_profile():
 
 
 
+# ──────────────────────────────────────────────────────────────────
+# 默认 Model ID 配置 API
+# ──────────────────────────────────────────────────────────────────
+
+# 复用与创建配置页完全一致的模型列表（CLAUDE_VERSIONS）
+DEFAULT_MODEL_BY_ID = {v["id"]: v for v in CLAUDE_VERSIONS}
+
+
+@app.route("/api/default_model_list", methods=["GET"])
+def default_model_list():
+    """返回与创建配置页相同的模型列表（去掉初代 Claude 4）"""
+    return jsonify({"ok": True, "versions": CLAUDE_45_PLUS_VERSIONS})
+
+
+@app.route("/api/query_model_quotas", methods=["POST"])
+def query_model_quotas():
+    """批量查询 region × model 的 TPM/TPD 配额
+    
+    请求体：{
+      access_key, secret_key,
+      entries: [{region, model_id}]
+    }
+    
+    返回：{
+      ok: True,
+      results: [{region, model_id, tpm, tpd, error}]
+    }
+    """
+    import concurrent.futures as _cf
+    data = request.get_json() or {}
+    ak, sk, _ = _creds(data)
+    entries = data.get("entries", [])
+    
+    if not all([ak, sk]):
+        return jsonify({"ok": False, "error": "请填写 AK/SK"}), 400
+    if not entries:
+        return jsonify({"ok": False, "error": "无数据可查询"}), 400
+    
+    # 确保 code_map 已加载
+    if not _quota_code_map:
+        _build_code_map(ak, sk)
+    
+    def _format_quota(value):
+        """格式化配额数值：满足 M 用 M，满足 K 用 K，否则原值"""
+        if value is None:
+            return ""
+        try:
+            num = int(value)
+            if num == 0:
+                return "0"
+            # 满足 M (整除 1,000,000)
+            if num >= 1_000_000 and num % 1_000_000 == 0:
+                return f"{num // 1_000_000}M"
+            # 满足 K (整除 1,000)
+            if num >= 1_000 and num % 1_000 == 0:
+                return f"{num // 1_000}K"
+            # 否则原值
+            return str(num)
+        except (ValueError, TypeError):
+            return str(value)
+    
+    def _query_one(entry):
+        region = entry.get("region", "")
+        model_id = entry.get("model_id", "")
+        result = {
+            "region": region,
+            "model_id": model_id,
+            "tpm": "",
+            "tpd": "",
+            "error": "",
+        }
+        
+        try:
+            client = _get_client("service-quotas", ak, sk, region)
+            ver = CLAUDE_45_BY_ID.get(model_id) or {}
+            label = ver.get("label", model_id).lower()
+            
+            # 生成多个 label 变体进行匹配
+            # "claude sonnet 4.5" → ["claude sonnet 4.5", "claude sonnet 4.5 v1", "sonnet 4.5", "sonnet 5"]
+            label_variants = [label]
+            
+            # 添加 v1 后缀
+            if " v1" not in label:
+                label_variants.append(f"{label} v1")
+            
+            # 去掉 claude 前缀（一些 quota 用短名称）
+            label_no_claude = label.replace("claude ", "").strip()
+            if label_no_claude != label:
+                label_variants.append(label_no_claude)
+                if " v1" not in label_no_claude:
+                    label_variants.append(f"{label_no_claude} v1")
+            
+            # 特殊情况：Sonnet 5 / Fable 5 可能在 quota 里叫 sonnet 5 / fable 5
+            if "sonnet" in label or "fable" in label or "opus" in label or "haiku" in label:
+                # 提取模型类型和主版本号
+                import re
+                match = re.search(r'(sonnet|fable|opus|haiku)\s+(\d+)', label_no_claude)
+                if match:
+                    model_type = match.group(1)
+                    major_ver = match.group(2)
+                    short_label = f"{model_type} {major_ver}"
+                    if short_label not in label_variants:
+                        label_variants.append(short_label)
+            
+            tpm_value = None
+            tpd_value = None
+            
+            # 尝试每个 label 变体
+            for lbl in label_variants:
+                if tpm_value and tpd_value:
+                    break
+                
+                # TPM: 优先 global，回退 cross-region
+                if not tpm_value:
+                    tpm_global = f"global cross-region model inference tokens per minute for anthropic {lbl}".lower()
+                    tpm_cross  = f"cross-region model inference tokens per minute for anthropic {lbl}".lower()
+                    tpm_code = _quota_code_map.get(tpm_global) or _quota_code_map.get(tpm_cross)
+                    
+                    if tpm_code:
+                        try:
+                            resp = client.get_service_quota(ServiceCode="bedrock", QuotaCode=tpm_code)
+                            val = resp.get("Quota", {}).get("Value")
+                            if val is not None:
+                                tpm_value = val
+                        except Exception:
+                            try:
+                                resp = client.get_aws_default_service_quota(ServiceCode="bedrock", QuotaCode=tpm_code)
+                                val = resp.get("Quota", {}).get("Value")
+                                if val is not None:
+                                    tpm_value = val
+                            except Exception:
+                                pass
+                
+                # TPD: 优先 global，回退 cross-region
+                if not tpd_value:
+                    tpd_global = f"global cross-region model inference tokens per day for anthropic {lbl}".lower()
+                    tpd_cross  = f"model invocation max tokens per day for anthropic {lbl} (doubled for cross-region calls)".lower()
+                    tpd_code = _quota_code_map.get(tpd_global) or _quota_code_map.get(tpd_cross)
+                    
+                    if tpd_code:
+                        try:
+                            resp = client.get_service_quota(ServiceCode="bedrock", QuotaCode=tpd_code)
+                            val = resp.get("Quota", {}).get("Value")
+                            if val is not None:
+                                tpd_value = val
+                        except Exception:
+                            try:
+                                resp = client.get_aws_default_service_quota(ServiceCode="bedrock", QuotaCode=tpd_code)
+                                val = resp.get("Quota", {}).get("Value")
+                                if val is not None:
+                                    tpd_value = val
+                            except Exception:
+                                pass
+            
+            if tpm_value is not None:
+                result["tpm"] = _format_quota(tpm_value)
+            if tpd_value is not None:
+                result["tpd"] = _format_quota(tpd_value)
+            
+            if not result["tpm"] and not result["tpd"]:
+                # 调试信息：记录实际尝试的配额名
+                result["error"] = f"未找到配额（尝试变体: {', '.join(label_variants[:3])}）"
+        except Exception as e:
+            result["error"] = _aws_error(e)
+        
+        return result
+    
+    results = []
+    max_workers = min(50, len(entries))
+    with _cf.ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = [pool.submit(_query_one, e) for e in entries]
+        for future in _cf.as_completed(futures):
+            try:
+                results.append(future.result())
+            except Exception:
+                pass
+    
+    return jsonify({"ok": True, "results": results})
+
+
+@app.route("/api/verify_default_model", methods=["POST"])
+def verify_default_model():
+    """验证 AK/SK 并尝试用系统 Inference Profile ID 调用（converse 一次）确认可用性
+    
+    新版 Claude 4.x/4.5+ 不支持直接用 foundation model ID 调用，
+    需要转换成系统 Inference Profile ID（us./eu./global. 前缀）
+    """
+    data = request.get_json() or {}
+    ak, sk, _ = _creds(data)
+    region = (data.get("region") or "us-east-1").strip()
+    model_id = (data.get("model_id") or "").strip()
+
+    if not all([ak, sk, region, model_id]):
+        return jsonify({"ok": False, "error": "请填写 AK/SK、区域和模型 ID"}), 400
+
+    try:
+        _, err = _verify_account(ak, sk)
+        if err:
+            return jsonify({"ok": False, "error": err}), 400
+
+        brt = _bedrock_runtime(ak, sk, region)
+
+        # 把 foundation model ID 转成系统 Inference Profile ID
+        # 优先 global，其次地理区域（us/eu）
+        ver = CLAUDE_BY_ID.get(model_id) or CLAUDE_45_BY_ID.get(model_id)
+        invoke_id = model_id  # 默认回退
+        if ver:
+            sources = ver.get("sources") or {}
+            geo = _region_geo(region)
+            for key in ("global", geo, "us", "eu"):
+                pid = sources.get(key)
+                if pid:
+                    invoke_id = pid
+                    break
+
+        brt.converse(
+            modelId=invoke_id,
+            messages=[{"role": "user", "content": [{"text": "hi"}]}],
+            inferenceConfig={"maxTokens": 10},
+        )
+        return jsonify({"ok": True, "model_id": model_id, "invoke_id": invoke_id, "region": region})
+    except Exception as e:
+        return jsonify({"ok": False, "error": _aws_error(e)}), 400
+
+
+@app.route("/api/export_default_config_excel", methods=["POST"])
+def export_default_config_excel():
+    """将默认 Model ID 配置信息导出为 Excel。
+
+    列说明（与 export_excel 保持一致风格）：
+      A  AWS账户ID  ─ 合并
+      B  登录URL    ─ 合并
+      C  账号       ─ 合并（留空）
+      D  密码       ─ 合并（留空）
+      E  Access Key ─ 合并
+      F  Secret Key ─ 合并
+      G  模型类型   ─ 同模型连续行合并
+      H  默认 Model ID ─ 同 Model ID 连续行合并
+      I  区域       ─ 每行独立
+      J  TPD        ─ 每行独立
+      K  TPM        ─ 每行独立
+      L  标签       ─ 连续相同标签合并
+    """
+    data = request.get_json() or {}
+    entries = data.get("entries", [])           # [{region, model_id, tpd, tpm, tags}]
+    account_id  = (data.get("account_id") or "").strip()
+    access_key  = (data.get("access_key") or "").strip()
+    secret_key  = (data.get("secret_key") or "").strip()
+
+    if not entries:
+        return jsonify({"ok": False, "error": "无数据可导出"}), 400
+
+    login_url = (
+        f"https://{account_id}.signin.aws.amazon.com/console"
+        if account_id else ""
+    )
+
+    rows = []
+    for e in entries:
+        mid = e.get("model_id", "")
+        meta = DEFAULT_MODEL_BY_ID.get(mid) or {}
+        label = meta.get("label") or mid
+        region = e.get("region", "")
+        tpd = e.get("tpd", "")
+        tpm = e.get("tpm", "")
+        tags_dict = e.get("tags") or {}
+        tags_str = ", ".join(f"{k}={v}" for k, v in tags_dict.items()) if tags_dict else ""
+
+        rows.append({
+            "account_id": account_id,
+            "login_url":  login_url,
+            "username":   "",
+            "password":   "",
+            "access_key": access_key,
+            "secret_key": secret_key,
+            "model_label":label,
+            "model_id":   mid,
+            "region":     region,
+            "tpd":        tpd,
+            "tpm":        tpm,
+            "tags":       tags_str,
+        })
+
+    # 按模型类型 → Model ID → 区域排序
+    rows.sort(key=lambda x: (x["model_label"], x["model_id"], x["region"]))
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Default Model Config"
+
+    hdr_font    = Font(name="Calibri", size=11, bold=False)
+    hdr_align   = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    val_align   = Alignment(horizontal="left",   vertical="center", wrap_text=False)
+    center_align= Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    def _border(top="thin", bottom="thin", left="thin", right="thin"):
+        def _side(s):
+            return Side(style=s) if s else Side(style=None)
+        return Border(left=_side(left), right=_side(right),
+                      top=_side(top),   bottom=_side(bottom))
+
+    full_border = _border()
+
+    headers = ["AWS账户ID", "登录URL", "账号", "密码", "Access Key", "Secret Key",
+               "模型类型", "默认 Model ID", "区域", "TPD", "TPM", "标签"]
+
+    for ci, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=ci, value=h)
+        cell.font      = hdr_font
+        cell.alignment = hdr_align
+        cell.border    = full_border
+    ws.row_dimensions[1].height = 20
+
+    # 居中列：C(3) D(4) G(7) H(8) I(9)
+    CENTER_COLS = {3, 4, 7, 8, 9}
+    data_start  = 2
+    total_rows  = len(rows)
+
+    for ri, row in enumerate(rows):
+        excel_row = data_start + ri
+        values = [
+            row["account_id"],
+            row["login_url"],
+            row["username"],
+            row["password"],
+            row["access_key"],
+            row["secret_key"],
+            row["model_label"],
+            row["model_id"],
+            row["region"],
+            row["tpd"],
+            row["tpm"],
+            row["tags"],
+        ]
+        for ci, val in enumerate(values, 1):
+            cell = ws.cell(row=excel_row, column=ci, value=val)
+            cell.border    = full_border
+            cell.alignment = center_align if ci in CENTER_COLS else val_align
+
+    # ── 列宽 ─────────────────────────────────────────────────
+    MIN_WIDTHS = {3: 20, 4: 20}
+    col_letters = [chr(64 + i) for i in range(1, len(headers) + 1)]
+    for ci, col_letter in enumerate(col_letters, 1):
+        max_len = len(headers[ci - 1])
+        for row in rows:
+            vals = [row["account_id"], row["login_url"], row["username"],
+                    row["password"],   row["access_key"], row["secret_key"],
+                    row["model_label"], row["model_id"], row["region"],
+                    row["tpd"],        row["tpm"],        row["tags"]]
+            max_len = max(max_len, len(str(vals[ci - 1]) if vals[ci - 1] else ""))
+        width = min(max_len + 4, 80)
+        width = max(width, MIN_WIDTHS.get(ci, 0))
+        ws.column_dimensions[col_letter].width = width
+
+    # ── 合并辅助函数（复用与 export_excel 相同逻辑） ──────────
+    def _apply_merge(r1, r2, col, value, align):
+        if r1 == r2:
+            return
+        ws.merge_cells(start_row=r1, start_column=col,
+                       end_row=r2,   end_column=col)
+        top_cell = ws.cell(row=r1, column=col, value=value)
+        top_cell.alignment = align
+        for r in range(r1, r2 + 1):
+            top    = "thin" if r == r1 else None
+            bottom = "thin" if r == r2 else None
+            ws.cell(row=r, column=col).border = _border(
+                top=top, bottom=bottom, left="thin", right="thin")
+
+    # ── A-F：全部数据行合并 ───────────────────────────────────
+    last_data = data_start + total_rows - 1
+    if total_rows > 1:
+        _apply_merge(data_start, last_data, 1, account_id,  center_align)
+        _apply_merge(data_start, last_data, 2, login_url,   center_align)
+        _apply_merge(data_start, last_data, 3, "",           center_align)
+        _apply_merge(data_start, last_data, 4, "",           center_align)
+        _apply_merge(data_start, last_data, 5, access_key,  center_align)
+        _apply_merge(data_start, last_data, 6, secret_key,  center_align)
+
+    # ── G（模型类型）：同模型连续行合并 ──────────────────────
+    i = 0
+    while i < total_rows:
+        j = i + 1
+        while j < total_rows and rows[j]["model_label"] == rows[i]["model_label"]:
+            j += 1
+        r1, r2 = data_start + i, data_start + j - 1
+        _apply_merge(r1, r2, 7, rows[i]["model_label"], center_align)
+        i = j
+
+    # ── H（Model ID）：同 Model ID 连续行合并 ──────────────────────
+    i = 0
+    while i < total_rows:
+        j = i + 1
+        while j < total_rows and rows[j]["model_id"] == rows[i]["model_id"]:
+            j += 1
+        r1, r2 = data_start + i, data_start + j - 1
+        _apply_merge(r1, r2, 8, rows[i]["model_id"], center_align)
+        i = j
+
+    # ── L（标签）：连续相同标签行合并 ────────────────────────────
+    i = 0
+    while i < total_rows:
+        j = i + 1
+        while j < total_rows and rows[j]["tags"] == rows[i]["tags"]:
+            j += 1
+        r1, r2 = data_start + i, data_start + j - 1
+        _apply_merge(r1, r2, 12, rows[i]["tags"], center_align)
+        i = j
+
+    ws.freeze_panes = "A2"
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    date_str = datetime.now().strftime("%Y%m%d")
+    filename = (
+        f"AWS-Bedrock-Default-{account_id}-{date_str}.xlsx"
+        if account_id
+        else f"AWS-Bedrock-Default-{date_str}.xlsx"
+    )
+    return send_file(
+        output,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
 @app.route("/api/export_excel", methods=["POST"])
 def export_excel():
     """导出批量创建结果为格式化 Excel，带单元格合并。
@@ -1890,6 +2321,12 @@ def delete_profiles():
 @app.route("/data-retention")
 def data_retention_page():
     return render_template("data_retention.html")
+
+
+@app.route("/default-model-config")
+def default_model_config_page():
+    """使用默认 Model ID 配置（无需创建 Inference Profile，直接用 AK/SK + Model ID）"""
+    return render_template("default_model_config.html")
 
 
 @app.route("/api/get_data_retention", methods=["POST"])
