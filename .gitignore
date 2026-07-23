@@ -1,0 +1,22 @@
+# 敏感文件和数据库
+.flask_secret
+users.db
+creds.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# 编辑器
+.idea/
+.vscode/
+.cursor/
+
+# 日志
+*.log
+server.log
+
+# 输出
+outputs/
