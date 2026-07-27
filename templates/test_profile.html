@@ -391,7 +391,23 @@ function renderSingleResult(d,arn,region){
         '</div></div>'+
       '</div>'+
       invokeHtml+
+      _renderCodeSnippet(d, arn, region)+
     '</div>';
+}
+
+function _renderCodeSnippet(d, arn, region){
+  var modelId = d.inferenceProfileArn || arn;
+  var reg = region || 'us-east-1';
+  var code = 'import boto3\n\nclient = boto3.client(\n    service_name="bedrock-runtime",\n    region_name="'+reg+'"\n)\n\nresponse = client.converse(\n    modelId="'+modelId+'",\n    messages=[\n        {\n            "role": "user",\n            "content": [{"text": "Hello!"}]\n        }\n    ]\n)\n\nprint(response["output"]["message"]["content"][0]["text"])';
+  return '<div style="margin-top:10px">'+
+    '<div class="label" style="margin-bottom:4px;font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em">示例代码（python boto3）</div>'+
+    '<div style="position:relative">'+
+      '<textarea id="codeSnippet" readonly style="width:100%;height:160px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:11px;font-family:\'SF Mono\',\'Cascadia Code\',Consolas,monospace;background:var(--surface2);color:var(--text);resize:vertical;line-height:1.6;outline:none" onclick="this.select()">'+es(code)+'</textarea>'+
+      '<button class="copy-btn" style="position:absolute;top:6px;right:6px" onclick="copyText(this, '+JSON.stringify(code)+')">'+
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制'+
+      '</button>'+
+    '</div>'+
+  '</div>';
 }
 
 // ── ARN 列表计数 ─────────────────────────────────────────────

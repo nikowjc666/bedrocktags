@@ -75,6 +75,9 @@ MODEL_ALIAS = {
     "4.8": "anthropic.claude-opus-4-8",
     "opus 4.8": "anthropic.claude-opus-4-8",
     "opus4.8": "anthropic.claude-opus-4-8",
+    "opus 5": "anthropic.claude-opus-5",
+    "opus5": "anthropic.claude-opus-5",
+    "claude opus 5": "anthropic.claude-opus-5",
     "fable 5": "anthropic.claude-fable-5",
     "fable5": "anthropic.claude-fable-5",
     "5": "anthropic.claude-fable-5",
@@ -100,9 +103,24 @@ CLAUDE_VERSIONS = [
         },
     },
     {
+        "id": "anthropic.claude-opus-5",
+        "label": "Claude Opus 5",
+        "sources": {
+            "us": "us.anthropic.claude-opus-5",
+            "eu": "eu.anthropic.claude-opus-5",
+            "global": "global.anthropic.claude-opus-5",
+        },
+    },
+    {
         "id": "anthropic.claude-opus-4-8",
         "label": "Claude Opus 4.8",
-        "sources": {"global": "global.anthropic.claude-opus-4-8"},
+        "sources": {
+            "us": "us.anthropic.claude-opus-4-8",
+            "eu": "eu.anthropic.claude-opus-4-8",
+            "jp": "jp.anthropic.claude-opus-4-8",
+            "au": "au.anthropic.claude-opus-4-8",
+            "global": "global.anthropic.claude-opus-4-8",
+        },
     },
     {
         "id": "anthropic.claude-opus-4-7",
