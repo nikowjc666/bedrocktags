@@ -2,6 +2,7 @@
 .flask_secret
 users.db
 creds.json
+test.py
 
 # Python
 __pycache__/
