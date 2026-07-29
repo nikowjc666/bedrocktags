@@ -879,7 +879,7 @@ def batch_create_stream():
             sources = ver.get("sources") or {}
             geo     = _region_geo(region)
             arn = source_id = None
-            for key in (geo, "global"):
+            for key in ("global", geo):   # global 优先，覆盖区域最广
                 pid = sources.get(key)
                 if pid:
                     arn       = _inference_profile_arn(region, pid)

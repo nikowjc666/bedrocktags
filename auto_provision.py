@@ -269,7 +269,8 @@ def _resolve_copy_from(br, region, ver):
     """解析 create_inference_profile 的 copyFrom 来源 ARN"""
     sources = ver.get("sources") or {}
     geo = _region_geo(region)
-    for key in (geo, "global"):
+    # 强制优先使用 global，然后才是地理区域（与 app.py 保持一致）
+    for key in ("global", geo):
         pid = sources.get(key)
         if pid:
             return _inference_profile_arn(region, pid)
