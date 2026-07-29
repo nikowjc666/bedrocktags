@@ -405,6 +405,20 @@ async function init(){
   renderModels();
   renderRegions();
   BedrockPersist.afterListsReady(saved);  // 恢复勾选状态
+
+  // 恢复凭证变量：persist.js 已把 ak/sk/aid 填回输入框，这里同步到 JS 变量
+  var akEl=document.getElementById("ak");
+  var skEl=document.getElementById("sk");
+  var aidEl=document.getElementById("aid");
+  if(akEl && akEl.value) AK=akEl.value.trim();
+  if(skEl && skEl.value) SK=skEl.value.trim();
+  if(aidEl && aidEl.textContent.trim()){
+    AID=aidEl.textContent.trim();
+    // 确保验证成功区域显示
+    var arEl=document.getElementById("ar");
+    if(arEl) arEl.style.display="";
+  }
+
   upCount();
 }
 
