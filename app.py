@@ -1272,6 +1272,71 @@ def test_profile():
         return jsonify({"ok": False, "available": False, "error": _aws_error(e)})
 
 
+@app.route("/api/test_apikey", methods=["POST"])
+def test_apikey():
+    """使用 AWS Bedrock Long-term API Key 测试调用模型（支持 model_id 或 ARN）"""
+    data = request.get_json() or {}
+    api_key = (data.get("api_key") or "").strip()
+    region  = (data.get("region") or "us-east-1").strip()
+    # 支持 model_id 或 ARN，统一用 model_id 字段传入
+    model_id = (data.get("model_id") or data.get("arn") or "anthropic.claude-opus-5").strip()
+    prompt   = (data.get("prompt") or "hi").strip()
+
+    if not api_key:
+        return jsonify({"ok": False, "error": "请填写 API Key"}), 400
+    if not model_id:
+        return jsonify({"ok": False, "error": "请填写 Model ID 或 ARN"}), 400
+
+    # 如果是 ARN，自动从中提取区域
+    if model_id.startswith("arn:"):
+        m = re.match(r"arn:aws:bedrock:([^:]+):", model_id)
+        if m and not data.get("region"):
+            region = m.group(1)
+
+    try:
+        endpoint = f"https://bedrock-runtime.{region}.amazonaws.com/model/{requests.utils.quote(model_id, safe='')}/converse"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        body = {
+            "messages": [{"role": "user", "content": [{"text": prompt}]}],
+            "inferenceConfig": {"maxTokens": 256},
+        }
+        resp = requests.post(endpoint, headers=headers, json=body, timeout=30)
+
+        if resp.status_code == 200:
+            result = resp.json()
+            text = ""
+            for block in result.get("output", {}).get("message", {}).get("content", []):
+                if "text" in block:
+                    text += block["text"]
+            usage = result.get("usage", {})
+            return jsonify({
+                "ok": True,
+                "invoke_ok": True,
+                "model_id": model_id,
+                "region": region,
+                "response": text,
+                "preview": text[:300],
+                "input_tokens": usage.get("inputTokens", 0),
+                "output_tokens": usage.get("outputTokens", 0),
+            })
+        else:
+            try:
+                err_body = resp.json()
+                err_msg = err_body.get("message") or err_body.get("Message") or resp.text
+            except Exception:
+                err_msg = resp.text
+            return jsonify({
+                "ok": False,
+                "invoke_ok": False,
+                "status_code": resp.status_code,
+                "error": f"HTTP {resp.status_code}: {err_msg}",
+            })
+    except Exception as e:
+        return jsonify({"ok": False, "invoke_ok": False, "error": str(e)}), 500
+
 
 # ──────────────────────────────────────────────────────────────────
 # 默认 Model ID 配置 API
@@ -2238,55 +2303,68 @@ def query_quotas():
         client = _get_client("service-quotas", ak, sk, region)
         region_results = []
 
-        # 先用第一个 code 试探权限
-        if targets:
-            test_nl, test_code = targets[0]
-            try:
-                client.get_aws_default_service_quota(ServiceCode=sc, QuotaCode=test_code)
-            except botocore.exceptions.ClientError as e:
-                code = e.response.get("Error", {}).get("Code", "")
-                if code in ("AccessDeniedException", "AccessDenied", "AuthorizationError"):
-                    raise PermissionError(f"账号无权限查询 Service Quotas（{region}），请确认 IAM 权限包含 servicequotas:GetServiceQuota")
-            except Exception:
-                pass  # 其他错误继续尝试
+        # ── 步骤1：全量拉取该账号在此区域的实际配额（list_service_quotas）──
+        # 这是真实数据，包含账号申请过/系统分配的所有配额
+        actual_map = {}  # quota_code -> Quota dict
+        try:
+            paginator = client.get_paginator("list_service_quotas")
+            for page in paginator.paginate(ServiceCode=sc):
+                for q in page.get("Quotas", []):
+                    name = q.get("QuotaName", "")
+                    nl = name.lower()
+                    if "claude" not in nl and "anthropic" not in nl:
+                        continue
+                    code = q.get("QuotaCode", "")
+                    if code:
+                        actual_map[code] = q
+        except botocore.exceptions.ClientError as e:
+            err_code = e.response.get("Error", {}).get("Code", "")
+            if err_code in ("AccessDeniedException", "AccessDenied", "AuthorizationError"):
+                raise PermissionError(f"账号无权限查询 Service Quotas（{region}），请确认 IAM 权限包含 servicequotas:ListServiceQuotas")
+            raise
 
-        def _fetch_one(nl_code):
-            nl, code = nl_code
-            aq, dq = {}, {}
-            try:
-                aq = client.get_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})
-            except botocore.exceptions.ClientError as e:
-                err_code = e.response.get("Error", {}).get("Code", "")
-                if err_code in ("AccessDeniedException", "AccessDenied", "AuthorizationError"):
-                    raise PermissionError(f"无权限: {e.response['Error']['Message']}")
-            except Exception:
-                pass
-            try:
-                dq = client.get_aws_default_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})
-            except Exception:
-                pass
-            if not aq and not dq:
-                return None
-            return {
+        # ── 步骤2：全量拉取默认配额（list_aws_default_service_quotas）──
+        # 默认配额是 AWS 对所有账号的基准值，和账号无关
+        default_map = {}  # quota_code -> Quota dict
+        try:
+            paginator = client.get_paginator("list_aws_default_service_quotas")
+            for page in paginator.paginate(ServiceCode=sc):
+                for q in page.get("Quotas", []):
+                    name = q.get("QuotaName", "")
+                    nl = name.lower()
+                    if "claude" not in nl and "anthropic" not in nl:
+                        continue
+                    code = q.get("QuotaCode", "")
+                    if code:
+                        default_map[code] = q
+        except Exception:
+            pass  # 默认配额查不到不影响主流程
+
+        # ── 步骤3：合并，以 actual_map 为主，default_map 补充缺失的 code ──
+        all_codes = set(actual_map.keys()) | set(default_map.keys())
+
+        # 用 targets 里的 code 过滤（targets 已经按模型/类型/global 过滤好了）
+        target_codes = {code for _, code in targets}
+
+        for code in all_codes:
+            if code not in target_codes:
+                continue
+            aq = actual_map.get(code, {})
+            dq = default_map.get(code, {})
+            name = (aq or dq).get("QuotaName", "")
+            if not name:
+                continue
+            # 真实当前值：只用 list_service_quotas 返回的，没有就是 None（真实没有，不填充）
+            current_value = aq.get("Value") if aq else None
+            default_value = dq.get("Value") if dq else None
+            region_results.append({
                 "region":        region,
-                "name":          (aq or dq).get("QuotaName", ""),
-                "value":         aq.get("Value"),
-                "default_value": dq.get("Value"),
+                "name":          name,
+                "value":         current_value,   # None = 账号未申请/AWS未分配，真实数据
+                "default_value": default_value,
                 "quota_code":    code,
-            }
+            })
 
-        max_w = min(30, len(targets))
-        with _cf.ThreadPoolExecutor(max_workers=max_w) as pool:
-            futures = {pool.submit(_fetch_one, t): t for t in targets}
-            for future in _cf.as_completed(futures):
-                try:
-                    item = future.result()
-                    if item:
-                        region_results.append(item)
-                except PermissionError:
-                    raise   # 权限错误向上传递
-                except Exception:
-                    pass
         region_results.sort(key=lambda x: x["name"])
         return region_results
 

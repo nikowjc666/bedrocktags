@@ -6,10 +6,12 @@ After=network.target
 User=ec2-user
 WorkingDirectory=/home/ec2-user/bedrocktags
 ExecStart=/usr/local/bin/gunicorn \
-    --workers 2 \
+    --workers 4 \
+    --worker-class gevent \
+    --worker-connections 100 \
     --bind 127.0.0.1:5001 \
-    --timeout 120 \
-    --keep-alive 5 \
+    --timeout 300 \
+    --keep-alive 10 \
     --log-level info \
     --access-logfile /var/log/bedrock-app/access.log \
     --error-logfile  /var/log/bedrock-app/error.log \

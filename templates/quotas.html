@@ -238,6 +238,50 @@ table tbody tr:last-child td{border-bottom:none}
 var B="",_allRows=[],_persistReady=false;
 function $(i){return document.getElementById(i)}
 function es(s){if(!s)return"";var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+
+// ── 统一 fetch 封装：处理 session 超时和非 JSON 响应 ──────────
+async function apiFetch(url, options){
+  var r;
+  try{
+    r = await fetch(url, options);
+  }catch(e){
+    // 网络错误（断线、超时）
+    throw new Error("网络错误，请检查连接后重试");
+  }
+  // session 超时 → 服务器返回 401 JSON 或重定向到登录页 HTML
+  if(r.status === 401){
+    var txt = await r.text();
+    var isHtml = txt.trim().startsWith("<");
+    if(isHtml || txt.includes("login_required") || txt.includes("未登录")){
+      if(confirm("登录已过期，是否立即跳转到登录页？")){
+        location.href = "/login";
+      }
+      throw new Error("登录已过期，请重新登录");
+    }
+  }
+  // 其他非 200 状态
+  if(!r.ok && r.status !== 200){
+    var errText = "";
+    try{ var ej = await r.json(); errText = ej.error || ej.message || ""; }catch(e2){ errText = await r.text().catch(()=>""); }
+    if(errText.trim().startsWith("<")){
+      throw new Error("服务器返回了登录页，请刷新页面重新登录");
+    }
+    throw new Error(errText || "HTTP " + r.status);
+  }
+  // 解析 JSON，失败时给出友好提示
+  var text = await r.text();
+  try{
+    return JSON.parse(text);
+  }catch(e){
+    if(text.trim().startsWith("<")){
+      if(confirm("登录已过期，是否立即跳转到登录页？")){
+        location.href = "/login";
+      }
+      throw new Error("登录已过期，请重新登录");
+    }
+    throw new Error("服务器返回了无效数据，请重试");
+  }
+}
 function sR(id,msg,type){var el=$(id);if(el)el.innerHTML='<div class="st '+type+'" style="white-space:pre-line">'+es(msg)+'</div>'}
 function creds(){return{access_key:$("ak").value.trim(),secret_key:$("sk").value.trim()}}
 
@@ -274,7 +318,7 @@ document.addEventListener("DOMContentLoaded",async function(){
 
 async function loadModelList(){
   try{
-    var r=await fetch(B+"/api/claude_45_versions"),d=await r.json();
+    var d=await apiFetch(B+"/api/claude_45_versions");
     if(!d.ok)return;
     var box=$("modelList");
     (d.versions||[]).forEach(function(v){
@@ -297,7 +341,7 @@ function taModel(){
 
 async function loadRegions(){
   try{
-    var r=await fetch(B+"/api/regions"),d=await r.json();
+    var d=await apiFetch(B+"/api/regions");
     if(!d.ok)return;
     var box=$("rgl");
     d.regions.forEach(function(reg){
@@ -318,8 +362,7 @@ async function vrf(){
   if(!c.access_key||!c.secret_key){sR("vrfMsg","请填写 ak/sk","wa");return}
   var btn=$("btnv");btn.disabled=true;btn.textContent="验证中...";
   try{
-    var r=await fetch(B+"/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c)});
-    var d=await r.json();
+    var d=await apiFetch(B+"/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c)});
     if(d.ok){$("aid").textContent=d.account_id;$("ar").style.display="flex";BedrockPersist.onVerified(d.account_id);sR("vrfMsg","已验证","ok")}
     else sR("vrfMsg",d.error,"er");
   }catch(e){sR("vrfMsg","错误："+e.message,"er")}
@@ -352,7 +395,7 @@ async function queryQuotas(forceRefresh){
   _allRows=[];
 
   try{
-    var r=await fetch(B+"/api/query_quotas",{
+    var d=await apiFetch(B+"/api/query_quotas",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
@@ -366,7 +409,6 @@ async function queryQuotas(forceRefresh){
         force_refresh:!!forceRefresh
       })
     });
-    var d=await r.json();
     $("qLoading").style.display="none";
 
     if(!d.ok){sR("queryMsg",d.error,"er");$("qEmp").style.display="flex";$("totalInfo").textContent="暂无数据";return}
@@ -441,7 +483,7 @@ function parseQuotaName(name){
 }
 
 function fmtNum(v){
-  if(v===null||v===undefined)return'<span style="color:var(--t3)">—</span>';
+  if(v===null||v===undefined)return'<span style="color:var(--t3)" title="该账号在此区域未分配此配额">—</span>';
   var n=Number(v);
   return n===0
     ?'<span style="color:var(--er);font-weight:600">0</span>'

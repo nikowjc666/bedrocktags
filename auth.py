@@ -130,6 +130,10 @@ def require_login_for_all():
         return
     if not session.get("logged_in"):
         if request.path.startswith("/api/"):
-            return jsonify({"ok": False, "error": "未登录，请先登录"}), 401
+            return jsonify({"ok": False, "error": "未登录，请先登录", "login_required": True}), 401
         return redirect(url_for("login_page"))
-    session.modified = True
+    # 设置 permanent session，避免并发请求时 session 丢失
+    session.permanent = True
+    # 只在非 API 请求时刷新 session（避免并发写入竞争）
+    if not request.path.startswith("/api/"):
+        session.modified = True
