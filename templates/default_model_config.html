@@ -487,12 +487,28 @@ async function buildConfig(){
   configEntries=[];
   var modelMap={};
   allModels.forEach(function(m){modelMap[m.id]=m});
+
+  // 地理区域映射（与后端 _region_geo 保持一致）
+  var US_REGIONS=new Set(["us-east-1","us-east-2","us-west-1","us-west-2","ca-central-1","sa-east-1"]);
+  var EU_REGIONS=new Set(["eu-west-1","eu-west-2","eu-west-3","eu-central-1","eu-central-2","eu-north-1","eu-south-1","eu-south-2","il-central-1","me-central-1","me-south-1","af-south-1"]);
+  var JP_REGIONS=new Set(["ap-northeast-1","ap-northeast-2","ap-northeast-3"]);
+  function regionGeo(r){ return US_REGIONS.has(r)?"us":EU_REGIONS.has(r)?"eu":JP_REGIONS.has(r)?"jp":"global"; }
+
   rs.forEach(function(region){
     ms.forEach(function(mid){
-      var m=modelMap[mid]||{id:mid,label:mid};
+      var m=modelMap[mid]||{id:mid,label:mid,sources:{}};
+      var sources=m.sources||{};
+      var geo=regionGeo(region);
+      // 优先 global，其次地理区域
+      var displayId=mid;
+      var keys=["global",geo,"us","eu"];
+      for(var i=0;i<keys.length;i++){
+        if(sources[keys[i]]){displayId=sources[keys[i]];break;}
+      }
       configEntries.push({
         region:region,
-        model_id:mid,
+        model_id:mid,          // 原始 ID，用于测试接口
+        display_id:displayId,  // global 前缀 ID，用于展示和 Excel
         model_label:m.label,
         tpm:"",
         tpd:"",
@@ -582,11 +598,12 @@ function renderTable(){
     var statusClass=e.testStatus==="✓ 可用"?"status-ok":e.testStatus==="✗ 失败"?"status-er":"status-pend";
     var tr=document.createElement("tr");
     tr.id="row-"+idx;
-    var escapedId=e.model_id.replace(/'/g,"\\'");
+    var showId=e.display_id||e.model_id;
+    var escapedId=showId.replace(/'/g,"\\'");
     tr.innerHTML=
       '<td class="id-mono">'+es(e.region)+'</td>'+
       '<td>'+es(e.model_label)+'</td>'+
-      '<td><span class="id-mono" style="font-size:10px">'+es(e.model_id)+'</span>'+
+      '<td><span class="id-mono" style="font-size:10px">'+es(showId)+'</span>'+
       '<button class="copy-btn" onclick="cpText(\''+escapedId+'\',this)">'+
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:9px;height:9px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制</button>'+
       '</td>'+
@@ -615,8 +632,12 @@ function cpText(text,btn){
 async function exportExcel(){
   if(!configEntries.length)return;
   try{
+    // 导出时用 display_id（global 前缀），原始 model_id 仅用于测试
+    var exportEntries=configEntries.map(function(e){
+      return Object.assign({},e,{model_id:e.display_id||e.model_id});
+    });
     var r=await fetch("/api/export_default_config_excel",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({entries:configEntries,account_id:AID,access_key:AK,secret_key:SK})});
+      body:JSON.stringify({entries:exportEntries,account_id:AID,access_key:AK,secret_key:SK})});
     if(!r.ok){alert("导出失败");return}
     var blob=await r.blob();
     var url=URL.createObjectURL(blob);

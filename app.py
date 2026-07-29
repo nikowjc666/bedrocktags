@@ -1606,6 +1606,21 @@ def export_default_config_excel():
         tags_dict = e.get("tags") or {}
         tags_str = ", ".join(f"{k}={v}" for k, v in tags_dict.items()) if tags_dict else ""
 
+        # 优先使用 global inference profile ID，其次地理区域，最后 foundation model ID
+        # 注意：前端已经预计算了 display_id 并作为 model_id 传入，这里做兜底
+        sources = meta.get("sources") or {}
+        geo = _region_geo(region)
+        # 如果传入的已经是 global/us/eu 前缀 ID，直接使用
+        if mid.startswith(("global.", "us.", "eu.", "jp.", "au.")):
+            display_id = mid
+        else:
+            display_id = mid
+            for key in ("global", geo, "us", "eu"):
+                pid = sources.get(key)
+                if pid:
+                    display_id = pid
+                    break
+
         rows.append({
             "account_id": account_id,
             "login_url":  login_url,
@@ -1614,7 +1629,7 @@ def export_default_config_excel():
             "access_key": access_key,
             "secret_key": secret_key,
             "model_label":label,
-            "model_id":   mid,
+            "model_id":   display_id,
             "region":     region,
             "tpd":        tpd,
             "tpm":        tpm,
