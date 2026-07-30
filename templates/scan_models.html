@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>扫描新模型 · aws bedrock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef2f7;--bg2:#e4eaf3;--surface:#fff;--surface2:#f8fafc;
+  --border:#e2e8f0;--border2:#cbd5e1;--text:#0f172a;--t2:#64748b;--t3:#94a3b8;
+  --pr:#2563eb;--ph:#1d4ed8;--pl:#eff6ff;
+  --ok:#16a34a;--ok-bg:#f0fdf4;--ok-bd:#bbf7d0;
+  --er:#dc2626;--er-bg:#fef2f2;--er-bd:#fecaca;
+  --wa:#d97706;--wa-bg:#fffbeb;--wa-bd:#fde68a;
+  --aws:#ff9900;--aws-dark:#232f3e;--r:7px;--r-sm:5px;
+  --shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde6f0 100%);
+  background-attachment:fixed;color:var(--text);font-size:12px;line-height:1.45;min-height:100vh}
+input,select{font-family:inherit}
+.h{background:linear-gradient(135deg,var(--aws-dark) 0%,#1a365d 60%,#1e3a5f 100%);
+  padding:0 16px;display:flex;align-items:center;justify-content:space-between;
+  gap:10px;height:44px;box-shadow:0 1px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
+.h-l{display:flex;align-items:center;gap:10px}
+.nav{display:flex;gap:4px}
+.nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:11px;
+  padding:4px 10px;border-radius:4px;transition:all .15s}
+.nav a:hover,.nav a.act{color:#fff;background:rgba(255,255,255,.12)}
+.h-logo{width:28px;height:28px;border-radius:6px;
+  background:linear-gradient(135deg,var(--aws) 0%,#ffb84d 100%);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.h-logo svg{color:#232f3e;width:16px;height:16px}
+.h-text h1{font-size:14px;font-weight:600;color:#fff}
+.h-text .s{color:rgba(255,255,255,.5);font-size:11px}
+.b{max-width:900px;margin:16px auto;padding:0 14px 28px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  box-shadow:var(--shadow);overflow:hidden;animation:fadeUp .4s ease both}
+.card:nth-child(1){animation-delay:.05s}.card:nth-child(2){animation-delay:.12s}
+.card:nth-child(3){animation-delay:.19s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.sht{display:flex;align-items:center;gap:7px;padding:8px 12px;font-size:12px;font-weight:600;
+  background:var(--surface2);border-bottom:1px solid var(--border);color:var(--text)}
+.sht-step{width:18px;height:18px;border-radius:50%;background:var(--pr);color:#fff;
+  font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sht-sub{font-weight:400;color:var(--t2);font-size:11px;margin-left:auto}
+.sb{padding:12px}
+.fr{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px}
+.fr:last-child{margin-bottom:0}
+.fg{display:flex;flex-direction:column;gap:3px;min-width:120px;flex:1}
+.fg label{font-size:11px;color:var(--t2);font-weight:500}
+.fg input,.fg select{height:30px;padding:0 9px;border:1px solid var(--border);
+  border-radius:var(--r-sm);font-size:12px;outline:none;background:var(--surface);
+  color:var(--text);transition:border-color .15s,box-shadow .15s}
+.fg input:focus,.fg select:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.fg input::placeholder{color:var(--t3)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;
+  height:30px;padding:0 11px;border:1px solid var(--border);border-radius:var(--r-sm);
+  font-size:12px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);
+  white-space:nowrap;transition:all .15s ease;font-family:inherit}
+.btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.bp{background:linear-gradient(135deg,var(--pr) 0%,#3b82f6 100%);color:#fff;
+  border-color:transparent;box-shadow:0 2px 8px rgba(37,99,235,.3)}
+.bp:hover{background:linear-gradient(135deg,var(--ph) 0%,var(--pr) 100%);color:#fff;border-color:transparent}
+.bs{background:linear-gradient(135deg,var(--ok) 0%,#22c55e 100%);color:#fff;
+  border-color:transparent;box-shadow:0 2px 8px rgba(22,163,74,.3)}
+.bs:hover{background:linear-gradient(135deg,#15803d 0%,var(--ok) 100%);color:#fff;border-color:transparent}
+.bdge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:12px;font-size:10px;font-weight:500}
+.bg-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+.bg-er{background:var(--er-bg);color:var(--er);border:1px solid var(--er-bd)}
+.bg-wa{background:var(--wa-bg);color:var(--wa);border:1px solid var(--wa-bd)}
+.bg-new{background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd}
+.bg-rg{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-family:"SF Mono",Consolas,monospace;font-size:10px}
+.st{display:flex;align-items:flex-start;gap:6px;padding:7px 10px;border-radius:var(--r-sm);
+  font-size:11px;margin-top:8px;font-weight:500}
+.st.er{background:var(--er-bg);border:1px solid var(--er-bd);color:var(--er)}
+.st.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
+.st.wa{background:var(--wa-bg);border:1px solid var(--wa-bd);color:var(--wa)}
+.st.info{background:var(--pl);border:1px solid #bfdbfe;color:var(--pr)}
+.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border);
+  border-top-color:var(--pr);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.mono{font-family:"SF Mono","Cascadia Code",Consolas,monospace;font-size:10px;color:var(--t2)}
+/* 模型卡片 */
+.model-card{border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden;margin-bottom:8px}
+.model-card.is-new{border-color:#bae6fd;background:#f0f9ff}
+.model-card-hdr{display:flex;align-items:center;gap:8px;padding:9px 12px;
+  background:var(--surface2);border-bottom:1px solid var(--border)}
+.model-card.is-new .model-card-hdr{background:#e0f2fe;border-bottom-color:#bae6fd}
+.model-card-body{padding:10px 12px;font-size:11px}
+.sources-grid{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.source-tag{padding:2px 8px;border-radius:4px;font-size:10px;font-family:"SF Mono",Consolas,monospace;
+  background:var(--pl);color:var(--pr);border:1px solid #bfdbfe}
+.source-tag.new{background:#dcfce7;color:#16a34a;border-color:#bbf7d0}
+/* 编辑区 */
+.edit-row{display:flex;gap:6px;align-items:center;margin-top:8px}
+.edit-row input{flex:1;height:26px;padding:0 8px;border:1px solid var(--border);
+  border-radius:4px;font-size:11px;outline:none;font-family:inherit}
+.edit-row input:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.footer{text-align:center;color:var(--t3);font-size:10px;padding:4px 0 0}
+#ar{margin-top:2px;padding:8px 10px;background:var(--ok-bg);border:1px solid var(--ok-bd);border-radius:var(--r-sm)}
+#aid{font-weight:600;font-size:12px;color:var(--text);font-family:"SF Mono",Consolas,monospace}
+.fx{display:flex;align-items:center;gap:8px}
+</style>
+</head>
+<body>
+<header class="h">
+  <div class="h-l">
+    <div class="h-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+    </div>
+    <div class="h-text">
+      <h1>扫描新模型</h1>
+      <div class="s">检测 AWS 上最新的 Claude 系统 Inference Profile · 一键添加到项目</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <a href="/">profile 标签</a>
+    <a href="/model-tags">创建配置</a>
+    <a href="/delete-profiles">删除配置</a>
+    <a href="/test-profile">测试模型</a>
+    <a href="/quotas">模型配额</a>
+    <a href="/data-retention">数据驻留</a>
+    <a href="/default-model-config">默认模型</a>
+    <a href="/mfa">MFA 验证码</a>
+    <a href="/scan-models" class="act">扫描新模型</a>
+  </nav>
+</header>
+
+<div class="b">
+
+  <!-- 步骤1：凭证 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">1</span> AWS 凭证</div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:2"><label>access key id</label>
+          <input id="ak" type="text" placeholder="AKIA..." autocomplete="off"></div>
+        <div class="fg" style="flex:2"><label>secret access key</label>
+          <input id="sk" type="password" placeholder="..." autocomplete="off"></div>
+        <div class="fg" style="flex:0 0 auto"><label>扫描区域</label>
+          <select id="region">
+            <option value="us-east-1">us-east-1</option>
+          </select>
+        </div>
+        <div class="fg" style="flex:0 0 auto"><label>&nbsp;</label>
+          <button class="btn bp" id="btnScan" onclick="scan()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            扫描
+          </button>
+        </div>
+      </div>
+      <div class="fr" id="ar" style="display:none">
+        <div class="fg" style="flex:1"><label>账号 ID</label>
+          <div class="fx"><span id="aid"></span><span class="bdge bg-ok">✓ 已验证</span></div>
+        </div>
+      </div>
+      <div id="scanMsg"></div>
+    </div>
+  </div>
+
+  <!-- 步骤2：扫描结果 -->
+  <div class="card" id="resultCard" style="display:none">
+    <div class="sht">
+      <span class="sht-step">2</span> 扫描结果
+      <span class="sht-sub" id="resultSub"></span>
+    </div>
+    <div class="sb">
+
+      <!-- 新发现模型 -->
+      <div id="newSection" style="display:none">
+        <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+          <span class="bdge bg-new">NEW</span> 发现新模型，可添加到项目
+        </div>
+        <div id="newList"></div>
+      </div>
+
+      <!-- 已有模型（可展开查看） -->
+      <div id="knownSection" style="margin-top:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:12px;font-weight:600;color:var(--t2)">已配置模型</span>
+          <button onclick="toggleKnown()" id="btnToggleKnown" class="btn" style="height:22px;padding:0 8px;font-size:10px">展开</button>
+        </div>
+        <div id="knownList" style="display:none"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="footer">扫描新模型 · aws bedrock inference profile</div>
+</div>
+
+<script src="/static/persist.js"></script>
+<script>
+var B = "";
+function $(id){ return document.getElementById(id); }
+function es(s){ if(!s)return""; var d=document.createElement("div");d.textContent=s;return d.innerHTML; }
+function sR(id,msg,type){ var el=$(id);if(el)el.innerHTML='<div class="st '+type+'">'+es(msg)+'</div>'; }
+
+document.addEventListener("DOMContentLoaded", async function(){
+  BedrockPersist.init();
+  // 加载区域列表
+  try{
+    var r=await fetch(B+"/api/regions"),d=await r.json();
+    if(d.ok){
+      var sel=$("region"); sel.innerHTML="";
+      d.regions.forEach(function(reg){
+        var o=document.createElement("option");
+        o.value=reg;o.textContent=reg;
+        if(reg==="us-east-1")o.selected=true;
+        sel.appendChild(o);
+      });
+    }
+  }catch(e){}
+  // 恢复凭证
+  var akEl=$("ak"),skEl=$("sk"),aidEl=$("aid");
+  if(akEl && akEl.value.trim() && skEl && skEl.value.trim() && aidEl && aidEl.textContent.trim()){
+    $("ar").style.display="flex";
+  }
+});
+
+async function scan(){
+  var ak=$("ak").value.trim(), sk=$("sk").value.trim();
+  var region=$("region").value;
+  if(!ak||!sk){ sR("scanMsg","请填写 AK/SK","wa"); return; }
+  var btn=$("btnScan");
+  btn.disabled=true;
+  btn.innerHTML='<span class="sp"></span> 扫描中...';
+  $("scanMsg").innerHTML='<div class="st info"><span class="sp"></span> 正在查询 AWS 系统 Inference Profile...</div>';
+  $("resultCard").style.display="none";
+
+  try{
+    var r=await fetch(B+"/api/scan_new_models",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({access_key:ak,secret_key:sk,region:region})
+    });
+    var d=await r.json();
+    if(!d.ok){ sR("scanMsg",d.error,"er"); return; }
+
+    // 更新验证状态
+    $("ar").style.display="flex";
+    BedrockPersist.onVerified("");
+
+    var newCount=d.new_count||0, knownCount=d.known_count||0;
+    $("resultSub").textContent="发现 "+d.total_profiles+" 个系统 Profile · "+newCount+" 个新模型 · "+knownCount+" 个已配置";
+    $("resultCard").style.display="";
+
+    if(newCount>0){
+      $("newSection").style.display="";
+      renderModels($("newList"), d.new_models, ak, sk, true);
+    }else{
+      $("newSection").style.display="";
+      $("newList").innerHTML='<div class="st ok">✓ 项目中已包含所有已知 Claude 模型，无新模型</div>';
+    }
+    renderModels($("knownList"), d.known_models, ak, sk, false);
+
+    sR("scanMsg","扫描完成！共 "+d.total_profiles+" 个系统 Profile","ok");
+  }catch(e){
+    sR("scanMsg","网络错误："+e.message,"er");
+  }finally{
+    btn.disabled=false;
+    btn.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> 扫描';
+  }
+}
+
+function renderModels(container, models, ak, sk, isNew){
+  container.innerHTML="";
+  if(!models||!models.length){
+    container.innerHTML='<div style="color:var(--t3);font-size:11px;padding:8px 0">无</div>';
+    return;
+  }
+  models.forEach(function(m){
+    var card=document.createElement("div");
+    card.className="model-card"+(isNew?" is-new":"");
+
+    var sourcesHtml="";
+    Object.entries(m.sources||{}).forEach(function(kv){
+      var isNewSrc=isNew||(m.new_sources&&m.new_sources[kv[0]]);
+      sourcesHtml+='<span class="source-tag'+(isNewSrc?" new":"")+'">'+es(kv[0])+': '+es(kv[1])+'</span>';
+    });
+
+    var addBtnHtml="";
+    if(isNew){
+      addBtnHtml='<button class="btn bs" style="height:24px;padding:0 10px;font-size:10px;margin-left:auto" onclick="addModel(this,'+
+        JSON.stringify(m.base_id)+','+JSON.stringify(m.label)+','+JSON.stringify(m.sources)+','+JSON.stringify(ak)+','+JSON.stringify(sk)+')">+ 添加到项目</button>';
+    }
+
+    card.innerHTML=
+      '<div class="model-card-hdr">'+
+        (isNew?'<span class="bdge bg-new" style="font-size:9px">NEW</span>':'<span class="bdge bg-ok" style="font-size:9px">✓</span>')+
+        '<span style="font-weight:600;font-size:12px">'+es(m.label)+'</span>'+
+        '<span class="mono" style="margin-left:4px">'+es(m.base_id)+'</span>'+
+        addBtnHtml+
+      '</div>'+
+      '<div class="model-card-body">'+
+        '<div style="font-size:10px;color:var(--t3);margin-bottom:4px">inference profile sources</div>'+
+        '<div class="sources-grid">'+sourcesHtml+'</div>'+
+        (isNew?
+          '<div class="edit-row">'+
+            '<input type="text" id="label-'+es(m.base_id)+'" value="'+es(m.label)+'" placeholder="显示名称（可修改）">'+
+          '</div>':""
+        )+
+        '<div id="addMsg-'+es(m.base_id)+'" style="margin-top:6px"></div>'+
+      '</div>';
+    container.appendChild(card);
+  });
+}
+
+async function addModel(btn, baseId, label, sources, ak, sk){
+  // 使用用户可能修改过的 label
+  var labelInput=document.getElementById("label-"+baseId);
+  var finalLabel=labelInput?labelInput.value.trim():label;
+  if(!finalLabel){alert("请填写显示名称");return}
+
+  btn.disabled=true;btn.textContent="添加中...";
+  var msgEl=document.getElementById("addMsg-"+baseId);
+
+  try{
+    var r=await fetch(B+"/api/add_model",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({base_id:baseId,label:finalLabel,sources:sources})
+    });
+    var d=await r.json();
+    if(d.ok){
+      btn.className="btn bg-ok";btn.textContent="✓ 已添加";
+      if(labelInput)labelInput.disabled=true;
+      if(msgEl) msgEl.innerHTML='<div class="st ok" style="margin-top:0">'+es(d.message)+'</div>';
+    }else{
+      btn.disabled=false;btn.textContent="+ 添加到项目";
+      if(msgEl) msgEl.innerHTML='<div class="st er" style="margin-top:0">'+es(d.error)+'</div>';
+    }
+  }catch(e){
+    btn.disabled=false;btn.textContent="+ 添加到项目";
+    if(msgEl) msgEl.innerHTML='<div class="st er" style="margin-top:0">网络错误：'+es(e.message)+'</div>';
+  }
+}
+
+function toggleKnown(){
+  var list=$("knownList"), btn=$("btnToggleKnown");
+  if(list.style.display==="none"){list.style.display="";btn.textContent="收起";}
+  else{list.style.display="none";btn.textContent="展开";}
+}
+</script>
+</body>
+</html>

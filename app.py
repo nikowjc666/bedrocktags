@@ -1598,7 +1598,15 @@ def export_default_config_excel():
     rows = []
     for e in entries:
         mid = e.get("model_id", "")
+        # mid 可能是 global.anthropic.xxx 或 anthropic.xxx，都要能查到 meta
+        # 先直接查，查不到就去掉前缀再查
         meta = DEFAULT_MODEL_BY_ID.get(mid) or {}
+        if not meta:
+            for prefix in ("global.", "us.", "eu.", "jp.", "au."):
+                if mid.startswith(prefix):
+                    base = mid[len(prefix):]
+                    meta = DEFAULT_MODEL_BY_ID.get(base) or CLAUDE_BY_ID.get(base) or {}
+                    break
         label = meta.get("label") or mid
         region = e.get("region", "")
         tpd = e.get("tpd", "")
@@ -1606,14 +1614,12 @@ def export_default_config_excel():
         tags_dict = e.get("tags") or {}
         tags_str = ", ".join(f"{k}={v}" for k, v in tags_dict.items()) if tags_dict else ""
 
-        # 优先使用 global inference profile ID，其次地理区域，最后 foundation model ID
-        # 注意：前端已经预计算了 display_id 并作为 model_id 传入，这里做兜底
-        sources = meta.get("sources") or {}
-        geo = _region_geo(region)
-        # 如果传入的已经是 global/us/eu 前缀 ID，直接使用
+        # 如果传入的已经是带前缀的 ID，直接使用；否则从 sources 里找 global
         if mid.startswith(("global.", "us.", "eu.", "jp.", "au.")):
             display_id = mid
         else:
+            sources = meta.get("sources") or {}
+            geo = _region_geo(region)
             display_id = mid
             for key in ("global", geo, "us", "eu"):
                 pid = sources.get(key)
@@ -2318,67 +2324,56 @@ def query_quotas():
         client = _get_client("service-quotas", ak, sk, region)
         region_results = []
 
-        # ── 步骤1：全量拉取该账号在此区域的实际配额（list_service_quotas）──
-        # 这是真实数据，包含账号申请过/系统分配的所有配额
-        actual_map = {}  # quota_code -> Quota dict
-        try:
-            paginator = client.get_paginator("list_service_quotas")
-            for page in paginator.paginate(ServiceCode=sc):
-                for q in page.get("Quotas", []):
-                    name = q.get("QuotaName", "")
-                    nl = name.lower()
-                    if "claude" not in nl and "anthropic" not in nl:
-                        continue
-                    code = q.get("QuotaCode", "")
-                    if code:
-                        actual_map[code] = q
-        except botocore.exceptions.ClientError as e:
-            err_code = e.response.get("Error", {}).get("Code", "")
-            if err_code in ("AccessDeniedException", "AccessDenied", "AuthorizationError"):
-                raise PermissionError(f"账号无权限查询 Service Quotas（{region}），请确认 IAM 权限包含 servicequotas:ListServiceQuotas")
-            raise
+        # 先用第一个 code 试探权限
+        if targets:
+            test_nl, test_code = targets[0]
+            try:
+                client.get_aws_default_service_quota(ServiceCode=sc, QuotaCode=test_code)
+            except botocore.exceptions.ClientError as e:
+                code = e.response.get("Error", {}).get("Code", "")
+                if code in ("AccessDeniedException", "AccessDenied", "AuthorizationError"):
+                    raise PermissionError(f"账号无权限查询 Service Quotas（{region}），请确认 IAM 权限包含 servicequotas:GetServiceQuota")
+            except Exception:
+                pass
 
-        # ── 步骤2：全量拉取默认配额（list_aws_default_service_quotas）──
-        # 默认配额是 AWS 对所有账号的基准值，和账号无关
-        default_map = {}  # quota_code -> Quota dict
-        try:
-            paginator = client.get_paginator("list_aws_default_service_quotas")
-            for page in paginator.paginate(ServiceCode=sc):
-                for q in page.get("Quotas", []):
-                    name = q.get("QuotaName", "")
-                    nl = name.lower()
-                    if "claude" not in nl and "anthropic" not in nl:
-                        continue
-                    code = q.get("QuotaCode", "")
-                    if code:
-                        default_map[code] = q
-        except Exception:
-            pass  # 默认配额查不到不影响主流程
-
-        # ── 步骤3：合并，以 actual_map 为主，default_map 补充缺失的 code ──
-        all_codes = set(actual_map.keys()) | set(default_map.keys())
-
-        # 用 targets 里的 code 过滤（targets 已经按模型/类型/global 过滤好了）
-        target_codes = {code for _, code in targets}
-
-        for code in all_codes:
-            if code not in target_codes:
-                continue
-            aq = actual_map.get(code, {})
-            dq = default_map.get(code, {})
-            name = (aq or dq).get("QuotaName", "")
-            if not name:
-                continue
-            # 真实当前值：只用 list_service_quotas 返回的，没有就是 None（真实没有，不填充）
-            current_value = aq.get("Value") if aq else None
-            default_value = dq.get("Value") if dq else None
-            region_results.append({
+        def _fetch_one(nl_code):
+            nl, code = nl_code
+            aq, dq = {}, {}
+            try:
+                aq = client.get_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})
+            except botocore.exceptions.ClientError as e:
+                err_code = e.response.get("Error", {}).get("Code", "")
+                if err_code in ("AccessDeniedException", "AccessDenied", "AuthorizationError"):
+                    raise PermissionError(f"无权限: {e.response['Error']['Message']}")
+            except Exception:
+                pass
+            try:
+                dq = client.get_aws_default_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})
+            except Exception:
+                pass
+            if not aq and not dq:
+                return None
+            return {
                 "region":        region,
-                "name":          name,
-                "value":         current_value,   # None = 账号未申请/AWS未分配，真实数据
-                "default_value": default_value,
+                "name":          (aq or dq).get("QuotaName", ""),
+                "value":         aq.get("Value"),
+                "default_value": dq.get("Value"),
                 "quota_code":    code,
-            })
+            }
+
+        # 并发查询，每个 code 同时发出请求
+        max_w = min(40, len(targets))
+        with _cf.ThreadPoolExecutor(max_workers=max_w) as pool:
+            futures = {pool.submit(_fetch_one, t): t for t in targets}
+            for future in _cf.as_completed(futures):
+                try:
+                    item = future.result()
+                    if item:
+                        region_results.append(item)
+                except PermissionError:
+                    raise
+                except Exception:
+                    pass
 
         region_results.sort(key=lambda x: x["name"])
         return region_results
@@ -2565,6 +2560,178 @@ def set_data_retention():
 @app.route("/test-profile")
 def test_profile_page():
     return render_template("test_profile.html")
+
+
+@app.route("/scan-models")
+def scan_models_page():
+    return render_template("scan_models.html")
+
+
+@app.route("/api/scan_new_models", methods=["POST"])
+def scan_new_models():
+    """从 AWS 拉取所有系统 Inference Profile，与项目已配置模型对比，返回新模型列表"""
+    data = request.get_json() or {}
+    ak, sk, _ = _creds(data)
+    region = (data.get("region") or "us-east-1").strip()
+
+    if not ak or not sk:
+        return jsonify({"ok": False, "error": "请填写 AK/SK"}), 400
+
+    try:
+        br = _bedrock(ak, sk, region)
+
+        # 拉取所有系统 Inference Profile（包含 anthropic 的）
+        all_profiles = []
+        paginator = br.get_paginator("list_inference_profiles")
+        for page in paginator.paginate(typeEquals="SYSTEM_DEFINED"):
+            for p in page.get("inferenceProfileSummaries", []):
+                pid = p.get("inferenceProfileId", "")
+                if "anthropic" not in pid.lower():
+                    continue
+                all_profiles.append({
+                    "id": pid,
+                    "arn": p.get("inferenceProfileArn", ""),
+                    "name": p.get("inferenceProfileName", ""),
+                    "status": p.get("status", ""),
+                })
+
+        # 已配置的模型 ID 集合
+        known_ids = set(v["id"] for v in CLAUDE_VERSIONS)
+
+        # 从 profile ID 推断 foundation model ID
+        # 例：global.anthropic.claude-opus-5 → anthropic.claude-opus-5
+        # 例：us.anthropic.claude-opus-5 → anthropic.claude-opus-5
+        def _extract_base_id(pid):
+            for prefix in ("global.", "us.", "eu.", "jp.", "au."):
+                if pid.startswith(prefix):
+                    return pid[len(prefix):]
+            return pid
+
+        # 按 foundation model ID 聚合 sources
+        model_map = {}  # base_id -> {label, sources: {geo: pid}}
+        GEO_PREFIXES = {"global", "us", "eu", "jp", "au"}
+        for p in all_profiles:
+            pid = p["id"]
+            # 提取 geo 前缀
+            geo = None
+            for prefix in GEO_PREFIXES:
+                if pid.startswith(prefix + "."):
+                    geo = prefix
+                    break
+            base_id = _extract_base_id(pid)
+            if base_id not in model_map:
+                # 生成可读 label：anthropic.claude-opus-5 → Claude Opus 5
+                label_raw = base_id.replace("anthropic.", "").replace("-", " ")
+                # 去掉版本后缀如 -20251101-v1:0
+                import re as _re
+                label_raw = _re.sub(r"-\d{8}-v\d+.*$", "", label_raw)
+                label_raw = _re.sub(r"\s+", " ", label_raw).strip()
+                label = "Claude " + " ".join(w.capitalize() for w in label_raw.split())
+                model_map[base_id] = {"base_id": base_id, "label": label, "sources": {}, "profiles": []}
+            if geo:
+                model_map[base_id]["sources"][geo] = pid
+            model_map[base_id]["profiles"].append(pid)
+
+        # 分类：已知 / 新发现
+        known = []
+        new_models = []
+        for base_id, info in sorted(model_map.items()):
+            entry = {
+                "base_id": base_id,
+                "label": info["label"],
+                "sources": info["sources"],
+                "profiles": sorted(info["profiles"]),
+                "is_new": base_id not in known_ids,
+            }
+            # 检查已知模型是否缺少新的 sources
+            if base_id in known_ids:
+                existing = CLAUDE_BY_ID.get(base_id, {})
+                existing_sources = existing.get("sources", {})
+                new_sources = {k: v for k, v in info["sources"].items() if k not in existing_sources}
+                entry["new_sources"] = new_sources
+                entry["existing_sources"] = existing_sources
+                known.append(entry)
+            else:
+                new_models.append(entry)
+
+        return jsonify({
+            "ok": True,
+            "region": region,
+            "total_profiles": len(all_profiles),
+            "known_count": len(known),
+            "new_count": len(new_models),
+            "new_models": new_models,
+            "known_models": known,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": _aws_error(e)}), 500
+
+
+@app.route("/api/add_model", methods=["POST"])
+def add_model():
+    """将新模型写入 app.py 和 auto_provision.py 的 CLAUDE_VERSIONS 列表"""
+    data = request.get_json() or {}
+    base_id = (data.get("base_id") or "").strip()
+    label   = (data.get("label") or "").strip()
+    sources = data.get("sources") or {}
+
+    if not base_id or not label:
+        return jsonify({"ok": False, "error": "缺少 base_id 或 label"}), 400
+    if base_id in CLAUDE_BY_ID:
+        return jsonify({"ok": False, "error": f"{base_id} 已存在，无需添加"}), 400
+
+    new_entry = {"id": base_id, "label": label, "sources": sources}
+
+    # 插入到 CLAUDE_VERSIONS 列表顶部（最新模型排最前）
+    CLAUDE_VERSIONS.insert(0, new_entry)
+    CLAUDE_BY_ID[base_id] = new_entry
+    CLAUDE_45_PLUS_VERSIONS.insert(0, new_entry)
+    CLAUDE_45_BY_ID[base_id] = new_entry
+    DEFAULT_MODEL_BY_ID[base_id] = new_entry
+
+    # 生成要插入 app.py 的代码片段
+    sources_repr = "{\n"
+    for k, v in sources.items():
+        sources_repr += f'            "{k}": "{v}",\n'
+    sources_repr += "        }"
+    new_block = f'''    {{
+        "id": "{base_id}",
+        "label": "{label}",
+        "sources": {sources_repr},
+    }},\n'''
+
+    # 写入 app.py：插入到 CLAUDE_VERSIONS = [ 之后第一个 { 之前
+    try:
+        app_py = os.path.join(os.path.dirname(__file__), "app.py")
+        with open(app_py, "r", encoding="utf-8") as f:
+            src = f.read()
+        marker = "CLAUDE_VERSIONS = [\n"
+        idx = src.find(marker)
+        if idx != -1:
+            insert_pos = idx + len(marker)
+            src = src[:insert_pos] + new_block + src[insert_pos:]
+            with open(app_py, "w", encoding="utf-8") as f:
+                f.write(src)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"写入 app.py 失败: {e}"}), 500
+
+    # 同步写入 auto_provision.py
+    try:
+        ap_py = os.path.join(os.path.dirname(__file__), "auto_provision.py")
+        with open(ap_py, "r", encoding="utf-8") as f:
+            src2 = f.read()
+        marker2 = "CLAUDE_VERSIONS = [\n"
+        idx2 = src2.find(marker2)
+        if idx2 != -1:
+            insert_pos2 = idx2 + len(marker2)
+            src2 = src2[:insert_pos2] + new_block + src2[insert_pos2:]
+            with open(ap_py, "w", encoding="utf-8") as f:
+                f.write(src2)
+    except Exception as e:
+        pass  # auto_provision.py 写失败不阻断主流程
+
+    return jsonify({"ok": True, "added": new_entry, "message": f"已添加 {label}，重启服务后生效"})
+
 
 
 @app.route("/mfa")

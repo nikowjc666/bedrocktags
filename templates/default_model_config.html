@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -194,6 +194,7 @@ table tbody tr:last-child td{border-bottom:none}
     <a href="/data-retention">数据驻留</a>
     <a href="/default-model-config" class="act">默认模型</a>
     <a href="/mfa">MFA 验证码</a>
+    <a href="/scan-models">扫描新模型</a>
   </nav>
 </header>
 
@@ -645,6 +646,8 @@ function cpText(text,btn){
 // ── 导出 Excel ────────────────────────────────────────────────────
 async function exportExcel(){
   if(!configEntries.length)return;
+  var btn=$("btnExport");
+  btn.disabled=true;btn.textContent="生成中...";
   try{
     // 导出时用 display_id（global 前缀），原始 model_id 仅用于测试
     var exportEntries=configEntries.map(function(e){
@@ -652,7 +655,11 @@ async function exportExcel(){
     });
     var r=await fetch("/api/export_default_config_excel",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({entries:exportEntries,account_id:AID,access_key:AK,secret_key:SK})});
-    if(!r.ok){alert("导出失败");return}
+    if(!r.ok){
+      var errText="";
+      try{var ej=await r.json();errText=ej.error||JSON.stringify(ej);}catch(e2){errText=await r.text();}
+      throw new Error("HTTP "+r.status+": "+errText);
+    }
     var blob=await r.blob();
     var url=URL.createObjectURL(blob);
     var a=document.createElement("a");a.href=url;
@@ -660,7 +667,12 @@ async function exportExcel(){
     var ds=dt.getFullYear()+("0"+(dt.getMonth()+1)).slice(-2)+("0"+dt.getDate()).slice(-2);
     a.download="AWS-Bedrock-Default-"+AID+"-"+ds+".xlsx";
     a.click();URL.revokeObjectURL(url);
-  }catch(e){alert("导出失败: "+e.message)}
+  }catch(e){
+    sR("verifyMsg","导出失败: "+e.message,"er");
+  }finally{
+    btn.disabled=false;
+    btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 导出 excel';
+  }
 }
 
 // ── 单条测试 ──────────────────────────────────────────────────────
