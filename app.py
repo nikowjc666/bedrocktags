@@ -17,6 +17,9 @@ import auth
 app = Flask(__name__)
 app.secret_key = auth.get_secret_key()
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
+# CloudFront 转发时带 X-Forwarded-Proto: https，但 EC2 只有 HTTP
+# 强制 Flask 生成的 URL 始终用 http，避免重定向到 https 导致连接失败
+app.config["PREFERRED_URL_SCHEME"] = "http"
 CORS(app)
 
 # 初始化数据库
