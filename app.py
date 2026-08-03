@@ -1275,6 +1275,55 @@ def test_profile():
         return jsonify({"ok": False, "available": False, "error": _aws_error(e)})
 
 
+@app.route("/api/test_model_id", methods=["POST"])
+def test_model_id():
+    """直接用 AK/SK + region + model_id 调用 bedrock-runtime，验证 model 是否可用"""
+    data = request.get_json() or {}
+    ak, sk, user_id = _creds(data)
+    region = (data.get("region") or "").strip()
+    model_id = (data.get("model_id") or "").strip()
+    prompt = (data.get("prompt") or "hi").strip()
+    if not all([ak, sk, region, model_id]):
+        return jsonify({"ok": False, "error": "参数不完整"}), 400
+    try:
+        if user_id:
+            _, err = _verify_account(ak, sk, user_id)
+            if err:
+                return jsonify({"ok": False, "error": err}), 400
+        rt = _bedrock_runtime(ak, sk, region)
+        invoke_resp = rt.converse(
+            modelId=model_id,
+            messages=[{"role": "user", "content": [{"text": prompt}]}],
+            inferenceConfig={"maxTokens": 32},
+        )
+        text = ""
+        for block in invoke_resp.get("output", {}).get("message", {}).get("content", []):
+            if "text" in block:
+                text += block["text"]
+        usage = invoke_resp.get("usage", {})
+        return jsonify({
+            "ok": True,
+            "invoke_ok": True,
+            "model_id": model_id,
+            "region": region,
+            "preview": text[:200],
+            "input_tokens": usage.get("inputTokens", 0),
+            "output_tokens": usage.get("outputTokens", 0),
+        })
+    except botocore.exceptions.ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        return jsonify({
+            "ok": False,
+            "invoke_ok": False,
+            "model_id": model_id,
+            "region": region,
+            "error_code": code,
+            "error": _aws_error(e),
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "invoke_ok": False, "model_id": model_id, "region": region, "error": str(e)}), 500
+
+
 @app.route("/api/test_apikey", methods=["POST"])
 def test_apikey():
     """使用 AWS Bedrock Long-term API Key 测试调用模型（支持 model_id 或 ARN）"""
