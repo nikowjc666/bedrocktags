@@ -480,36 +480,60 @@ async function testModelId(){
 
 function _renderMidResult(d,modelId,region){
   if(!d.invoke_ok){
-    var errMsg=d.error||"调用失败";
+    // 错误情况：显示所有尝试过的 model_id 和最后的错误
+    var triedList = (d.tried_candidates || []).join("<br>") || es(modelId);
+    var errMsg = d.error || d.last_error?.error_msg || "调用失败";
+    var errorDetails = d.last_error ? 
+      "<div style='margin-top:6px;font-size:10px;color:var(--t3)'>最后尝试: "+es(d.last_error.tried_model_id||"")+"</div>" : "";
+    
     $("midResult").innerHTML=
       '<div class="result-card">'+
         '<div class="row">'+
           '<div class="col"><div class="label">状态</div><div class="val"><span class="bdge bg-er">✗ 不可用</span></div></div>'+
           '<div class="col"><div class="label">区域</div><div class="val"><span class="bdge bg-rg">'+es(region)+'</span></div></div>'+
-          (d.error_code?'<div class="col"><div class="label">错误码</div><div class="val"><span class="bdge bg-er">'+es(d.error_code)+'</span></div></div>':'')+
+          (d.last_error?.error_code?'<div class="col"><div class="label">错误码</div><div class="val"><span class="bdge bg-er">'+es(d.last_error.error_code)+'</span></div></div>':'')+
         '</div>'+
-        '<div class="invoke-box" style="border-color:var(--er-bd);background:var(--er-bg)">'+
+        '<div style="margin-top:8px"><div class="label">尝试的 model id（优先级顺序）</div><div class="val" style="font-family:\'SF Mono\',monospace;font-size:10px;color:var(--t2);line-height:1.6">'+triedList+'</div>'+errorDetails+'</div>'+
+        '<div class="invoke-box" style="border-color:var(--er-bd);background:var(--er-bg);margin-top:8px">'+
           '<div class="label" style="color:var(--er)">调用失败</div>'+
           '<pre style="color:var(--er)">'+es(errMsg)+'</pre>'+
         '</div>'+
-        _renderMidCodeSnippet(modelId,region)+
+        _renderMidCodeSnippet(d.used_model_id || modelId,region)+
       '</div>';
     return;
   }
+  
+  // 成功情况：显示实际使用的 model_id 和是否应用了前缀
+  var usedId = d.used_model_id || modelId;
+  var prefixBadge = "";
+  if(d.prefix_applied){
+    var prefixType = d.is_global_inference_profile ? "global" : "其他";
+    prefixBadge = '<div style="margin-top:8px;padding:7px 10px;background:var(--wa-bg);border:1px solid var(--wa-bd);border-radius:var(--r-sm);font-size:11px;color:var(--wa);">'+
+      '<strong>✓ 自动添加前缀:</strong> 从 "'+es(modelId)+'" 转换为 "'+es(usedId)+'" ('+prefixType+' inference profile)'+
+    '</div>';
+  }
+  
   $("midResult").innerHTML=
     '<div class="result-card">'+
       '<div class="row">'+
         '<div class="col"><div class="label">状态</div><div class="val"><span class="bdge bg-ok">✓ 可用</span></div></div>'+
         '<div class="col"><div class="label">区域</div><div class="val"><span class="bdge bg-rg">'+es(region)+'</span></div></div>'+
+        (d.is_global_inference_profile?'<div class="col"><div class="label">profile 类型</div><div class="val"><span class="bdge bg-ok">global ✓</span></div></div>':'')+
         '<div class="col"><div class="label">token 使用</div><div class="val"><span class="bdge bg-rg">in '+es(String(d.input_tokens||0))+' / out '+es(String(d.output_tokens||0))+'</span></div></div>'+
       '</div>'+
       '<div class="row">'+
-        '<div class="col" style="flex:3"><div class="label">model id</div><div class="val" style="font-family:\'SF Mono\',monospace;font-size:10px">'+es(d.model_id||modelId)+
-          '<button class="copy-btn" onclick="copyText(this,\''+es(d.model_id||modelId)+'\')" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制</button>'+
+        '<div class="col" style="flex:3"><div class="label">请求的 model id</div><div class="val" style="font-family:\'SF Mono\',monospace;font-size:10px">'+es(d.requested_model_id || modelId)+
+          '<button class="copy-btn" onclick="copyText(this,\''+es(d.requested_model_id || modelId)+'\')" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制</button>'+
         '</div></div>'+
       '</div>'+
+      '<div class="row">'+
+        '<div class="col" style="flex:3"><div class="label">实际使用的 model id</div><div class="val" style="font-family:\'SF Mono\',monospace;font-size:10px">'+es(usedId)+
+          '<button class="copy-btn" onclick="copyText(this,\''+es(usedId)+'\')" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>复制</button>'+
+        '</div></div>'+
+      '</div>'+
+      prefixBadge+
       '<div class="invoke-box"><div class="label">调用响应</div><pre>'+es(d.preview||"(空)")+'</pre></div>'+
-      _renderMidCodeSnippet(d.model_id||modelId,region)+
+      _renderMidCodeSnippet(usedId, region)+
     '</div>';
 }
 

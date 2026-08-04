@@ -1277,51 +1277,118 @@ def test_profile():
 
 @app.route("/api/test_model_id", methods=["POST"])
 def test_model_id():
-    """直接用 AK/SK + region + model_id 调用 bedrock-runtime，验证 model 是否可用"""
+    """直接用 AK/SK + region + model_id 调用 bedrock-runtime，验证 model 是否可用
+    
+    改进：
+    - 如果 model_id 不包含 global 前缀，自动添加 'global.' 来使用全局 inference profile
+    - 同时尝试原始 model_id（如果是 foundation model 可能也支持）
+    - 返回实际使用的 model_id 和前缀说明
+    """
     data = request.get_json() or {}
     ak, sk, user_id = _creds(data)
     region = (data.get("region") or "").strip()
     model_id = (data.get("model_id") or "").strip()
     prompt = (data.get("prompt") or "hi").strip()
+    
     if not all([ak, sk, region, model_id]):
         return jsonify({"ok": False, "error": "参数不完整"}), 400
+    
     try:
         if user_id:
             _, err = _verify_account(ak, sk, user_id)
             if err:
                 return jsonify({"ok": False, "error": err}), 400
+        
         rt = _bedrock_runtime(ak, sk, region)
-        invoke_resp = rt.converse(
-            modelId=model_id,
-            messages=[{"role": "user", "content": [{"text": prompt}]}],
-            inferenceConfig={"maxTokens": 32},
-        )
-        text = ""
-        for block in invoke_resp.get("output", {}).get("message", {}).get("content", []):
-            if "text" in block:
-                text += block["text"]
-        usage = invoke_resp.get("usage", {})
-        return jsonify({
-            "ok": True,
-            "invoke_ok": True,
-            "model_id": model_id,
-            "region": region,
-            "preview": text[:200],
-            "input_tokens": usage.get("inputTokens", 0),
-            "output_tokens": usage.get("outputTokens", 0),
-        })
-    except botocore.exceptions.ClientError as e:
-        code = e.response.get("Error", {}).get("Code", "")
+        
+        # 候选 model_id 列表：优先使用 global，其次用原始 ID
+        model_candidates = []
+        
+        # 如果还没有 global 前缀，优先尝试 global
+        if not model_id.startswith("global.") and not model_id.startswith("arn:"):
+            model_candidates.append(("global." + model_id, True))  # (model_id, is_global_inference_profile)
+        
+        model_candidates.append((model_id, False))  # 原始 model_id
+        
+        # 如果原始 ID 也没有前缀，还可以尝试其他地理前缀
+        if not model_id.startswith(("global.", "us.", "eu.", "ap.", "arn:")):
+            model_candidates.insert(1, ("us." + model_id, False))  # 尝试 US 前缀
+        
+        last_error = None
+        used_model_id = None
+        
+        for candidate_id, is_global in model_candidates:
+            try:
+                invoke_resp = rt.converse(
+                    modelId=candidate_id,
+                    messages=[{"role": "user", "content": [{"text": prompt}]}],
+                    inferenceConfig={"maxTokens": 32},
+                )
+                text = ""
+                for block in invoke_resp.get("output", {}).get("message", {}).get("content", []):
+                    if "text" in block:
+                        text += block["text"]
+                usage = invoke_resp.get("usage", {})
+                used_model_id = candidate_id
+                
+                return jsonify({
+                    "ok": True,
+                    "invoke_ok": True,
+                    "requested_model_id": model_id,
+                    "used_model_id": used_model_id,
+                    "is_global_inference_profile": is_global,
+                    "prefix_applied": candidate_id != model_id,
+                    "region": region,
+                    "preview": text[:200],
+                    "input_tokens": usage.get("inputTokens", 0),
+                    "output_tokens": usage.get("outputTokens", 0),
+                })
+            except botocore.exceptions.ClientError as e:
+                error_msg = _aws_error(e)
+                last_error = {
+                    "tried_model_id": candidate_id,
+                    "error_code": e.response.get("Error", {}).get("Code", ""),
+                    "error_msg": error_msg,
+                }
+                # 继续尝试下一个候选
+                continue
+            except Exception as e:
+                last_error = {
+                    "tried_model_id": candidate_id,
+                    "error_code": "Exception",
+                    "error_msg": str(e),
+                }
+                # 继续尝试下一个候选
+                continue
+        
+        # 所有候选都失败了
+        if last_error:
+            return jsonify({
+                "ok": False,
+                "invoke_ok": False,
+                "requested_model_id": model_id,
+                "tried_candidates": [c[0] for c in model_candidates],
+                "last_error": last_error,
+                "region": region,
+                "error": f"所有模型前缀都失败。最后尝试: {last_error.get('tried_model_id')} - {last_error.get('error_msg')}",
+            }), 400
+        else:
+            return jsonify({
+                "ok": False,
+                "invoke_ok": False,
+                "requested_model_id": model_id,
+                "region": region,
+                "error": "未知错误",
+            }), 500
+            
+    except Exception as e:
         return jsonify({
             "ok": False,
             "invoke_ok": False,
             "model_id": model_id,
             "region": region,
-            "error_code": code,
-            "error": _aws_error(e),
-        })
-    except Exception as e:
-        return jsonify({"ok": False, "invoke_ok": False, "model_id": model_id, "region": region, "error": str(e)}), 500
+            "error": str(e)
+        }), 500
 
 
 @app.route("/api/test_apikey", methods=["POST"])
