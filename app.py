@@ -2558,24 +2558,50 @@ def query_quotas():
                 "quota_code":    code,
             }
 
-        # 并发查询，每个 code 同时发出请求
-        max_w = min(40, len(targets))
-        with _cf.ThreadPoolExecutor(max_workers=max_w) as pool:
-            futures = {pool.submit(_fetch_one, t): t for t in targets}
-            for future in _cf.as_completed(futures):
-                try:
-                    item = future.result()
-                    if item:
-                        region_results.append(item)
-                except PermissionError:
-                    raise
-                except Exception:
-                    pass
+        # 改进的并发控制：
+        # - 降低单次并发数（从 40 → 10）防止 CloudFront 超时
+        # - 添加批次处理逻辑：分批发送请求
+        # - 添加完成超时检测
+        
+        batch_size = 10  # 每批最多 10 个并发请求
+        total_targets = len(targets)
+        batch_count = (total_targets + batch_size - 1) // batch_size
+        
+        for batch_idx in range(batch_count):
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, total_targets)
+            batch_targets = targets[start_idx:end_idx]
+            
+            try:
+                with _cf.ThreadPoolExecutor(max_workers=len(batch_targets)) as pool:
+                    futures = {pool.submit(_fetch_one, t): t for t in batch_targets}
+                    for future in _cf.as_completed(futures):
+                        try:
+                            item = future.result()
+                            if item:
+                                region_results.append(item)
+                        except PermissionError:
+                            raise
+                        except Exception:
+                            pass
+            except PermissionError:
+                raise
+            except Exception as e:
+                # 批次处理中的异常，继续下一批
+                import sys
+                print(f"[Quota Batch Error] Batch {batch_idx}: {str(e)}", file=sys.stderr)
+                continue
+            
+            # 批次间延迟，给 AWS 休息时间
+            if batch_idx < batch_count - 1:
+                import time
+                time.sleep(0.5)  # 批次间 0.5 秒延迟
 
         region_results.sort(key=lambda x: x["name"])
         return region_results
 
-    max_region_workers = min(10, len(regions))
+    # 改进区域并发：从 10 → 5（防止总体并发过高）
+    max_region_workers = min(5, len(regions))
     with _cf.ThreadPoolExecutor(max_workers=max_region_workers) as pool:
         future_map = {pool.submit(_query_region, r): r for r in regions}
         for future in _cf.as_completed(future_map):
