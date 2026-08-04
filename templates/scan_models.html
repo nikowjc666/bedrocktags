@@ -336,7 +336,17 @@ async function addModel(btn, baseId, label, sources, ak, sk){
     if(d.ok){
       btn.className="btn bg-ok";btn.textContent="✓ 已添加";
       if(labelInput)labelInput.disabled=true;
-      if(msgEl) msgEl.innerHTML='<div class="st ok" style="margin-top:0">'+es(d.message)+'</div>';
+      
+      // 显示成功信息 + 重启提示
+      var restartHint = "";
+      if(d.restart_required){
+        restartHint = '<div style="margin-top:8px;padding:8px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:4px;font-size:10px;color:#0369a1">' +
+          '<strong>下一步：</strong> 为了永久保存配置，请在 EC2 上执行以下命令：<br>' +
+          '<code style="background:#e0f2fe;padding:2px 4px;border-radius:2px;font-family:monospace">'+es(d.restart_cmd)+'</code>' +
+          '</div>';
+      }
+      
+      if(msgEl) msgEl.innerHTML='<div class="st ok" style="margin-top:0">✓ '+es(d.message)+restartHint+'</div>';
     }else{
       btn.disabled=false;btn.textContent="+ 添加到项目";
       if(msgEl) msgEl.innerHTML='<div class="st er" style="margin-top:0">'+es(d.error)+'</div>';

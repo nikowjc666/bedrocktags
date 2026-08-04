@@ -2911,14 +2911,14 @@ def add_model():
 
     new_entry = {"id": base_id, "label": label, "sources": sources}
 
-    # 插入到 CLAUDE_VERSIONS 列表顶部（最新模型排最前）
+    # 插入到内存中的列表（立即生效）
     CLAUDE_VERSIONS.insert(0, new_entry)
     CLAUDE_BY_ID[base_id] = new_entry
     CLAUDE_45_PLUS_VERSIONS.insert(0, new_entry)
     CLAUDE_45_BY_ID[base_id] = new_entry
     DEFAULT_MODEL_BY_ID[base_id] = new_entry
 
-    # 生成要插入 app.py 的代码片段
+    # 生成要插入文件的代码片段
     sources_repr = "{\n"
     for k, v in sources.items():
         sources_repr += f'            "{k}": "{v}",\n'
@@ -2929,37 +2929,54 @@ def add_model():
         "sources": {sources_repr},
     }},\n'''
 
-    # 写入 app.py：插入到 CLAUDE_VERSIONS = [ 之后第一个 { 之前
-    try:
-        app_py = os.path.join(os.path.dirname(__file__), "app.py")
-        with open(app_py, "r", encoding="utf-8") as f:
-            src = f.read()
-        marker = "CLAUDE_VERSIONS = [\n"
-        idx = src.find(marker)
-        if idx != -1:
-            insert_pos = idx + len(marker)
-            src = src[:insert_pos] + new_block + src[insert_pos:]
-            with open(app_py, "w", encoding="utf-8") as f:
-                f.write(src)
-    except Exception as e:
-        return jsonify({"ok": False, "error": f"写入 app.py 失败: {e}"}), 500
+    # 异步写入文件（不阻塞响应）
+    def _write_files():
+        """后台写入文件"""
+        try:
+            app_py = _os.path.join(_os.path.dirname(__file__), "app.py")
+            with open(app_py, "r", encoding="utf-8") as f:
+                src = f.read()
+            marker = "CLAUDE_VERSIONS = [\n"
+            idx = src.find(marker)
+            if idx != -1:
+                insert_pos = idx + len(marker)
+                src = src[:insert_pos] + new_block + src[insert_pos:]
+                with open(app_py, "w", encoding="utf-8") as f:
+                    f.write(src)
+        except Exception as e:
+            import sys
+            print(f"[Add Model] 写入 app.py 失败: {e}", file=sys.stderr)
 
-    # 同步写入 auto_provision.py
-    try:
-        ap_py = os.path.join(os.path.dirname(__file__), "auto_provision.py")
-        with open(ap_py, "r", encoding="utf-8") as f:
-            src2 = f.read()
-        marker2 = "CLAUDE_VERSIONS = [\n"
-        idx2 = src2.find(marker2)
-        if idx2 != -1:
-            insert_pos2 = idx2 + len(marker2)
-            src2 = src2[:insert_pos2] + new_block + src2[insert_pos2:]
-            with open(ap_py, "w", encoding="utf-8") as f:
-                f.write(src2)
-    except Exception as e:
-        pass  # auto_provision.py 写失败不阻断主流程
+        # 同步写入 auto_provision.py
+        try:
+            ap_py = _os.path.join(_os.path.dirname(__file__), "auto_provision.py")
+            if _os.path.exists(ap_py):
+                with open(ap_py, "r", encoding="utf-8") as f:
+                    src2 = f.read()
+                marker2 = "CLAUDE_VERSIONS = [\n"
+                idx2 = src2.find(marker2)
+                if idx2 != -1:
+                    insert_pos2 = idx2 + len(marker2)
+                    src2 = src2[:insert_pos2] + new_block + src2[insert_pos2:]
+                    with open(ap_py, "w", encoding="utf-8") as f:
+                        f.write(src2)
+        except Exception as e:
+            import sys
+            print(f"[Add Model] 写入 auto_provision.py 失败: {e}", file=sys.stderr)
 
-    return jsonify({"ok": True, "added": new_entry, "message": f"已添加 {label}，重启服务后生效"})
+    # 非阻塞地执行文件写入
+    import threading
+    thread = threading.Thread(target=_write_files, daemon=True)
+    thread.start()
+
+    return jsonify({
+        "ok": True,
+        "added": new_entry,
+        "message": f"✓ 已添加 {label}",
+        "note": "已在当前会话中生效。重启 EC2 应用后配置永久保存。",
+        "restart_cmd": "sudo systemctl restart bedrock-app",
+        "restart_required": True
+    })
 
 
 
