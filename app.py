@@ -2255,19 +2255,78 @@ def _save_code_map_to_disk():
         pass
 
 def _build_code_map(ak, sk):
-    """用 us-east-1 list_aws_default_service_quotas 建立 code_map，写入磁盘"""
+    """用 us-east-1 list_aws_default_service_quotas 建立 code_map，写入磁盘
+    
+    改进的逻辑：
+    1. 添加重试机制处理 AWS 速率限制
+    2. 确保所有页面都被完整处理
+    3. 过滤掉不需要的配额类型（batch、customization 等）
+    """
     global _quota_code_map
     new_map = {}
+    
+    # 排除这些关键词的配额
+    EXCLUDE_KEYWORDS = [
+        "batch",
+        "customization",
+        "[bedrock-mantle endpoint]",
+        "latency-optimized",
+        "provisioned",
+        "sum of in-progress",
+        "records per",
+        "minimum number",
+        "doubled for cross-region",
+    ]
+    
     try:
         client = _get_client("service-quotas", ak, sk, "us-east-1")
-        for page in client.get_paginator("list_aws_default_service_quotas").paginate(ServiceCode="bedrock"):
-            for q in page.get("Quotas", []):
-                name = q.get("QuotaName", "")
-                nl   = name.lower()
-                if ("claude" in nl or "anthropic" in nl) and q.get("QuotaCode"):
-                    new_map[nl] = q["QuotaCode"]
-    except Exception:
-        pass
+        paginator = client.get_paginator("list_aws_default_service_quotas")
+        
+        # 添加重试处理
+        max_retries = 3
+        retry_count = 0
+        while retry_count < max_retries:
+            try:
+                page_count = 0
+                for page in paginator.paginate(ServiceCode="bedrock"):
+                    page_count += 1
+                    quotas = page.get("Quotas", [])
+                    for q in quotas:
+                        name = q.get("QuotaName", "")
+                        nl = name.lower()
+                        code = q.get("QuotaCode")
+                        
+                        if not code:
+                            continue
+                        
+                        # 必须包含 claude 或 anthropic
+                        if not ("claude" in nl or "anthropic" in nl):
+                            continue
+                        
+                        # 排除不需要的配额类型
+                        if any(kw in nl for kw in EXCLUDE_KEYWORDS):
+                            continue
+                        
+                        new_map[nl] = code
+                
+                # 成功处理所有页面，跳出重试循环
+                if page_count > 0:
+                    break
+                    
+            except botocore.exceptions.ClientError as e:
+                if e.response.get("Error", {}).get("Code") in ("ThrottlingException", "TooManyRequestsException", "RequestLimitExceeded"):
+                    import time
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        wait_time = 2 ** retry_count  # 指数退避: 2s, 4s, 8s
+                        time.sleep(wait_time)
+                        continue
+                raise
+    except Exception as e:
+        # 日志输出用于调试
+        import traceback
+        traceback.print_exc()
+    
     if new_map:
         _quota_code_map = new_map
         _save_code_map_to_disk()
@@ -2391,18 +2450,37 @@ def query_quotas():
         def _fetch_one(nl_code):
             nl, code = nl_code
             aq, dq = {}, {}
-            try:
-                aq = client.get_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})
-            except botocore.exceptions.ClientError as e:
-                err_code = e.response.get("Error", {}).get("Code", "")
-                if err_code in ("AccessDeniedException", "AccessDenied", "AuthorizationError"):
-                    raise PermissionError(f"无权限: {e.response['Error']['Message']}")
-            except Exception:
-                pass
-            try:
-                dq = client.get_aws_default_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})
-            except Exception:
-                pass
+            
+            # 重试配置：应对 AWS 速率限制
+            max_retries = 2
+            retry_delay = 0.1
+            
+            def _try_fetch(func_name, func):
+                """辅助函数，处理重试逻辑"""
+                for attempt in range(max_retries):
+                    try:
+                        return func()
+                    except botocore.exceptions.ClientError as e:
+                        err_code = e.response.get("Error", {}).get("Code", "")
+                        if err_code in ("AccessDeniedException", "AccessDenied", "AuthorizationError"):
+                            raise PermissionError(f"无权限: {e.response['Error']['Message']}")
+                        if err_code in ("ThrottlingException", "TooManyRequestsException", "RequestLimitExceeded"):
+                            if attempt < max_retries - 1:
+                                import time
+                                time.sleep(retry_delay * (2 ** attempt))
+                                continue
+                    except Exception:
+                        pass
+                    return None
+            
+            # 尝试获取实际配额值
+            aq = _try_fetch("get_service_quota", 
+                lambda: client.get_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})) or {}
+            
+            # 尝试获取默认配额值
+            dq = _try_fetch("get_aws_default_service_quota",
+                lambda: client.get_aws_default_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})) or {}
+            
             if not aq and not dq:
                 return None
             return {
@@ -2448,6 +2526,12 @@ def query_quotas():
                 all_errors.append({"region": region, "error": str(e), "type": "error"})
 
     all_results.sort(key=lambda x: (x["region"], x["name"]))
+    
+    # 日志输出用于调试
+    import sys
+    print(f"[Quota Query Debug] Found {len(all_results)} quotas from code_map with {len(_quota_code_map)} entries", file=sys.stderr)
+    print(f"[Quota Query Debug] Targets attempted: {len(targets)}, Results: {len(all_results)}", file=sys.stderr)
+    
     return jsonify({
         "ok":         True,
         "quotas":     all_results,
