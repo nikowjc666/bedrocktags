@@ -337,12 +337,16 @@ async function addModel(btn, baseId, label, sources, ak, sk){
       btn.className="btn bg-ok";btn.textContent="✓ 已添加";
       if(labelInput)labelInput.disabled=true;
       
-      // 显示成功信息 + 重启提示
+      // 显示成功信息 + 重启提示 + 跳转按钮
       var restartHint = "";
       if(d.restart_required){
         restartHint = '<div style="margin-top:8px;padding:8px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:4px;font-size:10px;color:#0369a1">' +
-          '<strong>下一步：</strong> 为了永久保存配置，请在 EC2 上执行以下命令：<br>' +
-          '<code style="background:#e0f2fe;padding:2px 4px;border-radius:2px;font-family:monospace">'+es(d.restart_cmd)+'</code>' +
+          '<strong>下一步：</strong><br>' +
+          '1. 在 EC2 上执行重启命令：<br>' +
+          '<code style="background:#e0f2fe;padding:2px 4px;border-radius:2px;font-family:monospace;display:inline-block;margin:4px 0">'+es(d.restart_cmd)+'</code><br>' +
+          '<button class="btn" style="margin-top:6px;height:24px;padding:0 10px;font-size:10px;background:#0369a1;color:#fff;border:none" onclick="goToCreateConfig()">'+
+            '或 → 前往创建配置 (当前会话可用)'+
+          '</button>' +
           '</div>';
       }
       
@@ -355,6 +359,13 @@ async function addModel(btn, baseId, label, sources, ak, sk){
     btn.disabled=false;btn.textContent="+ 添加到项目";
     if(msgEl) msgEl.innerHTML='<div class="st er" style="margin-top:0">网络错误：'+es(e.message)+'</div>';
   }
+}
+
+function goToCreateConfig(){
+  // 设置标记，告诉创建配置页有新模型被添加了
+  sessionStorage.setItem("from_scan", "true");
+  // 跳转到创建配置页面
+  window.location.href="/model-tags";
 }
 
 function toggleKnown(){

@@ -453,7 +453,13 @@ def regions():
 
 @app.route("/api/claude_versions", methods=["GET"])
 def claude_versions():
-    return jsonify({"ok": True, "versions": CLAUDE_VERSIONS})
+    """返回当前所有可用的 Claude 模型版本（包括新扫描添加的）"""
+    return jsonify({
+        "ok": True,
+        "versions": CLAUDE_VERSIONS,
+        "total": len(CLAUDE_VERSIONS),
+        "timestamp": _time.time()  # 时间戳，便于前端检测更新
+    })
 
 
 @app.route("/api/claude_45_versions", methods=["GET"])

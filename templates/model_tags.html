@@ -652,7 +652,47 @@ document.addEventListener("DOMContentLoaded",async function(){var d=BedrockPersi
 
 async function lR(){try{var r=await fetch(B+"/api/regions"),d=await r.json();if(!d.ok)return;var box=$("rgl");d.regions.forEach(function(reg){var lbl=document.createElement("label");lbl.className="rgi";lbl.innerHTML='<input type="checkbox" value="'+es(reg)+'" onchange="upRC()"> '+es(reg);box.appendChild(lbl)});upRC()}catch(e){}}
 
-async function lM(){try{var r=await fetch(B+"/api/claude_45_versions"),d=await r.json();if(!d.ok)return;var box=$("mgl");(d.versions||[]).forEach(function(v){var lbl=document.createElement("label");lbl.className="mgi";lbl.title=v.id;lbl.innerHTML='<input type="checkbox" value="'+es(v.id)+'" onchange="upMC()"> '+es(v.label);box.appendChild(lbl)});upMC()}catch(e){}}
+async function lM(){
+  try{
+    var r=await fetch(B+"/api/claude_45_versions"),
+        d=await r.json();
+    if(!d.ok)return;
+    var box=$("mgl");
+    box.innerHTML="";  // 清空旧的
+    (d.versions||[]).forEach(function(v){
+      var lbl=document.createElement("label");
+      lbl.className="mgi";
+      lbl.title=v.id;
+      lbl.innerHTML='<input type="checkbox" value="'+es(v.id)+'" onchange="upMC()"> '+es(v.label);
+      box.appendChild(lbl)
+    });
+    upMC()
+  }catch(e){}
+}
+
+// 手动刷新模型列表（从扫描页面跳转时调用）
+async function refreshModels(){
+  await lM();
+}
+
+// 页面加载时检查是否有新模型被添加（通过sessionStorage标记）
+document.addEventListener("DOMContentLoaded",async function(){
+  await lR();
+  await lM();
+  
+  // 检查是否从扫描页面跳转过来，如果是则刷新模型列表
+  var fromScan=sessionStorage.getItem("from_scan");
+  if(fromScan){
+    sessionStorage.removeItem("from_scan");
+    await refreshModels();
+    // 显示提示信息
+    var box=$("mgl");
+    var banner=document.createElement("div");
+    banner.style.cssText="padding:8px;background:#dcfce7;border:1px solid #bbf7d0;border-radius:4px;margin-top:8px;font-size:11px;color:#16a34a;display:flex;align-items:center;gap:6px";
+    banner.innerHTML='<strong>✓</strong> 新模型已添加！选择要创建的模型和区域';
+    if(box.parentElement) box.parentElement.appendChild(banner);
+  }
+});
 
 async function vrf(){var c=creds();if(!c.access_key||!c.secret_key){sR("createMsg","请填写 ak/sk","wa");return}var btn=$("btnv");btn.disabled=true;btn.textContent="验证中...";try{var r=await fetch(B+"/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c)}),d=await r.json();if(d.ok){$("aid").textContent=d.account_id;$("ar").style.display="flex";BedrockPersist.onVerified(d.account_id);sR("createMsg","已验证","ok")}else sR("createMsg",d.error,"er")}finally{btn.disabled=false;btn.textContent="验证"}}
 
