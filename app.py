@@ -135,6 +135,15 @@ CLAUDE_VERSIONS = [
         },
     },
     {
+        "id": "anthropic.claude-opus-4-5-20251101-v1:0",
+        "label": "Claude Opus 4.5",
+        "sources": {
+            "us": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+            "eu": "eu.anthropic.claude-opus-4-5-20251101-v1:0",
+            "global": "global.anthropic.claude-opus-4-5-20251101-v1:0",
+        },
+    },
+    {
         "id": "anthropic.claude-sonnet-4-20250514-v1:0",
         "label": "Claude Sonnet 4",
         "sources": {
