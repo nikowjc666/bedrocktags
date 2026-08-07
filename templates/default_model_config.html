@@ -675,6 +675,13 @@ async function exportExcel(){
   }
 }
 
+// ── 显示错误信息 ──────────────────────────────────────────────────
+function showError(idx){
+  var e=configEntries[idx];
+  if(!e||!e.testError)return;
+  alert("测试失败 ("+es(e.region)+" / "+es(e.model_label)+")\n\n失败原因：\n"+es(e.testError));
+}
+
 // ── 单条测试 ──────────────────────────────────────────────────────
 async function testOne(idx){
   var e=configEntries[idx];
@@ -690,11 +697,17 @@ async function testOne(idx){
       stEl.textContent="✓ 可用";stEl.className="status-ok";
     }else{
       e.testStatus="✗ 失败";
+      e.testError=j.reason||j.error||"未知错误";
       stEl.textContent="✗ 失败";stEl.className="status-er";
+      stEl.title=e.testError;
+      stEl.style.cursor="pointer";
+      stEl.onclick=function(){showError(idx)};
     }
   }catch(err){
     e.testStatus="✗ 网络错误";
+    e.testError=err.message||"网络连接失败";
     stEl.textContent="✗ 网络错误";stEl.className="status-er";
+    stEl.title=e.testError;
   }
 }
 
@@ -729,11 +742,21 @@ async function testAll(){
           if(stEl){stEl.textContent="✓ 可用";stEl.className="status-ok";}
         }else{
           e.testStatus="✗ 失败";fail++;
-          if(stEl){stEl.textContent="✗ 失败";stEl.className="status-er";}
+          e.testError=j.reason||j.error||"未知错误";
+          if(stEl){
+            stEl.textContent="✗ 失败";stEl.className="status-er";
+            stEl.title=e.testError;
+            stEl.style.cursor="pointer";
+            stEl.onclick=function(){showError(idx)};
+          }
         }
       }catch(err){
         e.testStatus="✗ 网络错误";fail++;
-        if(stEl){stEl.textContent="✗ 网络错误";stEl.className="status-er";}
+        e.testError=err.message||"网络连接失败";
+        if(stEl){
+          stEl.textContent="✗ 网络错误";stEl.className="status-er";
+          stEl.title=e.testError;
+        }
       }
       upProg();
     })();

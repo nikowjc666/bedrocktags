@@ -1678,14 +1678,44 @@ def verify_default_model():
                     invoke_id = pid
                     break
 
-        brt.converse(
-            modelId=invoke_id,
-            messages=[{"role": "user", "content": [{"text": "hi"}]}],
-            inferenceConfig={"maxTokens": 10},
-        )
-        return jsonify({"ok": True, "model_id": model_id, "invoke_id": invoke_id, "region": region})
+        try:
+            brt.converse(
+                modelId=invoke_id,
+                messages=[{"role": "user", "content": [{"text": "hi"}]}],
+                inferenceConfig={"maxTokens": 10},
+            )
+            return jsonify({"ok": True, "model_id": model_id, "invoke_id": invoke_id, "region": region})
+        except botocore.exceptions.ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            error_msg = e.response.get("Error", {}).get("Message", "")
+            
+            # 根据错误类型提供诊断信息
+            reason = ""
+            if error_code == "ValidationException":
+                reason = "模型在此区域不可用"
+            elif error_code in ("AccessDenied", "AccessDeniedException", "UnauthorizedException"):
+                reason = "访问权限不足 - IAM 用户缺少 bedrock:InvokeModel 权限"
+            elif error_code in ("ThrottlingException", "TooManyRequestsException"):
+                reason = "请求被限流，请稍候后重试"
+            elif error_code == "ResourceNotFoundException":
+                reason = "模型或 Inference Profile 不存在"
+            elif "on-demand throughput" in error_msg or "isn't supported" in error_msg:
+                reason = "无法直接调用 Foundation Model，需要使用 Inference Profile ID"
+            else:
+                reason = error_msg or error_code or "未知错误"
+            
+            return jsonify({
+                "ok": False, 
+                "error": _aws_error(e),
+                "reason": reason,
+                "error_code": error_code
+            }), 400
     except Exception as e:
-        return jsonify({"ok": False, "error": _aws_error(e)}), 400
+        return jsonify({
+            "ok": False, 
+            "error": _aws_error(e),
+            "reason": str(e)
+        }), 400
 
 
 @app.route("/api/export_default_config_excel", methods=["POST"])
