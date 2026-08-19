@@ -94,11 +94,6 @@ CLAUDE_VERSIONS = [
         },
     },
     {
-        "id": "anthropic.claude-opus-4-5-20251101-v1:0",
-        "label": "Claude Opus 4.5",
-        "sources": {"global": "global.anthropic.claude-opus-4-5-20251101-v1:0"},
-    },
-    {
         "id": "anthropic.claude-sonnet-4-6",
         "label": "Claude Sonnet 4.6",
         "sources": {
