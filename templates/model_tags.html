@@ -650,7 +650,7 @@ function clearResults(){
 }
 document.addEventListener("DOMContentLoaded",async function(){var d=BedrockPersist.init();await lR();await lM();BedrockPersist.afterListsReady(d);_persistReady=true;loadResults()});
 
-async function lR(){try{var r=await fetch(B+"/api/regions"),d=await r.json();if(!d.ok)return;var box=$("rgl");d.regions.forEach(function(reg){var lbl=document.createElement("label");lbl.className="rgi";lbl.innerHTML='<input type="checkbox" value="'+es(reg)+'" onchange="upRC()"> '+es(reg);box.appendChild(lbl)});upRC()}catch(e){}}
+async function lR(){try{var r=await fetch(B+"/api/regions"),d=await r.json();if(!d.ok)return;var box=$("rgl");box.innerHTML="";d.regions.forEach(function(reg){var lbl=document.createElement("label");lbl.className="rgi";lbl.innerHTML='<input type="checkbox" value="'+es(reg)+'" onchange="upRC()"> '+es(reg);box.appendChild(lbl)});upRC()}catch(e){}}
 
 async function lM(){
   try{
@@ -676,10 +676,8 @@ async function refreshModels(){
 }
 
 // 页面加载时检查是否有新模型被添加（通过sessionStorage标记）
+// 注意：lR() 和 lM() 已在上方 DOMContentLoaded 中调用，此处不重复调用
 document.addEventListener("DOMContentLoaded",async function(){
-  await lR();
-  await lM();
-  
   // 检查是否从扫描页面跳转过来，如果是则刷新模型列表
   var fromScan=sessionStorage.getItem("from_scan");
   if(fromScan){
