@@ -251,7 +251,9 @@ table tbody tr:last-child td{border-bottom:none}
         </div>
       </div>
       <!-- 标签 -->
-      <div class="fg" style="margin-top:10px;margin-bottom:5px"><label>配置标签（将写入 excel）</label></div>
+      <div class="fg" style="margin-top:10px;margin-bottom:5px">
+        <label>配置标签（将写入 excel）<span id="iamTagHint" style="color:var(--t3);font-weight:400;margin-left:6px;font-size:10px"></span></label>
+      </div>
       <div class="tg" id="tgg">
         <div class="tr">
           <input class="tk" placeholder="key">
@@ -486,12 +488,66 @@ async function vrf(){
       $("ar").style.display="";
       BedrockPersist.onVerified(AID);
       upCount();
+      // 验证成功后自动加载 IAM 标签（不阻塞主流程）
+      loadIamTags();
     }else{
       $("ar").style.display="none";AID="";
       sR("verifyMsg",j.error||"验证失败","er");
     }
   }catch(e){sR("verifyMsg","网络错误: "+e.message,"er")}
   btn.disabled=false;btn.textContent="验证";
+}
+
+// ── 从 IAM 加载标签并填入标签表格 ───────────────────────────────
+async function loadIamTags(){
+  var hint=$("iamTagHint");
+  if(hint) hint.textContent="正在读取 IAM 标签...";
+  try{
+    var r=await fetch("/api/get_iam_tags",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({access_key:AK,secret_key:SK})});
+    var j=await r.json();
+    if(j.ok && j.tags && Object.keys(j.tags).length>0){
+      fillTagsFromIam(j.tags);
+      if(hint) hint.textContent="← 已从 IAM 读取，可修改（仅影响 excel，不写回 IAM）";
+    }else{
+      if(hint) hint.textContent="（未找到 IAM 标签，可手动填写）";
+    }
+  }catch(e){
+    if(hint) hint.textContent="（读取 IAM 标签失败，可手动填写）";
+  }
+}
+
+// ── 将 IAM 标签填入标签表格（覆盖现有内容） ──────────────────────
+function fillTagsFromIam(tags){
+  var g=$("tgg");
+  g.innerHTML="";
+  var entries=Object.entries(tags);
+  if(!entries.length){
+    // 没有标签时保留空的第一行
+    var r=document.createElement("div");
+    r.className="tr";
+    r.innerHTML='<input class="tk" placeholder="key"><input class="tv" placeholder="value"><button class="btn bsm" onclick="addTg()">+ 添加行</button>';
+    g.appendChild(r);
+    return;
+  }
+  entries.forEach(function(kv,i){
+    var r=document.createElement("div");
+    r.className="tr";
+    // 每行都有删除按钮，最后一行额外加"+ 添加行"按钮
+    var btns = '<button class="rm" onclick="this.parentElement.remove();BedrockPersist.save()" title="删除此行">✕</button>';
+    if(i===entries.length-1){
+      btns='<button class="btn bsm" onclick="addTg()">+ 添加行</button>'+btns;
+    }
+    r.innerHTML=
+      '<input class="tk" placeholder="key" value="'+es(kv[0])+'">'+
+      '<input class="tv" placeholder="value" value="'+es(kv[1])+'">'+
+      btns;
+    r.querySelectorAll("input").forEach(function(inp){
+      inp.addEventListener("input",function(){BedrockPersist.save()});
+    });
+    g.appendChild(r);
+  });
+  BedrockPersist.save();
 }
 
 // ── 生成配置列表并查询配额 ────────────────────────────────────────

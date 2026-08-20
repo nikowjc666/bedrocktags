@@ -450,6 +450,37 @@ def verify():
         return jsonify({"ok": False, "error": _aws_error(e)}), 400
 
 
+@app.route("/api/get_iam_tags", methods=["POST"])
+def get_iam_tags():
+    """获取当前 AK/SK 对应的 IAM 用户或角色的标签（只读，不写回 IAM）"""
+    data = request.get_json() or {}
+    ak, sk, _ = _creds(data)
+    if not ak or not sk:
+        return jsonify({"ok": False, "error": "请填写 AK/SK"}), 400
+    try:
+        sess = boto3.Session(aws_access_key_id=ak, aws_secret_access_key=sk)
+        sts = sess.client("sts")
+        identity = sts.get_caller_identity()
+        arn = identity.get("Arn", "")
+        iam = sess.client("iam")
+        tags = {}
+        # 判断是 IAM User 还是 AssumedRole
+        if ":user/" in arn:
+            username = arn.split(":user/", 1)[1]
+            resp = iam.list_user_tags(UserName=username)
+            for t in resp.get("Tags", []):
+                tags[t["Key"]] = t["Value"]
+        elif ":assumed-role/" in arn:
+            # assumed-role/RoleName/SessionName → 取 RoleName
+            role_name = arn.split(":assumed-role/", 1)[1].split("/")[0]
+            resp = iam.list_role_tags(RoleName=role_name)
+            for t in resp.get("Tags", []):
+                tags[t["Key"]] = t["Value"]
+        return jsonify({"ok": True, "tags": tags, "arn": arn})
+    except Exception as e:
+        return jsonify({"ok": False, "error": _aws_error(e)}), 400
+
+
 @app.route("/api/regions", methods=["GET"])
 def regions():
     return jsonify({"ok": True, "regions": REGIONS})
