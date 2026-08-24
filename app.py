@@ -1541,21 +1541,25 @@ def query_model_quotas():
         _build_code_map(ak, sk)
     
     def _format_quota(value):
-        """格式化配额数值：满足 M 用 M，满足 K 用 K，否则原值"""
+        """格式化配额数值：统一以 M 为单位（保留必要小数位），小于 1M 则用 K"""
         if value is None:
             return ""
         try:
-            num = int(value)
+            num = float(value)
             if num == 0:
                 return "0"
-            # 满足 M (整除 1,000,000)
-            if num >= 1_000_000 and num % 1_000_000 == 0:
-                return f"{num // 1_000_000}M"
-            # 满足 K (整除 1,000)
-            if num >= 1_000 and num % 1_000 == 0:
-                return f"{num // 1_000}K"
-            # 否则原值
-            return str(num)
+            if num >= 1_000_000:
+                m = num / 1_000_000
+                # 整数 M 不显示小数，否则保留 1 位
+                if m == int(m):
+                    return f"{int(m)}M"
+                return f"{m:.1f}M"
+            if num >= 1_000:
+                k = num / 1_000
+                if k == int(k):
+                    return f"{int(k)}K"
+                return f"{k:.1f}K"
+            return str(int(num))
         except (ValueError, TypeError):
             return str(value)
     
