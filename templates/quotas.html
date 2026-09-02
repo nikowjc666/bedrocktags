@@ -140,6 +140,12 @@ table tbody tr:last-child td{border-bottom:none}
     <a href="/default-model-config">默认模型</a>
     <a href="/mfa">MFA 验证码</a>
     <a href="/scan-models">扫描新模型</a>
+    <span class="nav-sep" style="color:rgba(255,255,255,.2);font-size:11px;padding:0 2px">|</span>
+    <a href="/gpt-accounts">gpt 账号</a>
+    <a href="/gpt-test">gpt 测试</a>
+    <a href="/gpt-quotas">gpt 配额</a>
+    <a href="/gpt-default">gpt 默认</a>
+    <a href="/gpt-scan">gpt 扫描</a>
   </nav>
 </header>
 
@@ -520,6 +526,20 @@ function renderGroups(rows, useGlobal, regions){
   orderedRegions.forEach(function(region){
     var regionRows=byRegion[region];
     if(!regionRows||!regionRows.length)return;
+
+    // 去重：同一模型同一指标只保留优先级最高的一条
+    // 优先级：global > cross-region > bedrock-mantle > on-demand
+    var deduped={};
+    regionRows.forEach(function(q){
+      var p=parseQuotaName(q.name);
+      var key=p.model+'|'+p.type;
+      var nl=(q.name||"").toLowerCase();
+      var priority=nl.startsWith("global")?3:nl.startsWith("cross-region")?2:nl.startsWith("on-demand")?1:0;
+      if(!deduped[key]||priority>deduped[key].priority){
+        deduped[key]={row:q,priority:priority};
+      }
+    });
+    var regionRows=Object.values(deduped).map(function(x){return x.row;});
 
     var div=document.createElement("div");
     div.style.cssText="border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden";

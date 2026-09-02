@@ -1,0 +1,507 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>GPT 模型配额 · AWS Bedrock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f0f4ff;--bg2:#e8eeff;--surface:#fff;--surface2:#f8fafc;
+  --border:#e2e8f0;--text:#0f172a;--t2:#64748b;--t3:#94a3b8;
+  --pr:#7c3aed;--ph:#6d28d9;--pl:#f5f3ff;
+  --ok:#16a34a;--ok-bg:#f0fdf4;--ok-bd:#bbf7d0;
+  --er:#dc2626;--er-bg:#fef2f2;--er-bd:#fecaca;
+  --wa:#d97706;--wa-bg:#fffbeb;--wa-bd:#fde68a;
+  --gpt:#10a37f;--r:7px;--r-sm:5px;
+  --shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Inter",-apple-system,sans-serif;background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde8ff 100%);background-attachment:fixed;color:var(--text);font-size:12px;line-height:1.45;min-height:100vh;text-transform:lowercase}
+input,textarea,select{font-family:inherit;text-transform:none}
+.h{background:linear-gradient(135deg,#1a3a2e 0%,#1a2e3a 60%,#1a3530 100%);padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;height:44px;box-shadow:0 1px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
+.h-l{display:flex;align-items:center;gap:10px}
+.nav{display:flex;gap:4px;flex-wrap:wrap}
+.nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:11px;padding:4px 10px;border-radius:4px;transition:all .15s}
+.nav a:hover,.nav a.act{color:#fff;background:rgba(255,255,255,.12)}
+.nav-sep{color:rgba(255,255,255,.2);font-size:11px;padding:0 2px;align-self:center}
+.h-logo{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--gpt) 0%,#34d399 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.h-logo svg{color:#fff;width:16px;height:16px}
+.h-text h1{font-size:14px;font-weight:600;color:#fff}
+.h-text .s{color:rgba(255,255,255,.5);font-size:11px}
+.b{max-width:920px;margin:14px auto;padding:0 14px 28px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;animation:fadeUp .4s ease both}
+.card:nth-child(1){animation-delay:.05s}.card:nth-child(2){animation-delay:.1s}.card:nth-child(3){animation-delay:.15s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.sht{display:flex;align-items:center;gap:7px;padding:8px 12px;font-size:12px;font-weight:600;background:var(--surface2);border-bottom:1px solid var(--border)}
+.sht-step{width:18px;height:18px;border-radius:50%;background:var(--pr);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sht-sub{font-weight:400;color:var(--t2);font-size:11px;margin-left:auto}
+.sb{padding:12px}
+.fr{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px}
+.fr:last-child{margin-bottom:0}
+.fg{display:flex;flex-direction:column;gap:3px;min-width:100px;flex:1}
+.fg label{font-size:11px;color:var(--t2);font-weight:500}
+.fg input{height:30px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;outline:none;background:var(--surface);color:var(--text);transition:border-color .15s}
+.fg input:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(124,58,237,.1)}
+.fg input::placeholder{color:var(--t3)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:30px;padding:0 11px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);white-space:nowrap;transition:all .15s}
+.btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.bp{background:linear-gradient(135deg,var(--pr) 0%,#8b5cf6 100%);color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(124,58,237,.3)}
+.bp:hover{color:#fff;border-color:transparent}
+.bsm{height:26px;padding:0 8px;font-size:11px}
+.bdge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:12px;font-size:10px;font-weight:500}
+.bg-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+.st{display:flex;align-items:flex-start;gap:6px;padding:7px 10px;border-radius:var(--r-sm);font-size:11px;margin-top:8px;font-weight:500}
+.st.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
+.st.er{background:var(--er-bg);border:1px solid var(--er-bd);color:var(--er)}
+.st.wa{background:var(--wa-bg);border:1px solid var(--wa-bd);color:var(--wa)}
+.st.info{background:var(--pl);border:1px solid #ddd6fe;color:var(--pr)}
+.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--pr);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fx{display:flex;align-items:center;gap:8px}
+.mt8{margin-top:8px}
+/* 区域网格 */
+.region-grid{display:flex;flex-wrap:wrap;gap:4px;max-height:100px;overflow-y:auto;padding:6px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2);scrollbar-width:thin}
+.rgi{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:4px;font-size:11px;cursor:pointer;background:var(--surface);border:1px solid var(--border);transition:all .15s;user-select:none}
+.rgi:has(input:checked){background:var(--pl);border-color:#c4b5fd;color:var(--pr)}
+.rgi input{accent-color:var(--pr);width:11px;height:11px;cursor:pointer;margin:0}
+.rg-bar{display:flex;align-items:center;gap:8px;margin-top:5px;font-size:11px;color:var(--t2);flex-wrap:wrap}
+.rg-bar label{cursor:pointer;display:flex;align-items:center;gap:4px}
+/* 模型列表 */
+.model-list{display:flex;flex-direction:column;gap:4px;max-height:180px;overflow-y:auto;padding:6px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2)}
+.model-item{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:3px;font-size:11px;cursor:pointer;user-select:none}
+.model-item:hover{background:var(--pl)}
+.model-item:has(input:checked){background:var(--pl);color:var(--pr)}
+.model-item input{accent-color:var(--pr);width:11px;height:11px;cursor:pointer;margin:0}
+/* 配额类型 */
+.qt-lbl{display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;padding:2px 0}
+/* 结果 */
+.emp{padding:24px;text-align:center;color:var(--t2);font-size:11px;display:flex;flex-direction:column;align-items:center;gap:5px}
+.footer{text-align:center;color:var(--t3);font-size:10px;padding:4px 0 0}
+</style>
+</head>
+<body>
+<header class="h">
+  <div class="h-l">
+    <div class="h-logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M22.2 11.4a5.5 5.5 0 00-.42-4.26 5.57 5.57 0 00-6-2.65 5.5 5.5 0 00-4.14-1.84 5.57 5.57 0 00-5.31 3.86 5.5 5.5 0 00-3.67 2.66 5.57 5.57 0 00.69 6.52 5.5 5.5 0 00.42 4.25 5.57 5.57 0 006 2.66 5.5 5.5 0 004.14 1.84 5.57 5.57 0 005.31-3.86 5.5 5.5 0 003.67-2.65 5.57 5.57 0 00-.69-6.53z"/></svg></div>
+    <div class="h-text"><h1>GPT 模型配额</h1><div class="s">aws bedrock service quotas · tpm · tpd · rpm · 多区域 · 导出 excel</div></div>
+  </div>
+  <nav class="nav">
+    <a href="/">profile 标签</a><a href="/model-tags">创建配置</a><a href="/delete-profiles">删除配置</a>
+    <a href="/test-profile">测试模型</a><a href="/quotas">模型配额</a><a href="/data-retention">数据驻留</a>
+    <a href="/default-model-config">默认模型</a><a href="/mfa">MFA</a><a href="/scan-models">扫描</a>
+    <span class="nav-sep">|</span>
+    <a href="/gpt-accounts">GPT 账号</a><a href="/gpt-test">GPT 测试</a>
+    <a href="/gpt-quotas" class="act">GPT 配额</a><a href="/gpt-default">GPT 默认</a>
+  </nav>
+</header>
+
+<div class="b">
+  <!-- step 1: 凭证 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">1</span> aws 凭证<span class="sht-sub">验证后方可查询</span></div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:2"><label>access key id</label><input id="ak" type="text" placeholder="akia..." autocomplete="off"></div>
+        <div class="fg" style="flex:2"><label>secret access key</label><input id="sk" type="password" placeholder="..." autocomplete="off"></div>
+        <div class="fg" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn bp" id="btnV" onclick="vrf()">验证</button></div>
+      </div>
+      <div class="fr" id="ar" style="display:none">
+        <div class="fg" style="flex:1"><label>账号 id</label><div class="fx"><span id="aid"></span><span class="bdge bg-ok">✓ 已验证</span></div></div>
+      </div>
+      <div id="vrfMsg"></div>
+    </div>
+  </div>
+
+  <!-- step 2: 查询配置 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">2</span> 查询配置<span class="sht-sub">选择区域、模型、配额类型后查询</span></div>
+    <div class="sb">
+      <!-- 区域 -->
+      <div class="fr" style="margin-bottom:10px">
+        <div class="fg" style="flex:1">
+          <label>地域（多选）</label>
+          <div class="region-grid" id="rgl"></div>
+          <div class="rg-bar">
+            <label><input type="checkbox" id="saR" onchange="taR()"> 全选</label>
+            <span id="rc" style="color:var(--t3)">（已选 0）</span>
+            <button type="button" class="btn bsm" onclick="selRegionSet(['us-east-1','us-east-2','us-west-1','us-west-2'])">美国</button>
+            <button type="button" class="btn bsm" onclick="selRegionSet(['ap-southeast-1','ap-northeast-1'])">亚太</button>
+            <button type="button" class="btn bsm" onclick="selRegionSet(['eu-west-1','eu-central-1'])">欧洲</button>
+          </div>
+        </div>
+      </div>
+      <!-- 模型 + 配额类型 -->
+      <div class="fr" style="align-items:flex-start;gap:12px">
+        <div class="fg" style="flex:1">
+          <label>模型（多选）</label>
+          <div class="model-list" id="modelList"></div>
+          <div class="rg-bar">
+            <label><input type="checkbox" id="saModel" onchange="taModel()"> 全选</label>
+          </div>
+        </div>
+        <div class="fg" style="flex:1">
+          <label>配额类型（多选）</label>
+          <div style="display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2)">
+            <label class="qt-lbl"><input type="checkbox" value="tpm" class="qt-cb" checked style="accent-color:var(--pr)"> TPM（每分钟 Token）</label>
+            <label class="qt-lbl"><input type="checkbox" value="tpd" class="qt-cb" checked style="accent-color:var(--pr)"> TPD（每天 Token）</label>
+            <label class="qt-lbl"><input type="checkbox" value="rpm" class="qt-cb" style="accent-color:var(--pr)"> RPM（每分钟请求数）</label>
+            <hr style="border:none;border-top:1px solid var(--border);margin:2px 0">
+            <label class="qt-lbl" title="勾选后显示 global cross-region 配额"><input type="checkbox" id="cbGlobal" checked style="accent-color:var(--pr)"> Global（跨地域汇总配额）</label>
+          </div>
+        </div>
+      </div>
+      <div class="fr mt8">
+        <button class="btn bp" id="btnQuery" onclick="queryQuotas()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          查询配额
+        </button>
+        <button class="btn" id="btnRefresh" onclick="queryQuotas(true)" title="从 AWS 重新拉取最新配额代码">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          刷新配额代码
+        </button>
+        <button class="btn bsm" id="btnDebug" onclick="debugQuota()" title="诊断：查看服务器 code_map 状态">🔍 诊断</button>
+      </div>
+      <div id="queryMsg"></div>
+    </div>
+  </div>
+
+  <!-- step 3: 配额结果 -->
+  <div class="card">
+    <div class="sht">
+      <span class="sht-step">3</span> 配额结果
+      <span class="sht-sub" id="totalInfo">暂无数据</span>
+      <button class="btn bsm" id="btnExport" onclick="exportExcel()" style="margin-left:auto;display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:11px;height:11px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        下载 Excel
+      </button>
+    </div>
+    <div id="qEmp" class="emp">查询后将在此显示配额数据</div>
+    <div id="qLoading" class="emp" style="display:none"><span class="sp"></span> 查询中，请稍候...</div>
+    <div id="qGroups" style="padding:12px;display:flex;flex-direction:column;gap:14px"></div>
+    <div id="errSummary"></div>
+  </div>
+
+  <div class="footer">gpt 模型配额 · aws bedrock service quotas</div>
+</div>
+
+<script src="/static/persist.js"></script>
+<script>
+var B="", _allRows=[], _persistReady=false, _codeMapRefreshed=false;
+function $(i){return document.getElementById(i)}
+function es(s){if(!s)return"";var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+
+function sR(id,msg,type){var el=$(id);if(el)el.innerHTML='<div class="st '+type+'" style="white-space:pre-line">'+es(msg)+'</div>'}
+function creds(){return{access_key:$("ak").value.trim(),secret_key:$("sk").value.trim()}}
+
+function getSelRegions(){var rs=[];document.querySelectorAll("#rgl input:checked").forEach(function(cb){rs.push(cb.value)});return rs;}
+function upRC(){
+  var n=document.querySelectorAll("#rgl input:checked").length,all=document.querySelectorAll("#rgl input").length;
+  $("rc").textContent="（已选 "+n+"）";
+  $("saR").checked=n===all&&all>0;$("saR").indeterminate=n>0&&n<all;
+  if(_persistReady)BedrockPersist.save();
+}
+function taR(){var c=$("saR").checked;document.querySelectorAll("#rgl input").forEach(function(cb){cb.checked=c});upRC();}
+function selRegionSet(arr){document.querySelectorAll("#rgl input").forEach(function(cb){cb.checked=arr.indexOf(cb.value)!==-1;});upRC();}
+function getSelModels(){var ms=[];document.querySelectorAll(".model-cb:checked").forEach(function(cb){ms.push(cb.value)});return ms;}
+function taModel(){var c=$("saModel").checked;document.querySelectorAll(".model-cb").forEach(function(cb){cb.checked=c});}
+
+document.addEventListener("DOMContentLoaded",async function(){
+  var d=BedrockPersist.init();
+  await Promise.all([loadRegions(), loadModelList()]);
+  BedrockPersist.afterListsReady(d);
+  _persistReady=true;
+});
+
+async function loadModelList(){
+  try{
+    var r=await fetch(B+"/api/gpt/models"),j=await r.json();
+    if(!j.ok)return;
+    var box=$("modelList");
+    (j.models||[]).forEach(function(m){
+      var lbl=document.createElement("label");lbl.className="model-item";
+      // value 传 label（与 Claude 侧保持一致，query_quotas 用 label 做关键词匹配）
+      lbl.innerHTML='<input type="checkbox" class="model-cb" value="'+es(m.label)+'" data-id="'+es(m.id)+'"> '+es(m.label);
+      box.appendChild(lbl);
+    });
+  }catch(e){}
+}
+
+async function loadRegions(){
+  try{
+    var r=await fetch(B+"/api/regions"),d=await r.json();
+    if(!d.ok)return;
+    var box=$("rgl");
+    d.regions.forEach(function(reg){
+      var lbl=document.createElement("label");lbl.className="rgi";
+      lbl.innerHTML='<input type="checkbox" value="'+es(reg)+'" onchange="upRC()"> '+es(reg);
+      box.appendChild(lbl);
+    });
+    var first=box.querySelector('input[value="us-east-1"]');
+    if(first)first.checked=true;
+    upRC();
+  }catch(e){}
+}
+
+async function vrf(){
+  var c=creds();
+  if(!c.access_key||!c.secret_key){sR("vrfMsg","请填写 ak/sk","wa");return}
+  var btn=$("btnV");btn.disabled=true;btn.textContent="验证中...";
+  try{
+    var r=await fetch(B+"/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c)});
+    var d=await r.json();
+    if(d.ok){
+      $("aid").textContent=d.account_id;$("ar").style.display="flex";
+      BedrockPersist.onVerified(d.account_id);
+      // 验证成功后同步刷新 code_map（确保 GPT 模型配额被收录），完成后才提示"已验证"
+      sR("vrfMsg",'<span class="sp"></span> 正在加载配额代码...','info');
+      try{
+        await fetch(B+"/api/query_quotas",{
+          method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,
+            regions:["us-east-1"],service_code:"bedrock",quota_types:["tpm"],
+            models:["GPT-5.6 Sol"],use_global:true,force_refresh:true})
+        });
+        _codeMapRefreshed=true;
+      }catch(e2){}
+      sR("vrfMsg","已验证","ok");
+    }else sR("vrfMsg",d.error,"er");
+  }catch(e){sR("vrfMsg","错误："+e.message,"er")}
+  btn.disabled=false;btn.textContent="验证";
+}
+
+async function queryQuotas(forceRefresh){
+  var c=creds();
+  if(!c.access_key||!c.secret_key){sR("queryMsg","请先验证凭证","wa");return}
+  var regions=getSelRegions();
+  if(!regions.length){sR("queryMsg","请选择区域","wa");return}
+  var quotaTypes=[];document.querySelectorAll(".qt-cb:checked").forEach(function(cb){quotaTypes.push(cb.value)});
+  var selModels=getSelModels();
+  if(!selModels.length){sR("queryMsg","请至少选择一个模型","wa");return}
+
+  var btn=$("btnQuery"),btnR=$("btnRefresh");
+  btn.disabled=true;btnR.disabled=true;
+  btn.innerHTML='<span class="sp"></span> 查询中...';
+  if(forceRefresh)btnR.innerHTML='<span class="sp"></span> 刷新中...';
+  $("qEmp").style.display="none";
+  $("qLoading").style.display="flex";
+  $("qLoading").innerHTML='<span class="sp"></span> '+(forceRefresh?"正在刷新配额代码...":"正在查询 "+regions.length+" 个区域...");
+  $("qGroups").innerHTML="";
+  $("totalInfo").textContent="查询中...";
+  $("errSummary").innerHTML="";
+  $("queryMsg").innerHTML="";
+  $("btnExport").style.display="none";
+  _allRows=[];
+
+  try{
+    // GPT 配额页：第一次查询时强制刷新 code_map，确保 GPT 模型配额被收录
+    var shouldRefresh = forceRefresh || !_codeMapRefreshed;
+    if(shouldRefresh) _codeMapRefreshed = true;
+
+    // 直接复用 Claude 侧的 /api/query_quotas 接口
+    var r=await fetch(B+"/api/query_quotas",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        access_key:c.access_key,
+        secret_key:c.secret_key,
+        regions:regions,
+        service_code:"bedrock",
+        quota_types:quotaTypes,
+        models:selModels,
+        use_global:$("cbGlobal").checked,
+        force_refresh: shouldRefresh
+      })
+    });
+    var d=await r.json();
+    $("qLoading").style.display="none";
+
+    if(!d.ok){sR("queryMsg",d.error,"er");$("qEmp").style.display="flex";$("totalInfo").textContent="暂无数据";return}
+
+    _allRows=d.quotas||[];
+
+    if(!_allRows.length){
+      $("qEmp").style.display="flex";
+      $("qEmp").innerHTML='<div>未查到相关配额</div>'
+        +(d.debug_model_kws?'<div style="font-size:10px;color:var(--t3);margin-top:4px">匹配关键词: '+es(d.debug_model_kws.join(", "))+'</div>':"")
+        +(d.debug_map_size?'<div style="font-size:10px;color:var(--t3)">配额代码库共 '+d.debug_map_size+' 条，可点「刷新配额代码」重建</div>':"");
+      $("totalInfo").textContent="暂无数据";
+      sR("queryMsg","未匹配到配额，可点击「刷新配额代码」后重试","wa");
+    }else{
+      renderGroups(_allRows, d.use_global, d.regions||regions);
+      var modeLabel=d.use_global?" · global 模式":" · cross-region 模式";
+      $("totalInfo").textContent="共 "+_allRows.length+" 条 · "+regions.length+" 个区域"+modeLabel;
+      sR("queryMsg","查询完成，"+regions.length+" 个区域，共 "+_allRows.length+" 条"+(forceRefresh?" [已刷新配额代码]":""),"ok");
+      $("btnExport").style.display="inline-flex";
+    }
+
+    if(d.errors&&d.errors.length){
+      var permErrors=d.errors.filter(function(e){return e.type==="permission"});
+      var otherErrors=d.errors.filter(function(e){return e.type!=="permission"});
+      var errHtml='<div style="margin:8px 12px 12px">';
+      if(permErrors.length){
+        errHtml+='<div class="st er" style="flex-direction:column;align-items:flex-start;gap:4px;margin-bottom:6px"><strong>⚠️ 权限不足：</strong>';
+        permErrors.forEach(function(e){errHtml+='<div style="font-weight:400;font-size:11px;font-family:monospace">'+es(e.region)+'</div>';});
+        errHtml+='</div>';
+      }
+      if(otherErrors.length){
+        errHtml+='<div class="st wa" style="flex-direction:column;align-items:flex-start;gap:3px"><strong>'+otherErrors.length+' 个区域失败：</strong>';
+        otherErrors.forEach(function(e){errHtml+='<div style="font-weight:400;font-size:10px;color:var(--t2)">'+es(e.region)+'：'+es(e.error)+'</div>';});
+        errHtml+='</div>';
+      }
+      errHtml+='</div>';
+      $("errSummary").innerHTML=errHtml;
+    }
+  }catch(e){
+    $("qLoading").style.display="none";$("qEmp").style.display="flex";
+    sR("queryMsg","错误："+e.message,"er");$("totalInfo").textContent="暂无数据";
+  }finally{
+    btn.disabled=false;btnR.disabled=false;
+    btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 查询配额';
+    btnR.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:12px;height:12px"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> 刷新配额代码';
+  }
+}
+
+/* ── 渲染（与 Claude 配额页完全相同的格式） ── */
+function parseQuotaName(name){
+  var n=name||"";
+  var modelMatch=n.match(/\bfor\s+(.+)$/i);
+  var model=modelMatch?modelMatch[1].trim():n;
+  model=model.replace(/^Anthropic\s+/i,"").replace(/^OpenAI\s+/i,"");
+  var nl=n.toLowerCase();
+  var isGlobal=/^global cross-region/.test(nl);
+  var type="";
+  if(/tokens per day/i.test(nl))type="TPD";
+  else if(/tokens per minute/i.test(nl))type="TPM";
+  else if(/requests per minute/i.test(nl))type="RPM";
+  else type=n.replace(/for .+$/i,"").replace(/InvokeModel\s*/i,"").replace(/Model invocation\s*/i,"").trim();
+  return{model:model,type:type,global:isGlobal};
+}
+
+function fmtNum(v){
+  if(v===null||v===undefined)return'<span style="color:var(--t3)" title="该账号在此区域未分配此配额">—</span>';
+  var n=Number(v);
+  if(n===0)return'<span style="color:var(--er);font-weight:600">0</span>';
+  if(n>=1000000){var m=n/1000000;return(m===Math.floor(m)?Math.floor(m)+'M':m.toFixed(1)+'M')}
+  if(n>=1000){var k=n/1000;return(k===Math.floor(k)?Math.floor(k)+'K':k.toFixed(1)+'K')}
+  return String(n);
+}
+
+function renderGroups(rows, useGlobal, regions){
+  var grp=$("qGroups");grp.innerHTML="";
+  if(!rows.length){$("qEmp").style.display="flex";$("qEmp").textContent="未查到相关配额";return}
+  $("qEmp").style.display="none";
+  var modeTag=useGlobal
+    ?'<span style="margin-left:6px;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:600;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe">global</span>'
+    :'<span style="margin-left:6px;padding:1px 7px;border-radius:3px;font-size:10px;font-weight:600;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1">cross-region</span>';
+  var byRegion={};
+  rows.forEach(function(q){if(!byRegion[q.region])byRegion[q.region]=[];byRegion[q.region].push(q);});
+  var orderedRegions=regions||Object.keys(byRegion);
+  orderedRegions.forEach(function(region){
+    var regionRows=byRegion[region];
+    if(!regionRows||!regionRows.length)return;
+
+    // 去重：同一模型同一指标只保留优先级最高的
+    // 优先级：global > cross-region > bedrock-mantle > on-demand
+    var deduped={};
+    regionRows.forEach(function(q){
+      var p=parseQuotaName(q.name);
+      var key=p.model+'|'+p.type;
+      var nl=(q.name||"").toLowerCase();
+      var priority=nl.startsWith("global")?3:nl.startsWith("cross-region")?2:nl.startsWith("on-demand")?1:0;
+      if(!deduped[key]||priority>deduped[key].priority){
+        deduped[key]={row:q,priority:priority};
+      }
+    });
+    var dedupedRows=Object.values(deduped).map(function(x){return x.row;});
+
+    var div=document.createElement("div");
+    div.style.cssText="border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden";
+    div.innerHTML=
+      '<div style="padding:8px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:12px;font-weight:600;display:flex;align-items:center">'
+      +'<span style="font-family:monospace;font-size:12px;font-weight:700;color:var(--text)">'+es(region)+'</span>'
+      +modeTag
+      +'<span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--t2)">'+dedupedRows.length+' 条</span>'
+      +'</div>';
+    var tbl=document.createElement("table");
+    tbl.style.cssText="width:100%;border-collapse:collapse;font-size:12px";
+    tbl.innerHTML=
+      '<thead><tr style="background:var(--surface2)">'
+      +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border)">模型</th>'
+      +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border);width:80px">指标</th>'
+      +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border)">当前配额</th>'
+      +'<th style="padding:7px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border)">默认配额</th>'
+      +'</tr></thead>';
+    var sorted=dedupedRows.slice().sort(function(a,b){
+      var pa=parseQuotaName(a.name),pb=parseQuotaName(b.name);
+      var mc=pa.model.localeCompare(pb.model);return mc!==0?mc:pa.type.localeCompare(pb.type);
+    });
+    var tb=document.createElement("tbody");
+    sorted.forEach(function(q,i){
+      var parsed=parseQuotaName(q.name);
+      var tr=document.createElement("tr");
+      tr.style.borderBottom="1px solid var(--border)";
+      if(i%2===1)tr.style.background="var(--surface2)";
+      tr.innerHTML=
+        '<td style="padding:7px 14px">'+es(parsed.model)+'</td>'
+        +'<td style="padding:7px 14px"><span style="color:var(--pr);font-weight:600">'+es(parsed.type)+'</span></td>'
+        +'<td style="padding:7px 14px;font-family:\'SF Mono\',Consolas,monospace">'+fmtNum(q.value)+'</td>'
+        +'<td style="padding:7px 14px;font-family:\'SF Mono\',Consolas,monospace;color:var(--t2)">'+fmtNum(q.default_value)+'</td>';
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb);div.appendChild(tbl);grp.appendChild(div);
+  });
+}
+
+async function debugQuota(){
+  var c=creds();
+  if(!c.access_key||!c.secret_key){alert("请先填写 AK/SK");return}
+  var btn=$("btnDebug");btn.disabled=true;btn.textContent="诊断中...";
+  sR("queryMsg",'<span class="sp"></span> 正在诊断（会强制刷新 code_map，需要约 10-20 秒）...','info');
+  try{
+    var r=await fetch(B+"/api/gpt/debug_quota_names",{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key})});
+    var j=await r.json();
+    if(!j.ok){sR("queryMsg",j.error,"er");return}
+    _codeMapRefreshed=true;
+    var msg="=== 诊断结果 ===\n";
+    msg+="code_map 总条数: "+j.code_map_size+"\n";
+    msg+="GPT 相关条目: "+j.gpt_in_map+" 条\n";
+    msg+="模型关键词: "+j.model_kws.join(", ")+"\n\n";
+    msg+="能进入查询的条目 ("+j.targets_pass.length+" 条):\n";
+    j.targets_pass.forEach(function(n){msg+="  ✓ "+n+"\n";});
+    if(Object.keys(j.targets_fail).length){
+      msg+="\n被过滤的条目 ("+Object.keys(j.targets_fail).length+" 条):\n";
+      Object.entries(j.targets_fail).forEach(function(kv){msg+="  ✗ ["+kv[1]+"] "+kv[0]+"\n";});
+    }
+    $("queryMsg").innerHTML='<div class="st info" style="flex-direction:column;align-items:flex-start;white-space:pre;font-family:monospace;font-size:10px;line-height:1.6">'+es(msg)+'</div>';
+  }catch(e){sR("queryMsg","诊断失败: "+e.message,"er")}
+  btn.disabled=false;btn.textContent="🔍 诊断";
+}
+
+function exportExcel(){  if(!_allRows||!_allRows.length)return;
+  var accountId=$("aid").textContent.trim()||"unknown";
+  var btn=$("btnExport");btn.disabled=true;btn.textContent="生成中...";
+  fetch(B+"/api/export_quotas_excel",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({rows:_allRows,account_id:accountId,use_global:$("cbGlobal").checked})
+  }).then(function(r){
+    if(!r.ok)return r.json().then(function(d){throw new Error(d.error||"导出失败")});
+    return r.blob();
+  }).then(function(blob){
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    a.href=url;a.download="gpt-quotas-"+accountId+"-"+(new Date().toISOString().slice(0,10).replace(/-/g,""))+".xlsx";
+    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  }).catch(function(e){sR("queryMsg","导出失败："+e.message,"er");})
+  .finally(function(){
+    btn.disabled=false;
+    btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:11px;height:11px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下载 Excel';
+  });
+}
+</script>
+</body>
+</html>

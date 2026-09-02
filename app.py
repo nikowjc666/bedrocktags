@@ -1536,8 +1536,9 @@ def query_model_quotas():
     if not entries:
         return jsonify({"ok": False, "error": "无数据可查询"}), 400
     
-    # 确保 code_map 已加载
-    if not _quota_code_map:
+    # 确保 code_map 已加载，且包含 GPT/OpenAI 模型配额
+    has_openai = any("openai" in k or ("gpt" in k and "anthropic" not in k) for k in _quota_code_map)
+    if not _quota_code_map or not has_openai:
         _build_code_map(ak, sk)
     
     def _format_quota(value):
@@ -1576,33 +1577,86 @@ def query_model_quotas():
         
         try:
             client = _get_client("service-quotas", ak, sk, region)
+
+            # ── GPT/OpenAI 模型（openai. 前缀）──────────────────────
+            if model_id.startswith("openai."):
+                gpt_meta = GPT_MODEL_BY_ID.get(model_id) or {}
+                # 优先用 quota_key（精确对应 AWS quota name），回退到 label
+                qkey = (gpt_meta.get("quota_key") or gpt_meta.get("label", model_id.replace("openai.", ""))).lower()
+
+                tpm_value = tpd_value = None
+
+                # 按 Claude 侧同样的模式精确构造 quota name
+                # 格式：
+                #   "global cross-region model inference tokens per minute for {qkey}"
+                #   "global cross-region model inference tokens per day for {qkey}"
+                #   "cross-region model inference tokens per minute for {qkey}"
+                #   "on-demand model inference tokens per minute for {qkey}"
+                tpm_keys = [
+                    f"global cross-region model inference tokens per minute for {qkey}",
+                    f"cross-region model inference tokens per minute for {qkey}",
+                    f"on-demand model inference tokens per minute for {qkey}",
+                ]
+                tpd_keys = [
+                    f"global cross-region model inference tokens per day for {qkey}",
+                    f"cross-region model inference tokens per day for {qkey}",
+                    # doubled 版本作为 fallback（当没有 global cross-region 时使用）
+                    f"model invocation max tokens per day for {qkey} (doubled for cross-region calls)",
+                    f"on-demand model inference tokens per day for {qkey}",
+                ]
+
+                def _fetch_quota(code):
+                    try:
+                        v = client.get_service_quota(ServiceCode="bedrock", QuotaCode=code).get("Quota", {}).get("Value")
+                        if v is None:
+                            v = client.get_aws_default_service_quota(ServiceCode="bedrock", QuotaCode=code).get("Quota", {}).get("Value")
+                        return v
+                    except Exception:
+                        return None
+
+                for nm in tpm_keys:
+                    code = _quota_code_map.get(nm)
+                    if code:
+                        v = _fetch_quota(code)
+                        if v is not None:
+                            tpm_value = v
+                            break
+
+                for nm in tpd_keys:
+                    code = _quota_code_map.get(nm)
+                    if code:
+                        v = _fetch_quota(code)
+                        if v is not None:
+                            tpd_value = v
+                            break
+
+                if tpm_value is not None: result["tpm"] = _format_quota(tpm_value)
+                if tpd_value is not None: result["tpd"] = _format_quota(tpd_value)
+                if not result["tpm"] and not result["tpd"]:
+                    result["error"] = f"未找到配额（quota_key={qkey}）"
+                return result
+
+            # ── Claude 模型（原有逻辑不变）───────────────────────────
             ver = CLAUDE_45_BY_ID.get(model_id) or {}
             label = ver.get("label", model_id).lower()
             
             # 生成多个 label 变体进行匹配
-            # "claude sonnet 4.5" → ["claude sonnet 4.5", "claude sonnet 4.5 v1", "sonnet 4.5", "sonnet 5"]
             label_variants = [label]
             
-            # 添加 v1 后缀
             if " v1" not in label:
                 label_variants.append(f"{label} v1")
             
-            # 去掉 claude 前缀（一些 quota 用短名称）
             label_no_claude = label.replace("claude ", "").strip()
             if label_no_claude != label:
                 label_variants.append(label_no_claude)
                 if " v1" not in label_no_claude:
                     label_variants.append(f"{label_no_claude} v1")
             
-            # 特殊情况：Sonnet 5 / Fable 5 可能在 quota 里叫 sonnet 5 / fable 5
             if "sonnet" in label or "fable" in label or "opus" in label or "haiku" in label:
-                # 提取模型类型和主版本号
-                import re
-                match = re.search(r'(sonnet|fable|opus|haiku)\s+(\d+)', label_no_claude)
+                import re as _re
+                match = _re.search(r'(sonnet|fable|opus|haiku)\s+(\d+)', label_no_claude)
                 if match:
-                    model_type = match.group(1)
-                    major_ver = match.group(2)
-                    short_label = f"{model_type} {major_ver}"
+                    short_label = f"{match.group(1)} {match.group(2)}"
                     if short_label not in label_variants:
                         label_variants.append(short_label)
             
@@ -2374,16 +2428,23 @@ import concurrent.futures as _cf
 
 _CODE_MAP_PATH = _os.path.join(_os.path.dirname(__file__), "outputs", "quota_codes.json")
 _quota_code_map: dict = {}   # lower(name) → QuotaCode，全局内存
+_quota_value_map: dict = {}  # lower(name) → {value, default}，全局内存
 _quota_code_loaded = False
 
 def _load_code_map_from_disk():
-    global _quota_code_map, _quota_code_loaded
+    global _quota_code_map, _quota_value_map, _quota_code_loaded
     if _quota_code_loaded:
         return
     try:
         if _os.path.exists(_CODE_MAP_PATH):
             with open(_CODE_MAP_PATH, "r", encoding="utf-8") as f:
-                _quota_code_map = _json.load(f)
+                data = _json.load(f)
+            # 兼容旧格式（纯 code_map）和新格式（含 _values）
+            if "_values" in data:
+                _quota_value_map = data.pop("_values")
+                _quota_code_map = data
+            else:
+                _quota_code_map = data
     except Exception:
         pass
     _quota_code_loaded = True
@@ -2391,87 +2452,86 @@ def _load_code_map_from_disk():
 def _save_code_map_to_disk():
     try:
         _os.makedirs(_os.path.dirname(_CODE_MAP_PATH), exist_ok=True)
+        data = dict(_quota_code_map)
+        data["_values"] = _quota_value_map
         with open(_CODE_MAP_PATH, "w", encoding="utf-8") as f:
-            _json.dump(_quota_code_map, f, ensure_ascii=False)
+            _json.dump(data, f, ensure_ascii=False)
     except Exception:
         pass
 
 def _build_code_map(ak, sk):
-    """用 us-east-1 list_aws_default_service_quotas 建立 code_map，写入磁盘
-    
-    改进的逻辑：
-    1. 添加重试机制处理 AWS 速率限制
-    2. 确保所有页面都被完整处理
-    3. 过滤掉不需要的配额类型（batch、customization 等）
+    """建立 quota code_map，同时查默认配额和账户配额，写入磁盘
+    同时建立 _quota_value_map 存储实际配额值，避免查询时重复调用 API。
     """
-    global _quota_code_map
+    global _quota_code_map, _quota_value_map
     new_map = {}
-    
-    # 排除这些关键词的配额
+    new_val_map = {}  # nl -> {"value": float|None, "default": float|None}
+
     EXCLUDE_KEYWORDS = [
-        "batch",
-        "customization",
-        "[bedrock-mantle endpoint]",
-        "latency-optimized",
-        "provisioned",
-        "sum of in-progress",
-        "records per",
-        "minimum number",
-        "doubled for cross-region",
+        "batch", "customization", "latency-optimized", "provisioned",
+        "sum of in-progress", "records per", "minimum number",
     ]
-    
-    try:
-        client = _get_client("service-quotas", ak, sk, "us-east-1")
-        paginator = client.get_paginator("list_aws_default_service_quotas")
-        
-        # 添加重试处理
-        max_retries = 3
-        retry_count = 0
-        while retry_count < max_retries:
-            try:
-                page_count = 0
-                for page in paginator.paginate(ServiceCode="bedrock"):
-                    page_count += 1
-                    quotas = page.get("Quotas", [])
-                    for q in quotas:
-                        name = q.get("QuotaName", "")
-                        nl = name.lower()
-                        code = q.get("QuotaCode")
-                        
-                        if not code:
-                            continue
-                        
-                        # 必须包含 claude 或 anthropic
-                        if not ("claude" in nl or "anthropic" in nl):
-                            continue
-                        
-                        # 排除不需要的配额类型
-                        if any(kw in nl for kw in EXCLUDE_KEYWORDS):
-                            continue
-                        
-                        new_map[nl] = code
-                
-                # 成功处理所有页面，跳出重试循环
-                if page_count > 0:
+
+    def _collect(paginator_name, is_actual):
+        """is_actual=True 表示 list_service_quotas，直接携带账户实际值"""
+        try:
+            client = _get_client("service-quotas", ak, sk, "us-east-1")
+            paginator = client.get_paginator(paginator_name)
+            for attempt in range(3):
+                try:
+                    for page in paginator.paginate(ServiceCode="bedrock"):
+                        for q in page.get("Quotas", []):
+                            name = q.get("QuotaName", "")
+                            nl = name.lower()
+                            code = q.get("QuotaCode")
+                            if not code:
+                                continue
+                            if not ("claude" in nl or "anthropic" in nl
+                                    or "openai" in nl or "gpt" in nl):
+                                continue
+                            if any(kw in nl for kw in EXCLUDE_KEYWORDS):
+                                continue
+                            # bedrock-mantle: 只保留 input，跳过 output（避免 TPM 重复）
+                            if "[bedrock-mantle endpoint]" in nl and "output tokens per minute" in nl:
+                                continue
+                            # bedrock-mantle input → 重命名为标准 TPM 格式，方便 parseQuotaName
+                            if "[bedrock-mantle endpoint]" in nl and "input tokens per minute" in nl:
+                                # "[bedrock-mantle endpoint] input tokens per minute for gpt-5.5"
+                                # → "bedrock-mantle tokens per minute for gpt-5.5"
+                                import re as _re
+                                m = _re.search(r'for (.+)$', nl)
+                                if m:
+                                    nl = f"bedrock-mantle tokens per minute for {m.group(1).strip()}"
+                            new_map[nl] = code
+                            # 存 value
+                            val = q.get("Value")
+                            if nl not in new_val_map:
+                                new_val_map[nl] = {"value": None, "default": None}
+                            if is_actual and val is not None:
+                                new_val_map[nl]["value"] = val
+                            elif not is_actual and val is not None:
+                                new_val_map[nl]["default"] = val
                     break
-                    
-            except botocore.exceptions.ClientError as e:
-                if e.response.get("Error", {}).get("Code") in ("ThrottlingException", "TooManyRequestsException", "RequestLimitExceeded"):
-                    import time
-                    retry_count += 1
-                    if retry_count < max_retries:
-                        wait_time = 2 ** retry_count  # 指数退避: 2s, 4s, 8s
-                        time.sleep(wait_time)
+                except botocore.exceptions.ClientError as e:
+                    if e.response.get("Error", {}).get("Code") in (
+                            "ThrottlingException", "TooManyRequestsException", "RequestLimitExceeded"):
+                        import time as _t
+                        _t.sleep(2 ** (attempt + 1))
                         continue
-                raise
-    except Exception as e:
-        # 日志输出用于调试
-        import traceback
-        traceback.print_exc()
-    
+                    break
+        except Exception:
+            pass
+
+    import concurrent.futures as _cf2
+    with _cf2.ThreadPoolExecutor(max_workers=2) as pool:
+        pool.submit(_collect, "list_aws_default_service_quotas", False)
+        pool.submit(_collect, "list_service_quotas", True)
+
     if new_map:
         _quota_code_map = new_map
+        _quota_value_map = new_val_map
         _save_code_map_to_disk()
+
 
 
 def _refresh_code_map(ak, sk):
@@ -2509,9 +2569,10 @@ def query_quotas():
         "rpm": "requests per minute",
     }
     type_filters = [TYPE_KEYWORDS[t.lower()] for t in quota_types if t.lower() in TYPE_KEYWORDS]
-    EXCLUDE_KEYWORDS = ["on-demand", "doubled for cross-region", "[bedrock-mantle endpoint]",
-                        "latency-optimized", "provisioned", "batch inference", "customization",
+    EXCLUDE_KEYWORDS = ["latency-optimized", "provisioned", "batch inference", "customization",
                         "minimum number", "records per", "sum of in-progress"]
+    # 注：不排除 [bedrock-mantle endpoint]（GPT-5.5/5.4 等只有这种格式的配额）
+    # 也不排除 on-demand 和 doubled for cross-region（GPT OSS 和 GPT-5.6 的配额格式）
 
     # 强制刷新或按需加载 code_map
     if force_refresh:
@@ -2556,6 +2617,18 @@ def query_quotas():
             if nl.startswith("global cross-region "):
                 if nl[len("global "):] in _quota_code_map:
                     continue
+        # "doubled for cross-region calls" 的 TPD 去重：
+        # 若已有 global cross-region tokens per day 版本，则跳过 doubled 版本避免重复
+        if "doubled for cross-region calls" in nl:
+            # 提取模型名部分，如 "model invocation max tokens per day for gpt-5.6 sol (doubled...)"
+            # → 检查 "global cross-region model inference tokens per day for gpt-5.6 sol" 是否在 map 里
+            import re as _re2
+            m = _re2.search(r'for (.+?) \(doubled', nl)
+            if m:
+                model_part = m.group(1).strip()
+                global_tpd = f"global cross-region model inference tokens per day for {model_part}"
+                if global_tpd in _quota_code_map:
+                    continue
         targets.append((nl, code))
 
     if not targets:
@@ -2591,17 +2664,29 @@ def query_quotas():
 
         def _fetch_one(nl_code):
             nl, code = nl_code
+            # 优先从 _quota_value_map 取（build 时已缓存，无需调 API）
+            cached = _quota_value_map.get(nl)
+            if cached is not None:
+                val   = cached.get("value")
+                defv  = cached.get("default")
+                if val is not None or defv is not None:
+                    # 重建原始 QuotaName（bedrock-mantle 已被重命名，恢复原名用于显示）
+                    display_nl = nl
+                    return {
+                        "region":        region,
+                        "name":          display_nl,
+                        "value":         val,
+                        "default_value": defv,
+                        "quota_code":    code,
+                    }
+
             aq, dq = {}, {}
-            
-            # 重试配置：应对 AWS 速率限制
             max_retries = 2
             retry_delay = 0.1
-            
-            def _try_fetch(func_name, func):
-                """辅助函数，处理重试逻辑"""
+
+            def _try_fetch(func):
                 for attempt in range(max_retries):
-                    try:
-                        return func()
+                    try: return func()
                     except botocore.exceptions.ClientError as e:
                         err_code = e.response.get("Error", {}).get("Code", "")
                         if err_code in ("AccessDeniedException", "AccessDenied", "AuthorizationError"):
@@ -2613,21 +2698,16 @@ def query_quotas():
                                 continue
                     except Exception:
                         pass
-                    return None
-            
-            # 尝试获取实际配额值
-            aq = _try_fetch("get_service_quota", 
-                lambda: client.get_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})) or {}
-            
-            # 尝试获取默认配额值
-            dq = _try_fetch("get_aws_default_service_quota",
-                lambda: client.get_aws_default_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})) or {}
-            
+                return None
+
+            aq = _try_fetch(lambda: client.get_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})) or {}
+            dq = _try_fetch(lambda: client.get_aws_default_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})) or {}
+
             if not aq and not dq:
                 return None
             return {
                 "region":        region,
-                "name":          (aq or dq).get("QuotaName", ""),
+                "name":          (aq or dq).get("QuotaName", nl),
                 "value":         aq.get("Value"),
                 "default_value": dq.get("Value"),
                 "quota_code":    code,
@@ -3134,3 +3214,429 @@ def change_password():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001, debug=False, use_reloader=False, threaded=True)
+
+
+# ══════════════════════════════════════════════════════════════════
+#  GPT 模块  —  通过 AWS Bedrock 调用 OpenAI 模型（AK/SK 认证）
+# ══════════════════════════════════════════════════════════════════
+
+# Bedrock 上可用的 OpenAI 模型列表
+# Model ID 格式：openai.xxx（Bedrock Foundation Model ID）
+# quota_key: 对应 AWS Service Quotas quota name 里的关键词（小写，精确匹配）
+GPT_MODELS = [
+    {"id": "openai.gpt-5-6-sol",           "label": "GPT-5.6 Sol",          "series": "gpt-5",   "quota_key": "gpt-5.6 sol"},
+    {"id": "openai.gpt-5-6-terra",         "label": "GPT-5.6 Terra",        "series": "gpt-5",   "quota_key": "gpt-5.6 terra"},
+    {"id": "openai.gpt-5-6-luna",          "label": "GPT-5.6 Luna",         "series": "gpt-5",   "quota_key": "gpt-5.6 luna"},
+    {"id": "openai.gpt-5-5",               "label": "GPT-5.5",              "series": "gpt-5",   "quota_key": "gpt-5.5"},
+    {"id": "openai.gpt-5-4",               "label": "GPT-5.4",              "series": "gpt-5",   "quota_key": "gpt-5.4"},
+    {"id": "openai.gpt-oss-20b-1:0",       "label": "GPT OSS 20B",          "series": "gpt-oss", "quota_key": "gpt oss 20b"},
+    {"id": "openai.gpt-oss-120b-1:0",      "label": "GPT OSS 120B",         "series": "gpt-oss", "quota_key": "gpt oss 120b"},
+    {"id": "openai.gpt-oss-safeguard-20b", "label": "GPT OSS Safeguard 20B","series": "gpt-oss", "quota_key": "gpt oss safeguard 20b"},
+    {"id": "openai.gpt-oss-safeguard-120b","label": "GPT OSS Safeguard 120B","series":"gpt-oss", "quota_key": "gpt oss safeguard 120b"},
+]
+GPT_MODEL_BY_ID = {m["id"]: m for m in GPT_MODELS}
+
+
+def _gpt_bedrock(ak, sk, region):
+    """获取 bedrock-runtime 客户端，用于调用 GPT 模型"""
+    return _bedrock_runtime(ak, sk, region)
+
+
+def _gpt_error_bedrock(e):
+    if isinstance(e, botocore.exceptions.ClientError):
+        code = e.response.get("Error", {}).get("Code", "")
+        msg  = e.response.get("Error", {}).get("Message", "")
+        return f"{code}: {msg}" if code else msg
+    return str(e)
+
+
+def _fmt_quota(v):
+    """格式化配额数值（与 Claude 侧保持一致）"""
+    if not v:
+        return "—"
+    try:
+        n = int(v)
+        if n >= 1_000_000:
+            m = n / 1_000_000
+            return f"{int(m)}M" if m == int(m) else f"{m:.1f}M"
+        if n >= 1_000:
+            k = n / 1_000
+            return f"{int(k)}K" if k == int(k) else f"{k:.1f}K"
+        return str(n)
+    except Exception:
+        return str(v)
+
+
+# ── 页面路由 ──────────────────────────────────────────────────────
+
+@app.route("/gpt-test")
+def gpt_test_page():
+    return render_template("gpt_test.html")
+
+
+@app.route("/gpt-quotas")
+def gpt_quotas_page():
+    return render_template("gpt_quotas.html")
+
+
+@app.route("/gpt-default")
+def gpt_default_page():
+    return render_template("gpt_default.html")
+
+
+@app.route("/gpt-accounts")
+def gpt_accounts_page():
+    return render_template("gpt_accounts.html")
+
+
+# ── API ──────────────────────────────────────────────────────────
+
+@app.route("/api/gpt/models", methods=["GET"])
+def gpt_models():
+    """返回 Bedrock 上可用的 GPT 模型列表"""
+    return jsonify({"ok": True, "models": GPT_MODELS})
+
+
+@app.route("/api/gpt/debug_quota_names", methods=["POST"])
+def gpt_debug_quota_names():
+    """调试接口：强制重建 code_map，然后完整模拟 query_quotas 筛选，返回能匹配到的条目"""
+    data = request.get_json() or {}
+    ak, sk, _ = _creds(data)
+    if not all([ak, sk]):
+        return jsonify({"ok": False, "error": "请填写 AK/SK"}), 400
+
+    # 强制重建
+    _build_code_map(ak, sk)
+
+    all_gpt = sorted([k for k in _quota_code_map if "openai" in k or ("gpt" in k and "anthropic" not in k)])
+
+    # 模拟 query_quotas 的完整筛选逻辑
+    sel_models = [m["label"] for m in GPT_MODELS]
+    EXCLUDE = ["doubled for cross-region", "[bedrock-mantle endpoint]",
+               "latency-optimized", "provisioned", "batch inference", "customization",
+               "minimum number", "records per", "sum of in-progress"]
+
+    model_kws = [m.lower().replace("claude ", "").strip() for m in sel_models]
+
+    targets_pass = []
+    targets_fail = {}
+    for nl, code in _quota_code_map.items():
+        if "gpt" not in nl and "openai" not in nl:
+            continue
+        if any(ex in nl for ex in EXCLUDE):
+            targets_fail[nl] = "EXCLUDE_KEYWORDS"; continue
+        if not any(kw in nl for kw in model_kws):
+            targets_fail[nl] = "model_not_matched"; continue
+        targets_pass.append(nl)
+
+    return jsonify({
+        "ok": True,
+        "code_map_size": len(_quota_code_map),
+        "gpt_in_map": len(all_gpt),
+        "gpt_names": all_gpt,
+        "model_kws": model_kws,
+        "targets_pass": sorted(targets_pass),
+        "targets_fail": targets_fail,
+    })
+
+
+@app.route("/api/gpt/verify", methods=["POST"])
+def gpt_verify():
+    """验证 AK/SK 并确认账号可访问 Bedrock GPT 模型"""
+    data = request.get_json() or {}
+    ak, sk, user_id = _creds(data)
+    region = (data.get("region") or "us-east-1").strip()
+    if not ak or not sk:
+        return jsonify({"ok": False, "error": "请填写 Access Key 和 Secret Key"}), 400
+    try:
+        info, err = _verify_account(ak, sk, user_id or None)
+        if err:
+            return jsonify({"ok": False, "error": err}), 400
+        return jsonify({"ok": True, "account_id": info["account_id"], "arn": info["arn"]})
+    except Exception as e:
+        return jsonify({"ok": False, "error": _aws_error(e)}), 400
+
+
+@app.route("/api/gpt/test_model", methods=["POST"])
+def gpt_test_model():
+    """用 AK/SK + region + model_id 通过 Bedrock converse 测试 GPT 模型"""
+    data = request.get_json() or {}
+    ak, sk, _ = _creds(data)
+    region   = (data.get("region") or "us-east-1").strip()
+    model_id = (data.get("model_id") or "").strip()
+    prompt   = (data.get("prompt") or "hi").strip()
+    if not all([ak, sk, region, model_id]):
+        return jsonify({"ok": False, "error": "参数不完整"}), 400
+    try:
+        brt = _bedrock_runtime(ak, sk, region)
+        resp = brt.converse(
+            modelId=model_id,
+            messages=[{"role": "user", "content": [{"text": prompt}]}],
+            inferenceConfig={"maxTokens": 64},
+        )
+        text = ""
+        for block in resp.get("output", {}).get("message", {}).get("content", []):
+            if "text" in block:
+                text += block["text"]
+        usage = resp.get("usage", {})
+        return jsonify({
+            "ok": True,
+            "model": model_id,
+            "region": region,
+            "preview": text[:300],
+            "prompt_tokens": usage.get("inputTokens", 0),
+            "completion_tokens": usage.get("outputTokens", 0),
+            "total_tokens": usage.get("totalTokens", 0),
+        })
+    except botocore.exceptions.ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        msg  = e.response.get("Error", {}).get("Message", "")
+        reason = ""
+        if code in ("AccessDenied", "AccessDeniedException"):
+            reason = "无访问权限，请确认已在此区域开通该 GPT 模型"
+        elif code == "ValidationException":
+            reason = "该区域不支持此模型"
+        elif code in ("ThrottlingException",):
+            reason = "请求被限流，请稍后重试"
+        elif code == "ResourceNotFoundException":
+            reason = "模型不存在或未开通"
+        else:
+            reason = msg or code
+        return jsonify({"ok": False, "error": _aws_error(e), "reason": reason, "error_code": code}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/gpt/query_quotas", methods=["POST"])
+def gpt_query_quotas():
+    """查询 GPT 模型在指定区域的 Service Quota（TPM/TPD/RPM）"""
+    import concurrent.futures as _cf
+    data = request.get_json() or {}
+    ak, sk, _ = _creds(data)
+    regions   = [r.strip() for r in (data.get("regions") or []) if r and r.strip()]
+    model_ids = [m.strip() for m in (data.get("model_ids") or []) if m and m.strip()]
+    if not all([ak, sk]):
+        return jsonify({"ok": False, "error": "请填写 AK/SK"}), 400
+    if not regions:
+        return jsonify({"ok": False, "error": "请至少选择一个区域"}), 400
+    if not model_ids:
+        return jsonify({"ok": False, "error": "请至少选择一个模型"}), 400
+
+    # GPT 模型的配额名含 openai/gpt，_quota_code_map 可能只有 Claude 数据。
+    # 检查 map 里是否已有 openai/gpt 相关条目，没有则强制重建。
+    has_openai = any("openai" in k or "gpt" in k for k in _quota_code_map)
+    if not _quota_code_map or not has_openai:
+        _build_code_map(ak, sk)
+
+    results = []
+
+    def _query_one(region, model_id):
+        meta = GPT_MODEL_BY_ID.get(model_id) or {}
+        label = meta.get("label", model_id)
+        # 用 quota_key 精确匹配（与 query_model_quotas 保持一致）
+        qkey = (meta.get("quota_key") or label).lower()
+
+        rows = []
+        try:
+            client = _get_client("service-quotas", ak, sk, region)
+
+            def _fetch(code):
+                aq, dq = {}, {}
+                try: aq = client.get_service_quota(ServiceCode="bedrock", QuotaCode=code).get("Quota", {}) or {}
+                except Exception: pass
+                try: dq = client.get_aws_default_service_quota(ServiceCode="bedrock", QuotaCode=code).get("Quota", {}) or {}
+                except Exception: pass
+                return aq, dq
+
+            # 精确构造 quota name，与 Claude 侧同样模式
+            quota_name_patterns = [
+                f"global cross-region model inference tokens per minute for {qkey}",
+                f"cross-region model inference tokens per minute for {qkey}",
+                f"on-demand model inference tokens per minute for {qkey}",
+                f"global cross-region model inference tokens per day for {qkey}",
+                f"cross-region model inference tokens per day for {qkey}",
+                f"model invocation max tokens per day for {qkey} (doubled for cross-region calls)",
+                f"on-demand model inference tokens per day for {qkey}",
+                f"global cross-region model inference requests per minute for {qkey}",
+                f"cross-region model inference requests per minute for {qkey}",
+                f"on-demand model inference requests per minute for {qkey}",
+            ]
+
+            for nm in quota_name_patterns:
+                code = _quota_code_map.get(nm)
+                if not code:
+                    continue
+                aq, dq = _fetch(code)
+                if not aq and not dq:
+                    continue
+                rows.append({
+                    "region": region,
+                    "name": (aq or dq).get("QuotaName", nm),
+                    "value": aq.get("Value"),
+                    "default_value": dq.get("Value"),
+                    "quota_code": code,
+                })
+        except Exception:
+            pass
+        return rows
+
+    with _cf.ThreadPoolExecutor(max_workers=min(20, len(regions) * len(model_ids))) as pool:
+        futures = [pool.submit(_query_one, r, m) for r in regions for m in model_ids]
+        for f in _cf.as_completed(futures):
+            try:
+                results.extend(f.result())  # _query_one 现在返回 list
+            except Exception:
+                pass
+
+    return jsonify({"ok": True, "results": results, "regions": regions})
+
+
+@app.route("/api/gpt/export_excel", methods=["POST"])
+def gpt_export_excel():
+    """将 GPT 默认模型配置导出为 Excel（格式与 Claude default model Excel 对齐）"""
+    data       = request.get_json() or {}
+    entries    = data.get("entries", [])
+    account_id = (data.get("account_id") or "").strip()
+    access_key = (data.get("access_key") or "").strip()
+    secret_key = (data.get("secret_key") or "").strip()
+    region     = (data.get("region") or "").strip()
+
+    if not entries:
+        return jsonify({"ok": False, "error": "无数据可导出"}), 400
+
+    login_url = f"https://{account_id}.signin.aws.amazon.com/console" if account_id else ""
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "GPT Config"
+
+    hdr_font  = Font(name="Calibri", size=11, bold=False)
+    hdr_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    val_align = Alignment(horizontal="left",   vertical="center", wrap_text=False)
+    ctr_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    def _border(top="thin", bottom="thin", left="thin", right="thin"):
+        def _side(s): return Side(style=s) if s else Side(style=None)
+        return Border(left=_side(left), right=_side(right),
+                      top=_side(top),   bottom=_side(bottom))
+
+    full_border = _border()
+    # 与 Claude default 列格式对齐
+    headers = ["AWS账户ID", "登录URL", "账号", "密码", "Access Key", "Secret Key",
+               "区域", "模型类型", "Model ID", "TPM", "RPM", "标签"]
+    for ci, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=ci, value=h)
+        cell.font = hdr_font; cell.alignment = hdr_align; cell.border = full_border
+    ws.row_dimensions[1].height = 20
+
+    rows = []
+    for e in entries:
+        mid   = e.get("model_id", "")
+        meta  = GPT_MODEL_BY_ID.get(mid) or {}
+        label = meta.get("label") or mid
+        tags_dict = e.get("tags") or {}
+        tags_str  = ", ".join(f"{k}={v}" for k, v in tags_dict.items()) if tags_dict else ""
+        rows.append({
+            "account_id": account_id, "login_url": login_url,
+            "username": "", "password": "",
+            "access_key": access_key, "secret_key": secret_key,
+            "region": e.get("region", region),
+            "label": label, "model_id": mid,
+            "tpm": e.get("tpm", ""), "rpm": e.get("rpm", ""),
+            "tags": tags_str,
+        })
+
+    rows.sort(key=lambda x: (x["label"], x["region"]))
+    total_rows = len(rows)
+    data_start = 2
+    CENTER_COLS = {3, 4, 7, 8, 9}
+
+    for ri, row in enumerate(rows):
+        excel_row = data_start + ri
+        values = [row["account_id"], row["login_url"], row["username"], row["password"],
+                  row["access_key"], row["secret_key"], row["region"],
+                  row["label"], row["model_id"], row["tpm"], row["rpm"], row["tags"]]
+        for ci, val in enumerate(values, 1):
+            cell = ws.cell(row=excel_row, column=ci, value=val)
+            cell.border = full_border
+            cell.alignment = ctr_align if ci in CENTER_COLS else val_align
+
+    # A-F 全部行合并
+    last_data = data_start + total_rows - 1
+    if total_rows > 1:
+        for col, val in [(1, account_id), (2, login_url), (3, ""), (4, ""),
+                         (5, access_key), (6, secret_key)]:
+            ws.merge_cells(start_row=data_start, start_column=col,
+                           end_row=last_data, end_column=col)
+            tc = ws.cell(row=data_start, column=col, value=val)
+            tc.alignment = ctr_align
+            for r in range(data_start, last_data + 1):
+                top = "thin" if r == data_start else None
+                bottom = "thin" if r == last_data else None
+                ws.cell(row=r, column=col).border = _border(top=top, bottom=bottom,
+                                                            left="thin", right="thin")
+
+    col_widths = [18, 40, 18, 18, 22, 42, 14, 20, 30, 10, 10, 30]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+    ws.freeze_panes = "A2"
+
+    output = BytesIO()
+    wb.save(output); output.seek(0)
+    date_str = datetime.now().strftime("%Y%m%d")
+    filename = f"AWS-Bedrock-GPT-{account_id}-{date_str}.xlsx" if account_id else f"AWS-Bedrock-GPT-{date_str}.xlsx"
+    return send_file(output,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True, download_name=filename)
+
+
+@app.route("/api/gpt/export_quotas_excel", methods=["POST"])
+def gpt_export_quotas_excel():
+    """将 GPT 配额查询结果导出为 Excel"""
+    data = request.get_json() or {}
+    results  = data.get("results", [])
+    account_id = (data.get("account_id") or "").strip()
+    if not results:
+        return jsonify({"ok": False, "error": "无数据可导出"}), 400
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "GPT Quotas"
+
+    hdr_font  = Font(name="Calibri", size=11, bold=False)
+    hdr_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ctr_align = Alignment(horizontal="center", vertical="center")
+    val_align = Alignment(horizontal="left",   vertical="center")
+
+    def _border(top="thin", bottom="thin", left="thin", right="thin"):
+        def _side(s): return Side(style=s) if s else Side(style=None)
+        return Border(left=_side(left), right=_side(right), top=_side(top), bottom=_side(bottom))
+
+    full_border = _border()
+    headers = ["AWS账户ID", "区域", "模型", "Model ID", "TPM", "TPD", "RPM"]
+    for ci, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=ci, value=h)
+        cell.font = hdr_font; cell.alignment = hdr_align; cell.border = full_border
+    ws.row_dimensions[1].height = 20
+
+    for ri, res in enumerate(results):
+        excel_row = 2 + ri
+        values = [account_id, res.get("region", ""), res.get("label", ""),
+                  res.get("model_id", ""),
+                  res.get("tpm", "—"), res.get("tpd", "—"), res.get("rpm", "—")]
+        for ci, val in enumerate(values, 1):
+            cell = ws.cell(row=excel_row, column=ci, value=val)
+            cell.border = full_border
+            cell.alignment = ctr_align if ci in {1, 2, 3, 4, 5, 6, 7} else val_align
+
+    col_widths = [18, 16, 18, 30, 12, 12, 12]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[chr(64+i)].width = w
+    ws.freeze_panes = "A2"
+
+    output = BytesIO()
+    wb.save(output); output.seek(0)
+    date_str = datetime.now().strftime("%Y%m%d")
+    return send_file(output,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True, download_name=f"GPT-Quotas-{date_str}.xlsx")

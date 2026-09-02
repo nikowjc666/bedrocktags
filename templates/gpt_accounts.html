@@ -1,0 +1,281 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>GPT 账号管理 · AWS Bedrock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f0f4ff;--bg2:#e8eeff;--surface:#fff;--surface2:#f8fafc;
+  --border:#e2e8f0;--text:#0f172a;--t2:#64748b;--t3:#94a3b8;
+  --pr:#7c3aed;--ph:#6d28d9;--pl:#f5f3ff;
+  --ok:#16a34a;--ok-bg:#f0fdf4;--ok-bd:#bbf7d0;
+  --er:#dc2626;--er-bg:#fef2f2;--er-bd:#fecaca;
+  --wa:#d97706;--wa-bg:#fffbeb;--wa-bd:#fde68a;
+  --gpt:#10a37f;--r:7px;--r-sm:5px;
+  --shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Inter",-apple-system,sans-serif;background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde8ff 100%);background-attachment:fixed;color:var(--text);font-size:12px;line-height:1.45;min-height:100vh;text-transform:lowercase}
+input,textarea,select{font-family:inherit;text-transform:none}
+.h{background:linear-gradient(135deg,#1a3a2e 0%,#1a2e3a 60%,#1a3530 100%);padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;height:44px;box-shadow:0 1px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
+.h-l{display:flex;align-items:center;gap:10px}
+.nav{display:flex;gap:4px;flex-wrap:wrap}
+.nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:11px;padding:4px 10px;border-radius:4px;transition:all .15s}
+.nav a:hover,.nav a.act{color:#fff;background:rgba(255,255,255,.12)}
+.nav-sep{color:rgba(255,255,255,.2);font-size:11px;padding:0 2px;align-self:center}
+.h-logo{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--gpt) 0%,#34d399 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.h-logo svg{color:#fff;width:16px;height:16px}
+.h-text h1{font-size:14px;font-weight:600;color:#fff}
+.h-text .s{color:rgba(255,255,255,.5);font-size:11px}
+.b{max-width:900px;margin:14px auto;padding:0 14px 28px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;animation:fadeUp .4s ease both}
+.card:nth-child(1){animation-delay:.05s}.card:nth-child(2){animation-delay:.1s}.card:nth-child(3){animation-delay:.15s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.sht{display:flex;align-items:center;gap:7px;padding:8px 12px;font-size:12px;font-weight:600;background:var(--surface2);border-bottom:1px solid var(--border)}
+.sht-step{width:18px;height:18px;border-radius:50%;background:var(--pr);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sht-sub{font-weight:400;color:var(--t2);font-size:11px;margin-left:auto}
+.sb{padding:12px}
+.fr{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px}
+.fr:last-child{margin-bottom:0}
+.fg{display:flex;flex-direction:column;gap:3px;min-width:100px;flex:1}
+.fg label{font-size:11px;color:var(--t2);font-weight:500}
+.fg input,.fg select{height:30px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;outline:none;background:var(--surface);color:var(--text);transition:border-color .15s}
+.fg input:focus,.fg select:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(124,58,237,.1)}
+.fg input::placeholder{color:var(--t3)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:30px;padding:0 11px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);white-space:nowrap;transition:all .15s}
+.btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.bp{background:linear-gradient(135deg,var(--pr) 0%,#8b5cf6 100%);color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(124,58,237,.3)}
+.bp:hover{color:#fff;border-color:transparent}
+.bs{background:linear-gradient(135deg,var(--ok) 0%,#22c55e 100%);color:#fff;border-color:transparent}
+.bd{background:linear-gradient(135deg,var(--er) 0%,#ef4444 100%);color:#fff;border-color:transparent}
+.bsm{height:26px;padding:0 8px;font-size:11px}
+.bdge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:12px;font-size:10px;font-weight:500}
+.bg-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+.bg-er{background:var(--er-bg);color:var(--er);border:1px solid var(--er-bd)}
+.bg-wa{background:var(--wa-bg);color:var(--wa);border:1px solid var(--wa-bd)}
+.st{display:flex;align-items:flex-start;gap:6px;padding:7px 10px;border-radius:var(--r-sm);font-size:11px;margin-top:8px;font-weight:500}
+.st.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
+.st.er{background:var(--er-bg);border:1px solid var(--er-bd);color:var(--er)}
+.st.wa{background:var(--wa-bg);border:1px solid var(--wa-bd);color:var(--wa)}
+.st.info{background:var(--pl);border:1px solid #ddd6fe;color:var(--pr)}
+.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--pr);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fb{display:flex;align-items:center;justify-content:space-between}
+.fx{display:flex;align-items:center;gap:8px}
+.mt8{margin-top:8px}.mb8{margin-bottom:8px}.tc2{color:var(--t2)}
+.acc-list{display:flex;flex-direction:column;gap:8px}
+.acc-card{padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);display:flex;align-items:center;gap:10px;transition:border-color .15s}
+.acc-card:hover{border-color:#c4b5fd}
+.acc-info{flex:1;min-width:0}
+.acc-label{font-weight:600;font-size:12px;color:var(--text);margin-bottom:2px}
+.acc-key{font-family:monospace;font-size:10px;color:var(--t3)}
+.acc-meta{font-size:10px;color:var(--t2);margin-top:2px}
+.prog-wrap{margin-top:8px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);display:none}
+.prog-wrap.show{display:block}
+.prog-label{font-size:11px;color:var(--t2);margin-bottom:5px;display:flex;justify-content:space-between}
+.prog-bar-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.prog-bar-fill{height:100%;background:linear-gradient(90deg,var(--pr),#8b5cf6);border-radius:3px;width:0%;transition:width .3s ease}
+.prog-cur{font-size:10px;color:var(--t3);margin-top:4px}
+.copy-btn{display:inline-flex;align-items:center;gap:2px;padding:1px 5px;height:18px;border:1px solid var(--border);border-radius:3px;font-size:10px;cursor:pointer;background:var(--surface);color:var(--t2);transition:all .15s}
+.copy-btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.copy-btn.copied{border-color:var(--ok);color:var(--ok);background:var(--ok-bg)}
+.emp{padding:18px;text-align:center;color:var(--t2);font-size:11px}
+.footer{text-align:center;color:var(--t3);font-size:10px;padding:4px 0 0}
+</style>
+</head>
+<body>
+<header class="h">
+  <div class="h-l">
+    <div class="h-logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M22.2 11.4a5.5 5.5 0 00-.42-4.26 5.57 5.57 0 00-6-2.65 5.5 5.5 0 00-4.14-1.84 5.57 5.57 0 00-5.31 3.86 5.5 5.5 0 00-3.67 2.66 5.57 5.57 0 00.69 6.52 5.5 5.5 0 00.42 4.25 5.57 5.57 0 006 2.66 5.5 5.5 0 004.14 1.84 5.57 5.57 0 005.31-3.86 5.5 5.5 0 003.67-2.65 5.57 5.57 0 00-.69-6.53z"/></svg></div>
+    <div class="h-text"><h1>GPT 账号管理</h1><div class="s">aws bedrock · openai models · 管理多个 ak/sk 账号</div></div>
+  </div>
+  <nav class="nav">
+    <a href="/">profile 标签</a><a href="/model-tags">创建配置</a><a href="/delete-profiles">删除配置</a>
+    <a href="/test-profile">测试模型</a><a href="/quotas">模型配额</a><a href="/data-retention">数据驻留</a>
+    <a href="/default-model-config">默认模型</a><a href="/mfa">MFA</a><a href="/scan-models">扫描</a>
+    <span class="nav-sep">|</span>
+    <a href="/gpt-accounts" class="act">GPT 账号</a><a href="/gpt-test">GPT 测试</a>
+    <a href="/gpt-quotas">GPT 配额</a><a href="/gpt-default">GPT 默认</a>
+  </nav>
+</header>
+
+<div class="b">
+  <!-- step 1: 添加账号 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">1</span> 添加账号<span class="sht-sub">输入 aws ak/sk 验证后加入列表</span></div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:1"><label>标签（备注名）</label><input id="newLabel" type="text" placeholder="例：项目A账号"></div>
+        <div class="fg" style="flex:2"><label>access key id</label><input id="newAK" type="text" placeholder="AKIA..." autocomplete="off"></div>
+        <div class="fg" style="flex:2"><label>secret access key</label><input id="newSK" type="password" placeholder="..." autocomplete="off"></div>
+        <div class="fg" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn bp" id="btnAdd" onclick="addAccount()">验证并添加</button></div>
+      </div>
+      <div id="addMsg"></div>
+    </div>
+  </div>
+
+  <!-- step 2: 账号列表 -->
+  <div class="card">
+    <div class="sht">
+      <span class="sht-step">2</span> 账号列表
+      <span class="sht-sub" id="listInfo">共 0 个账号</span>
+      <button class="btn bsm bs" id="btnTestAll" onclick="testAllAccounts()" style="margin-left:auto;display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:11px;height:11px"><circle cx="12" cy="12" r="10"/><polyline points="10 8 16 12 10 16 10 8"/></svg>
+        全部验证
+      </button>
+    </div>
+    <div class="sb">
+      <div class="prog-wrap" id="testAllProg">
+        <div class="prog-label"><span>批量验证</span><span id="testAllPct">0%</span></div>
+        <div class="prog-bar-track"><div class="prog-bar-fill" id="testAllFill"></div></div>
+        <div class="prog-cur" id="testAllCur"></div>
+      </div>
+      <div id="accList" class="acc-list"></div>
+      <div id="accEmpty" class="emp">还没有添加账号，在上方输入 AK/SK 后点击「验证并添加」</div>
+    </div>
+  </div>
+
+  <!-- step 3: 说明 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">3</span> 使用说明</div>
+    <div class="sb" style="font-size:11px;color:var(--t2);line-height:1.8">
+      <p>账号列表存储在本次 session（关闭浏览器 tab 后清除），不会持久化到服务器。</p>
+      <p><strong style="color:var(--text)">使用流程：</strong>在此页添加并验证 AK/SK → 点击「用此账号」跳转测试页 → 前往配额页查看限制 → 前往默认模型页生成配置 Excel。</p>
+      <p><strong style="color:var(--text)">模型说明：</strong>GPT 模型在 Bedrock 上以 <code style="background:var(--surface2);padding:1px 4px;border-radius:3px;font-family:monospace">openai.gpt-xxx</code> 格式调用，与 Claude 完全一致，使用相同的 AK/SK 和 Bedrock API。</p>
+    </div>
+  </div>
+
+  <div class="footer">gpt 账号管理 · aws bedrock openai models</div>
+</div>
+
+<script src="/static/persist.js"></script>
+<script>
+var accounts=[], _nextId=1;
+function $(id){return document.getElementById(id)}
+function es(s){if(!s)return"";var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+function sR(id,msg,type){var el=$(id);if(el)el.innerHTML='<div class="st '+type+'">'+es(msg)+'</div>'}
+function maskKey(k){if(!k||k.length<10)return k;return k.slice(0,7)+"..."+k.slice(-4);}
+
+function renderList(){
+  var list=$("accList"),empty=$("accEmpty"),info=$("listInfo"),btn=$("btnTestAll");
+  info.textContent="共 "+accounts.length+" 个账号";
+  if(!accounts.length){empty.style.display="";list.style.display="none";btn.style.display="none";return;}
+  empty.style.display="none";list.style.display="flex";btn.style.display="";
+  list.innerHTML="";
+  accounts.forEach(function(acc){
+    var card=document.createElement("div");card.className="acc-card";
+    var statusHtml=acc.status==="ok"?'<span class="bdge bg-ok">✓ 有效</span>':acc.status==="er"?'<span class="bdge bg-er">✗ 无效</span>':'<span class="bdge bg-wa">未验证</span>';
+    var meta="AK: "+es(maskKey(acc.ak))+(acc.accountId?" · 账号: "+es(acc.accountId):"")+" · 添加于 "+acc.addedAt;
+    card.innerHTML=
+      '<div class="acc-info">'+
+        '<div class="acc-label">'+es(acc.label||"未命名")+'</div>'+
+        '<div class="acc-key">'+meta+'</div>'+
+      '</div>'+
+      '<div style="flex-shrink:0">'+statusHtml+'</div>'+
+      '<div style="display:flex;gap:5px;flex-shrink:0">'+
+        '<button class="btn bsm bp" onclick="useAccount('+acc.id+')">用此账号</button>'+
+        '<button class="btn bsm" id="testBtn-'+acc.id+'" onclick="testOne('+acc.id+')">验证</button>'+
+        '<button class="copy-btn" onclick="cpAK('+acc.id+',this)" title="复制 AK">复制 AK</button>'+
+        '<button class="btn bsm bd" style="color:#fff" onclick="removeAccount('+acc.id+')">删除</button>'+
+      '</div>';
+    list.appendChild(card);
+  });
+}
+
+async function addAccount(){
+  var label=$("newLabel").value.trim();
+  var ak=$("newAK").value.trim();
+  var sk=$("newSK").value.trim();
+  if(!ak||!sk){sR("addMsg","请填写 AK 和 SK","er");return}
+  var btn=$("btnAdd");btn.disabled=true;btn.textContent="验证中...";
+  try{
+    var r=await fetch("/api/gpt/verify",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({access_key:ak,secret_key:sk})});
+    var j=await r.json();
+    var acc={id:_nextId++,label:label||"账号 "+(accounts.length+1),ak:ak,sk:sk,
+      status:j.ok?"ok":"er",accountId:j.ok?j.account_id:"",addedAt:new Date().toLocaleTimeString()};
+    accounts.push(acc);
+    renderList();
+    if(j.ok){sR("addMsg","✓ 已添加「"+es(acc.label)+"」，账号 ID: "+es(j.account_id),"ok");}
+    else{sR("addMsg","账号已添加，但验证失败: "+(j.error||""),"wa");}
+    $("newLabel").value="";$("newAK").value="";$("newSK").value="";
+  }catch(e){sR("addMsg","网络错误: "+e.message,"er")}
+  btn.disabled=false;btn.textContent="验证并添加";
+}
+
+function removeAccount(id){
+  if(!confirm("确认删除此账号？"))return;
+  accounts=accounts.filter(function(a){return a.id!==id});
+  renderList();
+}
+
+function useAccount(id){
+  var acc=accounts.find(function(a){return a.id===id});
+  if(!acc)return;
+  // 把凭证写入 persist.js（ak/sk/aid 字段），其他 GPT 页面会自动恢复
+  BedrockPersist.set({ak:acc.ak,sk:acc.sk,aid:acc.accountId||""});
+  // 同时更新页面输入框的值（用于 persist.js 的 onVerified 机制）
+  var akEl=document.getElementById("ak"),skEl=document.getElementById("sk");
+  // 跳转到 GPT 测试页
+  location.href="/gpt-test";
+}
+
+function cpAK(id,btn){
+  var acc=accounts.find(function(a){return a.id===id});
+  if(!acc)return;
+  navigator.clipboard.writeText(acc.ak).then(function(){
+    btn.classList.add("copied");btn.textContent="已复制";
+    setTimeout(function(){btn.classList.remove("copied");btn.textContent="复制 AK"},1500);
+  }).catch(function(){});
+}
+
+async function testOne(id){
+  var acc=accounts.find(function(a){return a.id===id});
+  if(!acc)return;
+  var btn=$("testBtn-"+id);if(btn){btn.disabled=true;btn.textContent="验证中...";}
+  try{
+    var r=await fetch("/api/gpt/verify",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({access_key:acc.ak,secret_key:acc.sk})});
+    var j=await r.json();
+    acc.status=j.ok?"ok":"er";
+    if(j.ok)acc.accountId=j.account_id;
+    renderList();
+  }catch(e){acc.status="er";renderList();}
+}
+
+async function testAllAccounts(){
+  if(!accounts.length)return;
+  var pw=$("testAllProg");pw.classList.add("show");
+  var fill=$("testAllFill"),pct=$("testAllPct"),cur=$("testAllCur");
+  fill.style.width="0%";pct.textContent="0%";cur.textContent="开始验证...";
+  var total=accounts.length,done=0,ok=0,fail=0;
+  await Promise.all(accounts.map(async function(acc){
+    try{
+      var r=await fetch("/api/gpt/verify",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({access_key:acc.ak,secret_key:acc.sk})});
+      var j=await r.json();
+      acc.status=j.ok?"ok":"er";if(j.ok){acc.accountId=j.account_id;ok++;}else fail++;
+    }catch(e){acc.status="er";fail++;}
+    done++;var p=Math.round(done/total*100);fill.style.width=p+"%";pct.textContent=p+"%";
+    cur.textContent=done+"/"+total+" · "+ok+" 有效 · "+fail+" 失败";
+  }));
+  renderList();
+  cur.textContent="完成！"+ok+" 有效 · "+fail+" 失败";
+  setTimeout(function(){pw.classList.remove("show")},3000);
+}
+
+document.addEventListener("DOMContentLoaded",function(){
+  BedrockPersist.init();
+  renderList();
+  // 如果有已存储的凭证，自动填入
+  var saved=BedrockPersist.get();
+  if(saved.ak)$("newAK").value=saved.ak;
+  if(saved.sk)$("newSK").value=saved.sk;
+});
+</script>
+</body>
+</html>

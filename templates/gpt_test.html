@@ -1,0 +1,335 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>GPT 测试模型 · AWS Bedrock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f0f4ff;--bg2:#e8eeff;--surface:#fff;--surface2:#f8fafc;
+  --border:#e2e8f0;--text:#0f172a;--t2:#64748b;--t3:#94a3b8;
+  --pr:#7c3aed;--ph:#6d28d9;--pl:#f5f3ff;
+  --ok:#16a34a;--ok-bg:#f0fdf4;--ok-bd:#bbf7d0;
+  --er:#dc2626;--er-bg:#fef2f2;--er-bd:#fecaca;
+  --wa:#d97706;--wa-bg:#fffbeb;--wa-bd:#fde68a;
+  --gpt:#10a37f;--r:7px;--r-sm:5px;
+  --shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Inter",-apple-system,sans-serif;background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde8ff 100%);background-attachment:fixed;color:var(--text);font-size:12px;line-height:1.45;min-height:100vh;text-transform:lowercase}
+input,textarea,select{font-family:inherit;text-transform:none}
+.h{background:linear-gradient(135deg,#1a3a2e 0%,#1a2e3a 60%,#1a3530 100%);padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;height:44px;box-shadow:0 1px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
+.h-l{display:flex;align-items:center;gap:10px}
+.nav{display:flex;gap:4px;flex-wrap:wrap}
+.nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:11px;padding:4px 10px;border-radius:4px;transition:all .15s}
+.nav a:hover,.nav a.act{color:#fff;background:rgba(255,255,255,.12)}
+.nav-sep{color:rgba(255,255,255,.2);font-size:11px;padding:0 2px;align-self:center}
+.h-logo{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--gpt) 0%,#34d399 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.h-logo svg{color:#fff;width:16px;height:16px}
+.h-text h1{font-size:14px;font-weight:600;color:#fff}
+.h-text .s{color:rgba(255,255,255,.5);font-size:11px}
+.b{max-width:860px;margin:14px auto;padding:0 14px 28px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;animation:fadeUp .4s ease both}
+.card:nth-child(1){animation-delay:.05s}.card:nth-child(2){animation-delay:.1s}.card:nth-child(3){animation-delay:.15s}.card:nth-child(4){animation-delay:.2s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.sht{display:flex;align-items:center;gap:7px;padding:8px 12px;font-size:12px;font-weight:600;background:var(--surface2);border-bottom:1px solid var(--border)}
+.sht-step{width:18px;height:18px;border-radius:50%;background:var(--pr);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sht-sub{font-weight:400;color:var(--t2);font-size:11px;margin-left:auto}
+.sb{padding:12px}
+.fr{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px}
+.fr:last-child{margin-bottom:0}
+.fg{display:flex;flex-direction:column;gap:3px;min-width:100px;flex:1}
+.fg label{font-size:11px;color:var(--t2);font-weight:500}
+.fg input,.fg select{height:30px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;outline:none;background:var(--surface);color:var(--text);transition:border-color .15s}
+.fg input:focus,.fg select:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(124,58,237,.1)}
+.fg input::placeholder{color:var(--t3)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:30px;padding:0 11px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);white-space:nowrap;transition:all .15s}
+.btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.bp{background:linear-gradient(135deg,var(--pr) 0%,#8b5cf6 100%);color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(124,58,237,.3)}
+.bp:hover{color:#fff;border-color:transparent}
+.bsm{height:26px;padding:0 8px;font-size:11px}
+.bdge{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:12px;font-size:10px;font-weight:500}
+.bg-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+.st{display:flex;align-items:flex-start;gap:6px;padding:7px 10px;border-radius:var(--r-sm);font-size:11px;margin-top:8px;font-weight:500}
+.st.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
+.st.er{background:var(--er-bg);border:1px solid var(--er-bd);color:var(--er)}
+.st.wa{background:var(--wa-bg);border:1px solid var(--wa-bd);color:var(--wa)}
+.st.info{background:var(--pl);border:1px solid #ddd6fe;color:var(--pr)}
+.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--pr);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fx{display:flex;align-items:center;gap:8px}
+.fb{display:flex;align-items:center;justify-content:space-between}
+.mt8{margin-top:8px}.mb8{margin-bottom:8px}.tc2{color:var(--t2)}
+.mgl{display:flex;flex-wrap:wrap;gap:4px;padding:6px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2);max-height:130px;overflow-y:auto}
+.mgi{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:4px;font-size:11px;cursor:pointer;background:var(--surface);border:1px solid var(--border);transition:all .15s;user-select:none}
+.mgi:has(input:checked){background:var(--pl);border-color:#c4b5fd;color:var(--pr)}
+.mgi input{accent-color:var(--pr);width:11px;height:11px;cursor:pointer;margin:0}
+.res-card{padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);margin-top:8px;font-size:11px}
+.res-card .row{display:flex;gap:8px;margin-bottom:5px;align-items:baseline}
+.res-card .lbl{color:var(--t2);min-width:90px;flex-shrink:0}
+.res-card .val{color:var(--text);font-family:monospace;word-break:break-all}
+.preview{font-family:inherit;white-space:pre-wrap;background:var(--surface);border:1px solid var(--border);padding:6px 8px;border-radius:4px;line-height:1.6;margin-top:4px}
+.code-block{background:#1e1e2e;color:#cdd6f4;padding:10px 12px;border-radius:var(--r-sm);font-family:monospace;font-size:10px;line-height:1.7;margin-top:6px;overflow-x:auto;white-space:pre}
+.tw{max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r-sm)}
+table{width:100%;border-collapse:collapse;font-size:11px}
+table th,table td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--border)}
+table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t2);white-space:nowrap;position:sticky;top:0;z-index:1}
+table tbody tr:hover td{background:var(--pl)}
+table tbody tr:last-child td{border-bottom:none}
+.prog-wrap{margin-top:8px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);display:none}
+.prog-wrap.show{display:block}
+.prog-label{font-size:11px;color:var(--t2);margin-bottom:5px;display:flex;justify-content:space-between}
+.prog-bar-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.prog-bar-fill{height:100%;background:linear-gradient(90deg,var(--pr),#8b5cf6);border-radius:3px;width:0%;transition:width .3s ease}
+.prog-cur{font-size:10px;color:var(--t3);margin-top:4px}
+.footer{text-align:center;color:var(--t3);font-size:10px;padding:4px 0 0}
+</style>
+</head>
+<body>
+<header class="h">
+  <div class="h-l">
+    <div class="h-logo"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M22.2 11.4a5.5 5.5 0 00-.42-4.26 5.57 5.57 0 00-6-2.65 5.5 5.5 0 00-4.14-1.84 5.57 5.57 0 00-5.31 3.86 5.5 5.5 0 00-3.67 2.66 5.57 5.57 0 00.69 6.52 5.5 5.5 0 00.42 4.25 5.57 5.57 0 006 2.66 5.5 5.5 0 004.14 1.84 5.57 5.57 0 005.31-3.86 5.5 5.5 0 003.67-2.65 5.57 5.57 0 00-.69-6.53z"/></svg></div>
+    <div class="h-text"><h1>GPT 测试模型</h1><div class="s">aws bedrock · ak/sk · 单个/批量测试</div></div>
+  </div>
+  <nav class="nav">
+    <a href="/">profile 标签</a><a href="/model-tags">创建配置</a><a href="/delete-profiles">删除配置</a>
+    <a href="/test-profile">测试模型</a><a href="/quotas">模型配额</a><a href="/data-retention">数据驻留</a>
+    <a href="/default-model-config">默认模型</a><a href="/mfa">MFA</a><a href="/scan-models">扫描</a>
+    <span class="nav-sep">|</span>
+    <a href="/gpt-accounts">GPT 账号</a><a href="/gpt-test" class="act">GPT 测试</a>
+    <a href="/gpt-quotas">GPT 配额</a><a href="/gpt-default">GPT 默认</a>
+  </nav>
+</header>
+
+<div class="b">
+  <!-- step 1: 凭证 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">1</span> aws 凭证<span class="sht-sub">验证后方可测试</span></div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:2"><label>access key id</label><input id="ak" type="text" placeholder="AKIA..." autocomplete="off"></div>
+        <div class="fg" style="flex:2"><label>secret access key</label><input id="sk" type="password" placeholder="..." autocomplete="off"></div>
+        <div class="fg" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn bp" id="btnV" onclick="vrf()">验证</button></div>
+      </div>
+      <div class="fr" id="ar" style="display:none">
+        <div class="fg"><label>账号 id</label><div class="fx"><span id="aid" style="font-family:monospace;font-weight:600"></span><span class="bdge bg-ok">✓ 已验证</span></div></div>
+      </div>
+      <div id="vrfMsg"></div>
+    </div>
+  </div>
+
+  <!-- step 2: 单个测试 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">2</span> 单个模型测试<span class="sht-sub">选择区域和模型，查看响应和 token 用量</span></div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:0 0 130px"><label>区域</label><select id="testRegion"></select></div>
+        <div class="fg" style="flex:2"><label>模型</label><select id="modelSel"></select></div>
+        <div class="fg" style="flex:0 0 auto"><label>&nbsp;</label><button class="btn bp" id="btnTest" onclick="testModel()" disabled>测试</button></div>
+      </div>
+      <div class="fr" style="margin-bottom:0">
+        <div class="fg"><label>自定义 model id（留空则用上方选择）</label><input id="customModel" type="text" placeholder="openai.gpt-5-5 或其他 model id"></div>
+      </div>
+      <div class="fr" style="margin-bottom:0">
+        <div class="fg"><label>测试提示词（可选）</label><input id="testPrompt" type="text" value="hi" placeholder="hi"></div>
+      </div>
+      <div id="testResult"></div>
+    </div>
+  </div>
+
+  <!-- step 3: 批量测试 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">3</span> 批量测试<span class="sht-sub">选择区域和多个模型，并发检测，带进度和过滤</span></div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:0 0 130px"><label>区域</label><select id="batchRegion"></select></div>
+      </div>
+      <div class="fg" style="margin-bottom:8px">
+        <label>选择模型（多选）</label>
+        <div class="mgl" id="batchMgl"></div>
+        <div style="display:flex;gap:10px;margin-top:5px;font-size:11px;align-items:center">
+          <label style="cursor:pointer;display:flex;align-items:center;gap:4px;color:var(--t2)"><input type="checkbox" id="saAll" onchange="taAll()" style="accent-color:var(--pr)"> 全选</label>
+          <span id="batchMC" style="color:var(--t3)">（已选 0）</span>
+        </div>
+      </div>
+      <div class="fr mt8 fb">
+        <div style="display:flex;gap:6px">
+          <button class="btn bp" id="btnBatch" onclick="batchTest()" disabled>批量测试</button>
+          <button class="btn bsm" onclick="clearBatch()">清空</button>
+        </div>
+      </div>
+      <div class="prog-wrap" id="batchProg">
+        <div class="prog-label"><span>测试进度</span><span id="batchPct">0%</span></div>
+        <div class="prog-bar-track"><div class="prog-bar-fill" id="batchFill"></div></div>
+        <div class="prog-cur" id="batchCur">等待开始...</div>
+      </div>
+      <div id="batchMsg"></div>
+      <div id="batchResultWrap" style="display:none;margin-top:10px">
+        <div class="fb mb8">
+          <span class="tc2" id="batchSummary">0 项</span>
+          <div style="display:flex;gap:5px">
+            <button class="btn bsm" onclick="filterBatch('all')" id="fAll">全部</button>
+            <button class="btn bsm" onclick="filterBatch('ok')" id="fOk" style="color:var(--ok)">✓ 可用</button>
+            <button class="btn bsm" onclick="filterBatch('er')" id="fEr" style="color:var(--er)">✗ 失败</button>
+          </div>
+        </div>
+        <div class="tw">
+          <table>
+            <thead><tr><th>状态</th><th>模型</th><th>Model ID</th><th>区域</th><th>Tokens</th><th>详情</th></tr></thead>
+            <tbody id="batchTb"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">gpt 测试模型 · aws bedrock openai models</div>
+</div>
+
+<script src="/static/persist.js"></script>
+<script>
+var AK="",SK="",AID="", allModels=[], _batchResults=[], _filterMode="all";
+var REGIONS=["us-east-1","us-east-2","us-west-2","us-west-1","eu-west-1","eu-west-2","eu-central-1","ap-southeast-1","ap-northeast-1"];
+function $(id){return document.getElementById(id)}
+function es(s){if(!s)return"";var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+function sR(id,msg,type){var el=$(id);if(el)el.innerHTML='<div class="st '+type+'">'+es(msg)+'</div>'}
+
+function initRegions(){
+  ["testRegion","batchRegion"].forEach(function(id){
+    var sel=$(id);sel.innerHTML="";
+    REGIONS.forEach(function(r){var o=document.createElement("option");o.value=r;o.textContent=r;if(r==="us-east-1")o.selected=true;sel.appendChild(o);});
+  });
+}
+
+async function loadModels(){
+  try{
+    var r=await fetch("/api/gpt/models"),j=await r.json();
+    if(!j.ok)return;
+    allModels=j.models||[];
+    var sel=$("modelSel");sel.innerHTML="";
+    var gl=$("batchMgl");gl.innerHTML="";
+    allModels.forEach(function(m){
+      var o=document.createElement("option");o.value=m.id;o.textContent=m.label+" ("+m.id+")";sel.appendChild(o);
+      var lbl=document.createElement("label");lbl.className="mgi";
+      lbl.innerHTML='<input type="checkbox" value="'+es(m.id)+'" onchange="upBMC()"> '+es(m.label);
+      gl.appendChild(lbl);
+    });
+    upBMC();
+  }catch(e){}
+}
+
+function upBMC(){var n=document.querySelectorAll("#batchMgl input:checked").length;$("batchMC").textContent="（已选 "+n+"）";}
+function taAll(){var c=$("saAll").checked;document.querySelectorAll("#batchMgl input").forEach(function(cb){cb.checked=c});upBMC();}
+
+async function vrf(){
+  AK=$("ak").value.trim();SK=$("sk").value.trim();
+  if(!AK||!SK){sR("vrfMsg","请填写 AK/SK","er");return}
+  var btn=$("btnV");btn.disabled=true;btn.textContent="验证中...";
+  try{
+    var r=await fetch("/api/gpt/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_key:AK,secret_key:SK})});
+    var j=await r.json();
+    if(j.ok){
+      AID=j.account_id||"";$("aid").textContent=AID;$("ar").style.display="";
+      BedrockPersist.onVerified(AID);
+      sR("vrfMsg","✓ 已验证","ok");
+      $("btnTest").disabled=false;$("btnBatch").disabled=false;
+    }else{sR("vrfMsg",j.error||"验证失败","er");$("btnTest").disabled=true;$("btnBatch").disabled=true;}
+  }catch(e){sR("vrfMsg","网络错误","er")}
+  btn.disabled=false;btn.textContent="验证";
+}
+
+async function testModel(){
+  var model=$("customModel").value.trim()||$("modelSel").value;
+  var region=$("testRegion").value;
+  var prompt=$("testPrompt").value.trim()||"hi";
+  if(!model){sR("testResult","请选择模型","wa");return}
+  var btn=$("btnTest");btn.disabled=true;btn.textContent="测试中...";
+  $("testResult").innerHTML='<div class="st info"><span class="sp"></span> 正在调用 '+es(model)+'...</div>';
+  try{
+    var r=await fetch("/api/gpt/test_model",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({access_key:AK,secret_key:SK,region:region,model_id:model,prompt:prompt})});
+    var j=await r.json();
+    if(j.ok){
+      var code='import boto3\nclient = boto3.client("bedrock-runtime", region_name="'+j.region+'")\nresp = client.converse(\n    modelId="'+j.model+'",\n    messages=[{"role":"user","content":[{"text":"hello"}]}],\n    inferenceConfig={"maxTokens":256}\n)\nprint(resp["output"]["message"]["content"][0]["text"])';
+      $("testResult").innerHTML=
+        '<div class="res-card">'+
+        '<div class="row"><span class="lbl">模型</span><span class="val">'+es(j.model)+'</span></div>'+
+        '<div class="row"><span class="lbl">区域</span><span class="val">'+es(j.region)+'</span></div>'+
+        '<div class="row"><span class="lbl">token 用量</span><span class="val">input '+j.prompt_tokens+' · output '+j.completion_tokens+' · total '+j.total_tokens+'</span></div>'+
+        '<div class="row" style="flex-direction:column"><span class="lbl">回复预览</span><div class="preview">'+es(j.preview)+'</div></div>'+
+        '<div class="row" style="flex-direction:column;margin-top:8px"><span class="lbl">python 示例</span><div class="code-block">'+es(code)+'</div></div>'+
+        '</div>';
+    }else{
+      $("testResult").innerHTML='<div class="st er">'+es(j.reason||j.error||"调用失败")+'</div>';
+    }
+  }catch(e){sR("testResult","网络错误: "+e.message,"er")}
+  btn.disabled=false;btn.textContent="测试";
+}
+
+async function batchTest(){
+  var models=[];document.querySelectorAll("#batchMgl input:checked").forEach(function(cb){models.push(cb.value)});
+  if(!models.length){sR("batchMsg","请至少选择一个模型","wa");return}
+  var region=$("batchRegion").value;
+  var btn=$("btnBatch");btn.disabled=true;btn.textContent="测试中...";
+  var pw=$("batchProg");pw.classList.add("show");
+  var fill=$("batchFill"),pct=$("batchPct"),cur=$("batchCur");
+  fill.style.width="0%";pct.textContent="0%";cur.textContent="准备中...";
+  $("batchResultWrap").style.display="none";$("batchMsg").innerHTML="";_batchResults=[];
+  var total=models.length,done=0,ok=0,fail=0;
+  await Promise.all(models.map(async function(mid){
+    try{
+      var r=await fetch("/api/gpt/test_model",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({access_key:AK,secret_key:SK,region:region,model_id:mid,prompt:"hi"})});
+      var j=await r.json();
+      var meta=allModels.find(function(m){return m.id===mid})||{label:mid};
+      _batchResults.push({model:mid,label:meta.label,region:region,ok:j.ok,preview:j.preview||"",
+        error:j.reason||j.error||"",total:j.total_tokens||0});
+      if(j.ok)ok++;else fail++;
+    }catch(e){
+      var meta=allModels.find(function(m){return m.id===mid})||{label:mid};
+      _batchResults.push({model:mid,label:meta.label,region:region,ok:false,error:e.message||"网络错误"});
+      fail++;
+    }
+    done++;var p=Math.round(done/total*100);fill.style.width=p+"%";pct.textContent=p+"%";
+    cur.textContent=done+"/"+total+" · "+ok+" 成功 · "+fail+" 失败";
+  }));
+  cur.textContent="完成！"+ok+" 成功 · "+fail+" 失败";
+  $("batchSummary").textContent="共 "+_batchResults.length+" 个 · "+ok+" 可用 · "+fail+" 失败";
+  renderBatch("all");$("batchResultWrap").style.display="";
+  btn.disabled=false;btn.textContent="批量测试";
+  setTimeout(function(){pw.classList.remove("show")},3000);
+}
+
+function filterBatch(mode){
+  _filterMode=mode;
+  ["all","ok","er"].forEach(function(m){var id="f"+m.charAt(0).toUpperCase()+m.slice(1);if($(id))$(id).style.background=m===mode?"var(--pl)":"";});
+  renderBatch(mode);
+}
+function renderBatch(mode){
+  var tb=$("batchTb");tb.innerHTML="";
+  _batchResults.filter(function(r){return mode==="all"||(mode==="ok"&&r.ok)||(mode==="er"&&!r.ok)}).forEach(function(res){
+    var statusHtml=res.ok?'<span style="color:var(--ok);font-weight:600">✓ 可用</span>':'<span style="color:var(--er);font-weight:600">✗ 失败</span>';
+    var detail=res.ok?'tokens: '+res.total+(res.preview?' · "'+es(res.preview.slice(0,40))+'..."':''):es(res.error);
+    var tr=document.createElement("tr");
+    tr.innerHTML='<td>'+statusHtml+'</td><td>'+es(res.label)+'</td><td style="font-family:monospace;font-size:10px;color:var(--t2)">'+es(res.model)+'</td><td style="font-family:monospace;font-size:10px">'+es(res.region)+'</td><td style="font-family:monospace;text-align:center">'+es(res.ok?String(res.total):"—")+'</td><td style="color:var(--t2);font-size:10px">'+detail+'</td>';
+    tb.appendChild(tr);
+  });
+}
+function clearBatch(){_batchResults=[];$("batchResultWrap").style.display="none";$("batchMsg").innerHTML="";}
+
+document.addEventListener("DOMContentLoaded",async function(){
+  var d=BedrockPersist.init();
+  initRegions();
+  await loadModels();
+  var akEl=$("ak"),skEl=$("sk"),aidEl=$("aid");
+  if(akEl&&akEl.value)AK=akEl.value.trim();
+  if(skEl&&skEl.value)SK=skEl.value.trim();
+  if(aidEl&&aidEl.textContent.trim()){AID=aidEl.textContent.trim();$("ar").style.display="";}
+  if(AK&&SK){$("btnTest").disabled=false;$("btnBatch").disabled=false;}
+});
+</script>
+</body>
+</html>
