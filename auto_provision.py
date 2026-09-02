@@ -80,6 +80,9 @@ MODEL_ALIAS = {
     "claude opus 5": "anthropic.claude-opus-5",
     "fable 5": "anthropic.claude-fable-5",
     "fable5": "anthropic.claude-fable-5",
+    "fable 5.1": "anthropic.claude-fable-5-1",
+    "fable5.1": "anthropic.claude-fable-5-1",
+    "5.1": "anthropic.claude-fable-5-1",
     "5": "anthropic.claude-fable-5",
     "opus 4.5": "anthropic.claude-opus-4-5-20251101-v1:0",
     "opus4.5": "anthropic.claude-opus-4-5-20251101-v1:0",
@@ -93,6 +96,15 @@ MODEL_ALIAS = {
 
 # 完整模型信息（同步自 app.py）
 CLAUDE_VERSIONS = [
+    {
+        "id": "anthropic.claude-fable-5-1",
+        "label": "Claude Fable 5.1",
+        "sources": {
+            "us": "us.anthropic.claude-fable-5-1",
+            "eu": "eu.anthropic.claude-fable-5-1",
+            "global": "global.anthropic.claude-fable-5-1",
+        },
+    },
     {
         "id": "anthropic.claude-fable-5",
         "label": "Claude Fable 5",

@@ -68,9 +68,22 @@ input,textarea,select{font-family:inherit;text-transform:none}
   position:sticky;top:0;z-index:100;
 }
 .h-l{display:flex;align-items:center;gap:10px}
-.nav{display:flex;gap:4px}
-.nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:11px;padding:4px 10px;border-radius:4px;transition:all .15s}
+.nav{display:flex;gap:2px;align-items:center}
+.nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:13px;padding:5px 12px;border-radius:4px;transition:all .15s}
 .nav a:hover,.nav a.act{color:#fff;background:rgba(255,255,255,.12)}
+.dd{position:relative}
+.dd-btn{display:inline-flex;align-items:center;gap:5px;color:rgba(255,255,255,.75);font-size:13px;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap;transition:all .15s;user-select:none;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);font-family:inherit;font-weight:500;}
+.dd-btn::after{content:"▾";font-size:10px;opacity:.8;transition:transform .2s}
+.dd.open .dd-btn::after{transform:rotate(-180deg)}
+.dd.open .dd-btn,.dd-btn:hover{color:#fff;background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.22)}
+.dd-btn.act{color:#fff;background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.22)}
+.dd-menu{display:none;position:absolute;right:0;top:calc(100% + 6px);background:#1a2a4a;border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:5px;min-width:140px;box-shadow:0 10px 28px rgba(0,0,0,.4);z-index:200;white-space:nowrap;}
+.dd.open .dd-menu{display:block}
+.dd-menu a{display:block;color:rgba(255,255,255,.8);text-decoration:none;font-size:13px;padding:7px 13px;border-radius:5px;transition:all .12s;}
+.dd-menu a:hover,.dd-menu a.act{color:#fff;background:rgba(255,255,255,.13)}
+.dd-menu a.act{font-weight:600}
+/* ── 下拉导航 ─────────────────────────────────────── */
+.nav{display:flex;gap:2px;align-items:center}
 .h-logo{
   width:28px;height:28px;border-radius:6px;
   background:linear-gradient(135deg,var(--aws) 0%,#ffb84d 100%);
@@ -496,19 +509,29 @@ table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t
     </div>
   </div>
   <nav class="nav">
-    <a href="/">profile 标签</a>
-    <a href="/model-tags" class="act">创建配置</a>
-    <a href="/delete-profiles">删除配置</a>
-    <a href="/test-profile">测试模型</a>
-    <a href="/quotas">模型配额</a>
-    <a href="/data-retention">数据驻留</a>
-    <a href="/default-model-config">默认模型</a>
-    <a href="/mfa">MFA 验证码</a>
-    <a href="/scan-models">扫描新模型</a>
-    <span class="nav-sep" style="color:rgba(255,255,255,.2);font-size:11px;padding:0 2px">|</span>
-    <a href="/gpt-test">gpt 测试</a>
-    <a href="/gpt-quotas">gpt 配额</a>
-    <a href="/gpt-default">gpt 默认</a>
+    <div class="dd">
+      <button class="dd-btn act">bedrock</button>
+      <div class="dd-menu">
+        <a href="/">profile 标签</a>
+        <a href="/model-tags" class="act">创建配置</a>
+        <a href="/delete-profiles">删除配置</a>
+        <a href="/test-profile">测试模型</a>
+        <a href="/quotas">模型配额</a>
+        <a href="/data-retention">数据驻留</a>
+        <a href="/default-model-config">默认模型</a>
+        <a href="/mfa">mfa 验证码</a>
+        <a href="/scan-models">扫描新模型</a>
+      </div>
+    </div>
+    <div class="dd">
+      <button class="dd-btn">gpt</button>
+      <div class="dd-menu">
+        <a href="/gpt-accounts">gpt 账号</a>
+        <a href="/gpt-test">gpt 测试</a>
+        <a href="/gpt-quotas">gpt 配额</a>
+        <a href="/gpt-default">gpt 默认</a>
+      </div>
+    </div>
   </nav>
 </header>
 
@@ -528,7 +551,7 @@ table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t
   </div>
 
   <div class="card">
-    <div class="sht"><span class="sht-step">2</span> 创建配置<span class="sht-sub">claude 4.5+ · fable 5 · 区域 × 模型</span></div>
+    <div class="sht"><span class="sht-step">2</span> 创建配置<span class="sht-sub">claude 4.5+ · fable 5.1 · fable 5 · 区域 × 模型</span></div>
     <div class="sb">
       <div class="fr">
         <div class="fg" style="flex:1"><label>配置名称</label><input id="pname" type="text" placeholder="my-claude-profile" oninput="upPreview()"></div>
@@ -618,6 +641,22 @@ table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t
     </div>
   </div>
 </div>
+<script>
+document.addEventListener("DOMContentLoaded",function(){
+  document.querySelectorAll(".dd-btn").forEach(function(btn){
+    btn.addEventListener("click",function(e){
+      e.stopPropagation();
+      var dd=btn.closest(".dd");
+      var isOpen=dd.classList.contains("open");
+      document.querySelectorAll(".dd.open").forEach(function(d){d.classList.remove("open")});
+      if(!isOpen)dd.classList.add("open");
+    });
+  });
+  document.addEventListener("click",function(){
+    document.querySelectorAll(".dd.open").forEach(function(d){d.classList.remove("open")});
+  });
+});
+</script>
 <script src="/static/persist.js"></script>
 <script>
 var B="",results=[],_persistReady=false;

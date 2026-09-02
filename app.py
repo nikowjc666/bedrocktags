@@ -51,6 +51,15 @@ CLAUDE_VERSIONS = [
         },
     },
     {
+        "id": "anthropic.claude-fable-5-1",
+        "label": "Claude Fable 5.1",
+        "sources": {
+            "us": "us.anthropic.claude-fable-5-1",
+            "eu": "eu.anthropic.claude-fable-5-1",
+            "global": "global.anthropic.claude-fable-5-1",
+        },
+    },
+    {
         "id": "anthropic.claude-fable-5",
         "label": "Claude Fable 5",
         "sources": {
