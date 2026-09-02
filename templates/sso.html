@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SSO 用户管理 · AWS Bedrock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f0f4ff;--bg2:#e8eeff;--surface:#fff;--surface2:#f8fafc;
+  --border:#e2e8f0;--text:#0f172a;--t2:#64748b;--t3:#94a3b8;
+  --pr:#2563eb;--ph:#1d4ed8;--pl:#eff6ff;
+  --ok:#16a34a;--ok-bg:#f0fdf4;--ok-bd:#bbf7d0;
+  --er:#dc2626;--er-bg:#fef2f2;--er-bd:#fecaca;
+  --wa:#d97706;--wa-bg:#fffbeb;--wa-bd:#fde68a;
+  --sso:#0ea5e9;--r:7px;--r-sm:5px;
+  --shadow:0 1px 3px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.04);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Inter",-apple-system,sans-serif;background:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 50%,#dde8ff 100%);background-attachment:fixed;color:var(--text);font-size:12px;line-height:1.45;min-height:100vh;text-transform:lowercase}
+input,textarea,select{font-family:inherit;text-transform:none}
+.h{background:linear-gradient(135deg,#0c2340 0%,#0f3460 60%,#0c2e50 100%);padding:0 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;height:44px;box-shadow:0 1px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
+.h-l{display:flex;align-items:center;gap:10px}
+.nav{display:flex;gap:2px;align-items:center}
+.nav a{color:rgba(255,255,255,.65);text-decoration:none;font-size:13px;padding:5px 12px;border-radius:4px;transition:all .15s}
+.nav a:hover,.nav a.act{color:#fff;background:rgba(255,255,255,.12)}
+.dd{position:relative}
+.dd-btn{display:inline-flex;align-items:center;gap:5px;color:rgba(255,255,255,.75);font-size:13px;padding:6px 14px;border-radius:5px;cursor:pointer;white-space:nowrap;transition:all .15s;user-select:none;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);font-family:inherit;font-weight:500}
+.dd-btn::after{content:"▾";font-size:10px;opacity:.8;transition:transform .2s}
+.dd.open .dd-btn::after{transform:rotate(-180deg)}
+.dd.open .dd-btn,.dd-btn:hover{color:#fff;background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.22)}
+.dd-btn.act{color:#fff;background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.22)}
+.dd-menu{display:none;position:absolute;right:0;top:calc(100% + 6px);background:#0c2340;border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:5px;min-width:140px;box-shadow:0 10px 28px rgba(0,0,0,.4);z-index:200;white-space:nowrap}
+.dd.open .dd-menu{display:block}
+.dd-menu a{display:block;color:rgba(255,255,255,.8);text-decoration:none;font-size:13px;padding:7px 13px;border-radius:5px;transition:all .12s}
+.dd-menu a:hover,.dd-menu a.act{color:#fff;background:rgba(255,255,255,.13)}
+.dd-menu a.act{font-weight:600}
+.h-logo{width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,var(--sso) 0%,#38bdf8 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;color:#fff;font-weight:700}
+.h-text h1{font-size:14px;font-weight:600;color:#fff}
+.h-text .s{color:rgba(255,255,255,.5);font-size:11px}
+.b{max-width:900px;margin:14px auto;padding:0 14px 28px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;animation:fadeUp .4s ease both}
+.card:nth-child(1){animation-delay:.05s}.card:nth-child(2){animation-delay:.1s}.card:nth-child(3){animation-delay:.15s}.card:nth-child(4){animation-delay:.2s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.sht{display:flex;align-items:center;gap:7px;padding:8px 12px;font-size:12px;font-weight:600;background:var(--surface2);border-bottom:1px solid var(--border)}
+.sht-step{width:18px;height:18px;border-radius:50%;background:var(--pr);color:#fff;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sht-sub{font-weight:400;color:var(--t2);font-size:11px;margin-left:auto}
+.sb{padding:12px}
+.fr{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:8px}
+.fr:last-child{margin-bottom:0}
+.fg{display:flex;flex-direction:column;gap:3px;min-width:90px;flex:1}
+.fg label{font-size:11px;color:var(--t2);font-weight:500}
+.fg input,.fg select{height:30px;padding:0 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;outline:none;background:var(--surface);color:var(--text);transition:border-color .15s}
+.fg input:focus,.fg select:focus{border-color:var(--pr);box-shadow:0 0 0 2px rgba(37,99,235,.1)}
+.fg input::placeholder{color:var(--t3)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:30px;padding:0 11px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text);white-space:nowrap;transition:all .15s;font-family:inherit}
+.btn:hover{border-color:var(--pr);color:var(--pr);background:var(--pl)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.bp{background:linear-gradient(135deg,var(--pr) 0%,#3b82f6 100%);color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(37,99,235,.3)}
+.bp:hover{color:#fff;border-color:transparent}
+.bs{background:linear-gradient(135deg,var(--ok) 0%,#22c55e 100%);color:#fff;border-color:transparent}
+.bd{background:linear-gradient(135deg,var(--er) 0%,#ef4444 100%);color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(220,38,38,.3)}
+.bd:hover{color:#fff;border-color:transparent}
+.bsm{height:26px;padding:0 8px;font-size:11px}
+.st{display:flex;align-items:flex-start;gap:6px;padding:7px 10px;border-radius:var(--r-sm);font-size:11px;margin-top:8px;font-weight:500}
+.st.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok)}
+.st.er{background:var(--er-bg);border:1px solid var(--er-bd);color:var(--er)}
+.st.wa{background:var(--wa-bg);border:1px solid var(--wa-bd);color:var(--wa)}
+.st.info{background:var(--pl);border:1px solid #bfdbfe;color:var(--pr)}
+.sp{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--pr);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.chk-row{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--t2);margin-top:6px}
+.chk-row input[type=checkbox]{width:14px;height:14px;cursor:pointer}
+/* result table */
+.rtbl{width:100%;border-collapse:collapse;font-size:11px;margin-top:10px}
+.rtbl th{text-align:left;padding:5px 8px;background:var(--surface2);border-bottom:2px solid var(--border);color:var(--t2);font-weight:600}
+.rtbl td{padding:5px 8px;border-bottom:1px solid var(--border);color:var(--text);word-break:break-all}
+.rtbl tr:last-child td{border-bottom:none}
+.rtbl .pwd-cell{font-family:monospace;font-size:11px;font-weight:600;color:#b45309}
+.rtbl .miss{color:var(--er);font-size:10px}
+.summary-bar{display:flex;gap:16px;padding:8px 12px;background:var(--surface2);border-radius:var(--r-sm);font-size:12px;margin-bottom:10px;border:1px solid var(--border)}
+.summary-bar b{font-size:16px;display:block}
+.export-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.danger-zone{border-color:#fecaca!important;background:#fff7f7}
+.danger-zone .sht{background:#fff1f1}
+.del-confirm-row{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--er);margin-top:6px;font-weight:500}
+.footer{text-align:center;color:var(--t3);font-size:10px;padding:4px 0 0}
+</style>
+</head>
+<body>
+<header class="h">
+  <div class="h-l">
+    <div class="h-logo">SSO</div>
+    <div class="h-text"><h1>SSO 用户管理</h1><div class="s">aws iam identity center · 批量创建 / 生成密码 / 导出</div></div>
+  </div>
+  <nav class="nav">
+    <div class="dd">
+      <button class="dd-btn">bedrock</button>
+      <div class="dd-menu">
+        <a href="/">profile 标签</a>
+        <a href="/model-tags">创建配置</a>
+        <a href="/delete-profiles">删除配置</a>
+        <a href="/test-profile">测试模型</a>
+        <a href="/quotas">模型配额</a>
+        <a href="/data-retention">数据驻留</a>
+        <a href="/default-model-config">默认模型</a>
+        <a href="/mfa">mfa 验证码</a>
+        <a href="/scan-models">扫描新模型</a>
+      </div>
+    </div>
+    <div class="dd">
+      <button class="dd-btn">gpt</button>
+      <div class="dd-menu">
+        <a href="/gpt-accounts">gpt 账号</a>
+        <a href="/gpt-test">gpt 测试</a>
+        <a href="/gpt-quotas">gpt 配额</a>
+        <a href="/gpt-default">gpt 默认</a>
+      </div>
+    </div>
+    <div class="dd">
+      <button class="dd-btn act">sso: 用户管理</button>
+      <div class="dd-menu">
+        <a href="/sso" class="act">批量创建 / 密码</a>
+      </div>
+    </div>
+  </nav>
+</header>
+
+<div class="b">
+
+  <!-- 1. 凭证 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">1</span> aws 凭证<span class="sht-sub">填写 ak/sk，决定操作哪个账号</span></div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:2"><label>access key id *</label><input id="ak" placeholder="AKIA..." autocomplete="off" spellcheck="false"></div>
+        <div class="fg" style="flex:2"><label>secret access key *</label><input id="sk" type="password" placeholder="••••••••" autocomplete="off"></div>
+        <div class="fg" style="flex:1"><label>区域 *</label><input id="region" value="us-east-1" placeholder="us-east-1"></div>
+        <div class="fg" style="flex:1"><label>session token（可选）</label><input id="tok" type="password" placeholder="临时凭证时填写" autocomplete="off"></div>
+      </div>
+      <div class="fr">
+        <button class="btn bp" onclick="whoami()">检测凭证</button>
+      </div>
+      <div id="whoamiMsg"></div>
+    </div>
+  </div>
+
+  <!-- 2. 批量创建 + 密码 -->
+  <div class="card">
+    <div class="sht"><span class="sht-step">2</span> 批量创建用户 + 生成密码<span class="sht-sub">纯 api 调用，无需浏览器</span></div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg"><label>用户名前缀 *</label><input id="prefix" value="kiro" placeholder="kiro"></div>
+        <div class="fg"><label>邮箱域名 *</label><input id="domain" value="example.com" placeholder="example.com"></div>
+        <div class="fg" style="max-width:90px"><label>数量 *</label><input id="count" type="number" min="1" value="3"></div>
+        <div class="fg" style="max-width:90px"><label>序号起始值</label><input id="start" type="number" min="0" value="1"></div>
+        <div class="fg" style="max-width:80px"><label>序号位数</label><input id="pad" type="number" min="1" value="2"></div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label>sso 组名</label><input id="group" value="Kiro-Users" placeholder="Kiro-Users"></div>
+        <div class="fg"><label>identity store id（可选）</label><input id="store_id" placeholder="留空自动发现"></div>
+      </div>
+      <div class="chk-row">
+        <input type="checkbox" id="create_group" checked><span>组不存在时自动创建</span>
+      </div>
+      <div class="chk-row">
+        <input type="checkbox" id="skip_pwd"><span>只创建用户，不生成密码</span>
+      </div>
+      <div class="fr" style="margin-top:10px">
+        <button class="btn" onclick="preview()">预览</button>
+        <button class="btn bp" id="runBtn" onclick="runCreate()">开始执行（创建 + 生成密码）</button>
+      </div>
+      <div id="runMsg"></div>
+
+      <!-- 结果区 -->
+      <div id="resultBox" style="display:none;margin-top:12px">
+        <div id="summaryBar" class="summary-bar"></div>
+        <table class="rtbl">
+          <thead><tr>
+            <th>用户名</th><th>邮箱</th><th>一次性密码</th><th>双栈登录地址</th><th>状态</th>
+          </tr></thead>
+          <tbody id="resultBody"></tbody>
+        </table>
+        <div class="export-btns">
+          <button class="btn" onclick="exportTxt()">导出 TXT</button>
+          <button class="btn" onclick="exportCsv()">导出 CSV</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">sso 用户管理 · aws iam identity center · 纯 api 调用</div>
+</div>
+
+<script>
+// ── 下拉菜单 ──────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", function(){
+  document.querySelectorAll(".dd-btn").forEach(function(btn){
+    btn.addEventListener("click", function(e){
+      e.stopPropagation();
+      var dd = btn.closest(".dd"), open = dd.classList.contains("open");
+      document.querySelectorAll(".dd.open").forEach(function(d){ d.classList.remove("open") });
+      if (!open) dd.classList.add("open");
+    });
+  });
+  document.addEventListener("click", function(){
+    document.querySelectorAll(".dd.open").forEach(function(d){ d.classList.remove("open") });
+  });
+});
+
+// ── 工具函数 ──────────────────────────────────────────────
+function creds(){ return { access_key_id: G("ak"), secret_access_key: G("sk"), region: G("region"), session_token: G("tok") }; }
+function userParams(){ return { prefix: G("prefix"), domain: G("domain"), count: G("count"), start: G("start"), pad: G("pad"), group: G("group"), identity_store_id: G("store_id"), create_group: G2("create_group"), skip_passwords: G2("skip_pwd") }; }
+function G(id){ return document.getElementById(id).value.trim(); }
+function G2(id){ return document.getElementById(id).checked; }
+function setMsg(id, html, cls){ var el=document.getElementById(id); el.innerHTML='<div class="st '+cls+'">'+html+'</div>'; }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+async function api(path, body){ const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); return r.json(); }
+
+// ── 检测凭证 ──────────────────────────────────────────────
+async function whoami(){
+  setMsg("whoamiMsg", '<span class="sp"></span> 检测中...', "info");
+  const res = await api("/api/sso/whoami", creds());
+  if (!res.ok){ setMsg("whoamiMsg", res.error, "er"); return; }
+  let html = '账号: <strong>'+esc(res.account)+'</strong> &nbsp;|&nbsp; 身份: '+esc(res.arn)+' &nbsp;|&nbsp; 区域: '+esc(res.region);
+  if (res.identity_center && res.identity_center.length){
+    html += '<br>identity store: <strong>'+esc(res.identity_center[0].identity_store_id)+'</strong>';
+    html += ' &nbsp;|&nbsp; 登录地址: <a href="'+esc(res.identity_center[0].portal_url)+'" target="_blank" style="color:var(--pr)">'+esc(res.identity_center[0].portal_url)+'</a>';
+  }
+  if (res.identity_center_error) html += '<br>⚠ '+esc(res.identity_center_error);
+  setMsg("whoamiMsg", html, "ok");
+}
+
+// ── 预览 ──────────────────────────────────────────────────
+async function preview(){
+  const res = await api("/api/sso/preview", {...creds(), ...userParams()});
+  if (!res.ok){ setMsg("runMsg", res.error, "er"); return; }
+  setMsg("runMsg", "预览：共 "+res.users.length+" 个用户 — "+res.users.map(u=>esc(u.username)).join(", "), "info");
+}
+
+// ── 执行创建 ──────────────────────────────────────────────
+let lastResult = null;
+
+async function runCreate(){
+  if (!confirm("将在 AWS 上实际创建用户，确认继续？")) return;
+  const btn = document.getElementById("runBtn");
+  btn.disabled = true; btn.textContent = "执行中...";
+  setMsg("runMsg", '<span class="sp"></span> 创建用户并生成密码（纯 API）...', "info");
+  document.getElementById("resultBox").style.display = "none";
+  try {
+    const res = await api("/api/sso/run", {...creds(), ...userParams()});
+    if (!res.ok){ setMsg("runMsg", res.error, "er"); return; }
+    lastResult = res;
+    const s = res.summary;
+    let smsg = '完成: 创建 <b>'+s.created+'</b> 跳过 <b>'+s.skipped+'</b> 失败 <b>'+s.failed+'</b>';
+    smsg += ' &nbsp;|&nbsp; identity store: '+esc(res.identity_store_id);
+    if (res.portal_url) smsg += ' &nbsp;|&nbsp; <a href="'+esc(res.portal_url)+'" target="_blank" style="color:var(--pr)">登录地址</a>';
+    setMsg("runMsg", smsg, s.failed>0?"wa":"ok");
+    renderResults(res);
+  } finally {
+    btn.disabled = false; btn.textContent = "开始执行（创建 + 生成密码）";
+  }
+}
+
+function renderResults(res){
+  document.getElementById("resultBox").style.display = "";
+  const s = res.summary;
+  document.getElementById("summaryBar").innerHTML =
+    '<div>已创建<b>'+s.created+'</b></div><div>跳过<b>'+s.skipped+'</b></div><div>失败<b>'+s.failed+'</b></div>'+
+    (res.portal_url?'<div style="margin-left:auto;font-size:11px;color:var(--t2)">登录: <a href="'+esc(res.portal_url)+'" target="_blank" style="color:var(--pr)">'+esc(res.portal_url)+'</a></div>':'');
+  document.getElementById("resultBody").innerHTML = res.results.map(r =>
+    '<tr><td>'+esc(r.username)+'</td><td>'+esc(r.email)+'</td>'+
+    '<td class="'+(r.one_time_password?'pwd-cell':'')+'">'+
+    (r.one_time_password ? esc(r.one_time_password) : '<span class="miss">(未获取)</span>')+
+    '</td><td style="font-size:10px;color:var(--t2)">'+(r.portal_url_dualstack?esc(r.portal_url_dualstack):'')+'</td>'+
+    '<td>'+esc(r.status)+'</td></tr>'
+  ).join('');
+}
+
+// ── 导出 TXT ──────────────────────────────────────────────
+function exportTxt(){
+  if (!lastResult) return;
+  const p = lastResult.portal_url || '', d = lastResult.dualstack_url || '';
+  const blocks = lastResult.results.map(r => {
+    const lines = [];
+    if (p) lines.push('默认 AWS access portal URL（仅限 IPv4）: '+p);
+    if (d) lines.push('双栈 AWS access portal URL: '+d);
+    lines.push('用户名: '+r.username);
+    lines.push('一次性密码: '+(r.one_time_password||'(未获取)'));
+    return lines.join('\r\n');
+  });
+  dl('sso_登录信息_'+ts()+'.txt', blocks.join('\r\n\r\n'), 'text/plain');
+}
+
+// ── 导出 CSV ──────────────────────────────────────────────
+function exportCsv(){
+  if (!lastResult) return;
+  const q = v => '"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const hdr = ['username','email','portal_url','dualstack_url','one_time_password','group','status'];
+  const lines = [hdr.join(',')];
+  lastResult.results.forEach(r => {
+    lines.push(hdr.map(h => {
+      if (h==='portal_url') return q(lastResult.portal_url||'');
+      if (h==='dualstack_url') return q(lastResult.dualstack_url||'');
+      if (h==='group') return q(lastResult.group||'');
+      return q(r[h]);
+    }).join(','));
+  });
+  dl('sso_users_'+ts()+'.csv', '\ufeff'+lines.join('\r\n'), 'text/csv');
+}
+
+function dl(name, content, mime){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type:mime+';charset=utf-8'}));
+  a.download=name; a.click(); URL.revokeObjectURL(a.href);
+}
+function ts(){ const d=new Date(),p=n=>String(n).padStart(2,'0'); return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds()); }
+
+// ── 删除预览 ──────────────────────────────────────────────
+let delPreviewData = null;
+
+async function deletePreview(){
+  delPreviewData = null;
+  setMsg("delMsg", '<span class="sp"></span> 查询中...', "info");
+  document.getElementById("delResultBox").style.display = "none";
+  const payload = {...creds(), usernames: G("delNames"),
+    prefix: G("prefix"), domain: G("domain"), count: G("count"),
+    start: G("start"), pad: G("pad")};
+  const res = await api("/api/sso/delete_preview", payload);
+  if (!res.ok){ setMsg("delMsg", res.error, "er"); return; }
+  delPreviewData = res;
+  setMsg("delMsg", '共 '+res.items.length+' 个，存在 <b>'+res.found+'</b> 个，不存在 '+res.missing+' 个。勾选确认后点删除。', res.found>0?"wa":"ok");
+  document.getElementById("delResultBox").style.display = "";
+  document.getElementById("delSummary").innerHTML = '<div>找到 <b>'+res.found+'</b> 个</div><div>不存在 <b>'+res.missing+'</b> 个</div>';
+  document.getElementById("delBody").innerHTML = res.items.map(i =>
+    '<tr><td>'+esc(i.username)+'</td><td style="font-size:10px;color:var(--t3)">'+esc(i.user_id||'—')+'</td>'+
+    '<td>'+(i.exists?'<span style="color:var(--er);font-weight:600">将删除</span>':'<span style="color:var(--t3)">不存在</span>')+'</td></tr>'
+  ).join('');
+}
+
+async function deleteRun(){
+  if (!delPreviewData){ setMsg("delMsg","请先点「预览待删除」","er"); return; }
+  const targets = delPreviewData.items.filter(i=>i.exists).map(i=>i.username);
+  if (!targets.length){ setMsg("delMsg","没有可删除的用户","er"); return; }
+  if (!document.getElementById("delConfirm").checked){ setMsg("delMsg","请先勾选上方确认框","er"); return; }
+  const btn = document.getElementById("delBtn");
+  btn.disabled = true; btn.textContent = "删除中...";
+  try {
+    const payload = {...creds(), usernames_confirmed: targets, confirm_count: targets.length,
+      identity_store_id: G("store_id")};
+    const res = await api("/api/sso/delete_run", payload);
+    if (!res.ok){ setMsg("delMsg", res.error, "er"); return; }
+    const s = res.summary;
+    setMsg("delMsg", "完成: 删除 <b>"+s.deleted+"</b> 跳过 <b>"+s.skipped+"</b> 失败 <b>"+s.failed+"</b>", s.failed>0?"wa":"ok");
+    document.getElementById("delBody").innerHTML = res.results.map(r =>
+      '<tr><td>'+esc(r.username)+'</td><td></td><td>'+esc(r.status)+'</td></tr>'
+    ).join('');
+    delPreviewData = null;
+    document.getElementById("delConfirm").checked = false;
+  } finally {
+    btn.disabled = false; btn.textContent = "确认删除";
+  }
+}
+</script>
+</body>
+</html>

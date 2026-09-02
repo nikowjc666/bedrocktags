@@ -3649,3 +3649,190 @@ def gpt_export_quotas_excel():
     return send_file(output,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         as_attachment=True, download_name=f"GPT-Quotas-{date_str}.xlsx")
+
+
+# ── SSO 用户批量管理 ──────────────────────────────────────────────────────────
+
+import sso_user_generator as sso_core
+import sso_password_api as sso_pwd
+
+
+@app.route("/sso")
+def sso_page():
+    return render_template("sso.html")
+
+
+@app.route("/api/sso/preview", methods=["POST"])
+def sso_preview():
+    """预览将要创建的 SSO 用户（不调用 AWS）。"""
+    data = request.get_json() or {}
+    try:
+        prefix = (data.get("prefix") or "").strip()
+        domain = (data.get("domain") or "").strip()
+        count  = int(data.get("count"))
+        start  = int(data.get("start", 1))
+        pad    = int(data.get("pad", 2))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "参数格式不正确"}), 400
+    if not prefix: return jsonify({"ok": False, "error": "前缀不能为空"}), 400
+    if not domain: return jsonify({"ok": False, "error": "域名不能为空"}), 400
+    if count < 1:  return jsonify({"ok": False, "error": "数量必须 >= 1"}), 400
+    try:
+        users = sso_core.build_users(prefix, domain, count, start, pad)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    return jsonify({"ok": True,
+                    "users": [{"username": u.username, "email": u.email} for u in users]})
+
+
+def _sso_session(data: dict):
+    """从请求体构建 boto3 Session，返回 (session, error)。"""
+    ak  = (data.get("access_key_id") or "").strip()
+    sk  = (data.get("secret_access_key") or "").strip()
+    tok = (data.get("session_token") or "").strip() or None
+    reg = (data.get("region") or "").strip()
+    if not ak or not sk: return None, "请填写 AK/SK"
+    if not reg:          return None, "请填写区域"
+    try:
+        s = boto3.Session(aws_access_key_id=ak, aws_secret_access_key=sk,
+                          aws_session_token=tok, region_name=reg)
+        return s, None
+    except Exception as e:
+        return None, str(e)
+
+
+@app.route("/api/sso/whoami", methods=["POST"])
+def sso_whoami():
+    """检测凭证并发现 Identity Center 实例。"""
+    data = request.get_json() or {}
+    s, err = _sso_session(data)
+    if err: return jsonify({"ok": False, "error": err}), 400
+    try:
+        ident = s.client("sts").get_caller_identity()
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"凭证校验失败: {e}"}), 400
+    result = {"ok": True,
+              "account": ident.get("Account"),
+              "arn":     ident.get("Arn"),
+              "region":  s.region_name,
+              "identity_center": None, "identity_center_error": None}
+    try:
+        insts = s.client("sso-admin").list_instances().get("Instances", [])
+        result["identity_center"] = [
+            {"identity_store_id": i.get("IdentityStoreId"),
+             "instance_arn":      i.get("InstanceArn"),
+             "portal_url": sso_core.build_portal_url(i.get("IdentityStoreId"))}
+            for i in insts]
+        if not insts:
+            result["identity_center_error"] = "未发现 Identity Center 实例"
+    except Exception as e:
+        result["identity_center_error"] = str(e)
+    return jsonify(result)
+
+
+@app.route("/api/sso/run", methods=["POST"])
+def sso_run():
+    """批量创建 SSO 用户并生成一次性密码，一步返回完整结果。"""
+    data = request.get_json() or {}
+    s, err = _sso_session(data)
+    if err: return jsonify({"ok": False, "error": err}), 400
+
+    # 解析参数
+    try:
+        prefix = (data.get("prefix") or "").strip()
+        domain = (data.get("domain") or "").strip()
+        count  = int(data.get("count"))
+        start  = int(data.get("start", 1))
+        pad    = int(data.get("pad", 2))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "参数格式不正确"}), 400
+    if not prefix: return jsonify({"ok": False, "error": "前缀不能为空"}), 400
+    if not domain: return jsonify({"ok": False, "error": "域名不能为空"}), 400
+    if count < 1:  return jsonify({"ok": False, "error": "数量必须 >= 1"}), 400
+
+    group        = (data.get("group") or "").strip() or None
+    create_group = bool(data.get("create_group"))
+    store_id_in  = (data.get("identity_store_id") or "").strip() or None
+    skip_pwd     = bool(data.get("skip_passwords"))
+
+    try:
+        users    = sso_core.build_users(prefix, domain, count, start, pad)
+        store_id = sso_core.resolve_identity_store_id(s, store_id_in)
+        ids_cli  = s.client("identitystore")
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"初始化失败: {e}"}), 500
+
+    # 登录地址
+    portal_url    = sso_core.build_portal_url(store_id)
+    dualstack_url = ""
+    try:
+        for inst in s.client("sso-admin").list_instances().get("Instances", []):
+            if inst.get("IdentityStoreId") == store_id:
+                arn = inst.get("InstanceArn", "")
+                dualstack_url = sso_core.build_dualstack_portal_url(
+                    arn.split("/")[-1] if "/" in arn else "",
+                    (data.get("region") or "").strip())
+                break
+    except Exception:
+        pass
+
+    # 组
+    group_id = None
+    if group:
+        try:
+            if create_group:
+                group_id, _ = sso_core.ensure_group(ids_cli, store_id, group)
+            else:
+                group_id = sso_core.find_group_id(ids_cli, store_id, group)
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"处理组失败: {e}"}), 500
+
+    # 创建用户
+    results = []
+    created = skipped = failed = 0
+    for u in users:
+        row = {"username": u.username, "email": u.email,
+               "user_id": "", "portal_url": portal_url,
+               "portal_url_dualstack": dualstack_url,
+               "group": group or "",
+               "one_time_password": "", "status": ""}
+        try:
+            uid = sso_core.find_existing_user(ids_cli, store_id, u.username)
+            if uid:
+                row["user_id"] = uid
+                row["status"]  = "已存在(跳过)"
+                skipped += 1
+            else:
+                row["user_id"] = sso_core.create_user(ids_cli, store_id, u)
+                row["status"]  = "已创建"
+                created += 1
+            if group_id and row["user_id"]:
+                sso_core.add_to_group(ids_cli, store_id, group_id, row["user_id"])
+                row["status"] += f" / 已加入组 {group}"
+        except Exception as e:
+            row["status"] = f"失败: {e}"
+            failed += 1
+        results.append(row)
+
+    # 生成一次性密码（纯 API）
+    if not skip_pwd:
+        for r in results:
+            if not r["user_id"]: continue
+            try:
+                r["one_time_password"] = sso_pwd.generate_otp(
+                    s, (data.get("region") or "").strip(),
+                    r["user_id"], store_id)
+            except Exception as e:
+                r["one_time_password"] = ""
+                r["status"] += f" / 密码失败: {e}"
+
+    return jsonify({
+        "ok": True,
+        "identity_store_id": store_id,
+        "portal_url":    portal_url,
+        "dualstack_url": dualstack_url,
+        "group":         group,
+        "summary":       {"created": created, "skipped": skipped, "failed": failed},
+        "results":       results,
+    })
+
