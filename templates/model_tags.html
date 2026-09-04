@@ -577,7 +577,7 @@ table th{background:var(--surface2);font-weight:600;font-size:10px;color:var(--t
         </div>
       </div>
       <div class="preview-bar" id="preview">将创建 <strong>0</strong> 个 inference profile</div>
-      <div class="fg" style="margin-top:10px;margin-bottom:5px"><label>创建时附加标签</label></div>
+      <div class="fg" style="margin-top:10px;margin-bottom:5px"><label>创建时附加标签<span id="iamTagHint" style="color:var(--t3);font-weight:400;margin-left:8px;font-size:10px"></span></label></div>
       <div class="tg" id="tgg">
         <div class="tr"><input class="tk" placeholder="key" value="map-migrated"><input class="tv" placeholder="value"><button class="btn bsm" onclick="addTg()">+ 添加行</button></div>
       </div>
@@ -741,10 +741,49 @@ document.addEventListener("DOMContentLoaded",async function(){
   }
 });
 
-async function vrf(){var c=creds();if(!c.access_key||!c.secret_key){sR("createMsg","请填写 ak/sk","wa");return}var btn=$("btnv");btn.disabled=true;btn.textContent="验证中...";try{var r=await fetch(B+"/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c)}),d=await r.json();if(d.ok){$("aid").textContent=d.account_id;$("ar").style.display="flex";BedrockPersist.onVerified(d.account_id);sR("createMsg","已验证","ok")}else sR("createMsg",d.error,"er")}finally{btn.disabled=false;btn.textContent="验证"}}
+async function vrf(){var c=creds();if(!c.access_key||!c.secret_key){sR("createMsg","请填写 ak/sk","wa");return}var btn=$("btnv");btn.disabled=true;btn.textContent="验证中...";try{var r=await fetch(B+"/api/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c)}),d=await r.json();if(d.ok){$("aid").textContent=d.account_id;$("ar").style.display="flex";BedrockPersist.onVerified(d.account_id);sR("createMsg","已验证","ok");loadIamTags()}else sR("createMsg",d.error,"er")}finally{btn.disabled=false;btn.textContent="验证"}}
 
 function colT(){var t={};document.querySelectorAll("#tgg .tr").forEach(function(r){var k=r.querySelector(".tk").value.trim(),v=r.querySelector(".tv").value.trim();if(k)t[k]=v||""});return t}
 function addTg(){var g=$("tgg"),r=document.createElement("div");r.className="tr";r.innerHTML='<input class="tk" placeholder="key"><input class="tv" placeholder="value"><button class="btn bsm" onclick="addTg()">+</button><button class="rm" onclick="this.parentElement.remove();BedrockPersist.save()">✕</button>';g.appendChild(r);BedrockPersist.save()}
+
+async function loadIamTags(){
+  var hint=$("iamTagHint");
+  if(hint) hint.textContent="正在读取 IAM 标签...";
+  var c=creds();
+  try{
+    var r=await fetch(B+"/api/get_iam_tags",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key})});
+    var j=await r.json();
+    if(j.ok&&j.tags&&Object.keys(j.tags).length>0){
+      fillTagsFromIam(j.tags);
+      if(hint) hint.textContent="← 已从 IAM 读取，可修改";
+    }else{
+      if(hint) hint.textContent="（未找到 IAM 标签，可手动填写）";
+    }
+  }catch(e){
+    if(hint) hint.textContent="（读取 IAM 标签失败，可手动填写）";
+  }
+}
+
+function fillTagsFromIam(tags){
+  var g=$("tgg");
+  g.innerHTML="";
+  var entries=Object.entries(tags);
+  if(!entries.length){
+    var r=document.createElement("div");r.className="tr";
+    r.innerHTML='<input class="tk" placeholder="key"><input class="tv" placeholder="value"><button class="btn bsm" onclick="addTg()">+ 添加行</button>';
+    g.appendChild(r);return;
+  }
+  entries.forEach(function(kv,i){
+    var r=document.createElement("div");r.className="tr";
+    var btns='<button class="rm" onclick="this.parentElement.remove();BedrockPersist.save()" title="删除">✕</button>';
+    if(i===entries.length-1) btns='<button class="btn bsm" onclick="addTg()">+ 添加行</button>'+btns;
+    r.innerHTML='<input class="tk" placeholder="key" value="'+es(kv[0])+'"><input class="tv" placeholder="value" value="'+es(kv[1])+'">'+btns;
+    r.querySelectorAll("input").forEach(function(inp){inp.addEventListener("input",function(){BedrockPersist.save()})});
+    g.appendChild(r);
+  });
+  BedrockPersist.save();
+}
 function clrForm(){$("pname").value="";$("pdesc").value="";document.querySelectorAll("#tgg .tr").forEach(function(r,i){if(i>0)r.remove()});var f=document.querySelector("#tgg .tr");if(f){f.querySelector(".tk").value="";f.querySelector(".tv").value=""} $("createMsg").innerHTML=""}
 
 // ── 确认弹窗 ────────────────────────────────────────────────────
