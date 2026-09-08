@@ -173,7 +173,7 @@ DEFAULT_MODEL_BY_ID = {v["id"]: v for v in CLAUDE_45_PLUS_VERSIONS}
 
 
 def _is_claude_45_plus(model_id):
-    return model_id in CLAUDE_45_BY_ID
+    return model_id not in CLAUDE_40_IDS and model_id in CLAUDE_BY_ID
 
 
 def _model_slug(model_id):
@@ -508,7 +508,9 @@ def claude_versions():
 
 @app.route("/api/claude_45_versions", methods=["GET"])
 def claude_45_versions():
-    return jsonify({"ok": True, "versions": CLAUDE_45_PLUS_VERSIONS})
+    # 動的に CLAUDE_VERSIONS から計算（scan で追加したモデルも反映される）
+    versions = [v for v in CLAUDE_VERSIONS if v["id"] not in CLAUDE_40_IDS]
+    return jsonify({"ok": True, "versions": versions})
 
 
 @app.route("/api/resolveclaude_models", methods=["POST"])
@@ -1518,7 +1520,8 @@ DEFAULT_MODEL_BY_ID = {v["id"]: v for v in CLAUDE_VERSIONS}
 @app.route("/api/default_model_list", methods=["GET"])
 def default_model_list():
     """返回与创建配置页相同的模型列表（去掉初代 Claude 4）"""
-    return jsonify({"ok": True, "versions": CLAUDE_45_PLUS_VERSIONS})
+    versions = [v for v in CLAUDE_VERSIONS if v["id"] not in CLAUDE_40_IDS]
+    return jsonify({"ok": True, "versions": versions})
 
 
 @app.route("/api/query_model_quotas", methods=["POST"])
@@ -2673,21 +2676,10 @@ def query_quotas():
 
         def _fetch_one(nl_code):
             nl, code = nl_code
-            # 优先从 _quota_value_map 取（build 时已缓存，无需调 API）
+            # _quota_value_map 仅用于获取默认值（default），
+            # 账户实际配额（value）必须实时从目标区域查询，不能用缓存（缓存只建了 us-east-1）
             cached = _quota_value_map.get(nl)
-            if cached is not None:
-                val   = cached.get("value")
-                defv  = cached.get("default")
-                if val is not None or defv is not None:
-                    # 重建原始 QuotaName（bedrock-mantle 已被重命名，恢复原名用于显示）
-                    display_nl = nl
-                    return {
-                        "region":        region,
-                        "name":          display_nl,
-                        "value":         val,
-                        "default_value": defv,
-                        "quota_code":    code,
-                    }
+            cached_default = cached.get("default") if cached else None
 
             aq, dq = {}, {}
             max_retries = 2
@@ -2710,7 +2702,11 @@ def query_quotas():
                 return None
 
             aq = _try_fetch(lambda: client.get_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})) or {}
-            dq = _try_fetch(lambda: client.get_aws_default_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})) or {}
+            # default_value 优先用缓存（全局 AWS 默认值，不因区域/账户而异），减少 API 调用
+            if cached_default is not None:
+                dq = {"Value": cached_default}
+            else:
+                dq = _try_fetch(lambda: client.get_aws_default_service_quota(ServiceCode=sc, QuotaCode=code).get("Quota", {})) or {}
 
             if not aq and not dq:
                 return None
