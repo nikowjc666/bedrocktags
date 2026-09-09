@@ -3235,6 +3235,7 @@ if __name__ == "__main__":
 # Model ID 格式：openai.xxx（Bedrock Foundation Model ID）
 # quota_key: 对应 AWS Service Quotas quota name 里的关键词（小写，精确匹配）
 GPT_MODELS = [
+    {"id": "openai.gpt-6",                 "label": "GPT-6",                "series": "gpt-6",   "quota_key": "gpt-6"},
     {"id": "openai.gpt-5-6-sol",           "label": "GPT-5.6 Sol",          "series": "gpt-5",   "quota_key": "gpt-5.6 sol"},
     {"id": "openai.gpt-5-6-terra",         "label": "GPT-5.6 Terra",        "series": "gpt-5",   "quota_key": "gpt-5.6 terra"},
     {"id": "openai.gpt-5-6-luna",          "label": "GPT-5.6 Luna",         "series": "gpt-5",   "quota_key": "gpt-5.6 luna"},
