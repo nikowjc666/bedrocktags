@@ -1548,10 +1548,14 @@ def query_model_quotas():
     if not entries:
         return jsonify({"ok": False, "error": "无数据可查询"}), 400
     
-    # 确保 code_map 已加载，且包含 GPT/OpenAI 模型配额
-    has_openai = any("openai" in k or ("gpt" in k and "anthropic" not in k) for k in _quota_code_map)
-    if not _quota_code_map or not has_openai:
-        _build_code_map(ak, sk)
+    # 强制刷新 code_map（模型配额页「刷新配额代码」按钮）
+    if data.get("force_refresh"):
+        _refresh_code_map(ak, sk)
+    else:
+        # 确保 code_map 已加载，且包含 GPT/OpenAI 模型配额
+        has_openai = any("openai" in k or ("gpt" in k and "anthropic" not in k) for k in _quota_code_map)
+        if not _quota_code_map or not has_openai:
+            _build_code_map(ak, sk)
     
     def _format_quota(value):
         """格式化配额数值：统一以 M 为单位（保留必要小数位），小于 1M 则用 K"""

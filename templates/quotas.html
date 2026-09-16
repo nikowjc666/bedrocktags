@@ -417,16 +417,37 @@ async function vrf(){
   finally{btn.disabled=false;btn.textContent="验证"}
 }
 
+// 获取选中模型的 {id,label}
+function getSelModelEntries(){
+  var ms=[];
+  document.querySelectorAll(".model-cb:checked").forEach(function(cb){
+    ms.push({id:cb.getAttribute("data-id")||cb.value, label:cb.value});
+  });
+  return ms;
+}
+// "200M" / "30M" / "5K" → 数值；空/— → null
+function parseQuotaVal(s){
+  if(s===null||s===undefined||s===""||s==="—")return null;
+  var raw=String(s).trim().toUpperCase();
+  var mul=raw.endsWith("M")?1e6:raw.endsWith("K")?1e3:1;
+  if(mul!==1)raw=raw.slice(0,-1);
+  var n=Number(raw);
+  return isFinite(n)?n*mul:null;
+}
+
+// 改为与「默认模型」页完全相同的查询方式：/api/query_model_quotas 按 model_id 精确查
 async function queryQuotas(forceRefresh){
   var c=creds();
   if(!c.access_key||!c.secret_key){sR("queryMsg","请先验证凭证","wa");return}
   var regions=getSelRegions();
   if(!regions.length){sR("queryMsg","请选择区域","wa");return}
+  var models=getSelModelEntries();
+  if(!models.length){sR("queryMsg","请至少选择一个模型","wa");return}
 
   var quotaTypes=[];
   document.querySelectorAll(".qt-cb:checked").forEach(function(cb){quotaTypes.push(cb.value)});
-  var selModels=getSelModels();
-  if(!selModels.length){sR("queryMsg","请至少选择一个模型","wa");return}
+  var showTpm=!quotaTypes.length||quotaTypes.indexOf("tpm")!==-1;
+  var showTpd=!quotaTypes.length||quotaTypes.indexOf("tpd")!==-1;
 
   var btn=$("btnQuery"), btnR=$("btnRefresh");
   btn.disabled=true; btnR.disabled=true;
@@ -434,7 +455,7 @@ async function queryQuotas(forceRefresh){
   if(forceRefresh)btnR.innerHTML='<span class="sp"></span> 刷新中...';
   $("qEmp").style.display="none";
   $("qLoading").style.display="flex";
-  $("qLoading").innerHTML='<span class="sp"></span> '+(forceRefresh?"正在刷新配额代码...":"正在查询 "+regions.length+" 个区域...");
+  $("qLoading").innerHTML='<span class="sp"></span> 正在查询 '+regions.length+' 个区域 × '+models.length+' 个模型...';
   $("qGroups").innerHTML="";
   $("totalInfo").textContent="查询中...";
   $("errSummary").innerHTML="";
@@ -442,66 +463,48 @@ async function queryQuotas(forceRefresh){
   $("btnExport").style.display="none";
   _allRows=[];
 
+  // 区域 × 模型 → entries，与默认模型页一致
+  var entries=[];
+  regions.forEach(function(r){models.forEach(function(m){entries.push({region:r,model_id:m.id})})});
+  var labelById={};models.forEach(function(m){labelById[m.id]=m.label});
+
   try{
-    var d=await apiFetch(B+"/api/query_quotas",{
+    var d=await apiFetch(B+"/api/query_model_quotas",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        access_key:c.access_key,
-        secret_key:c.secret_key,
-        regions:regions,
-        service_code:"bedrock",
-        quota_types:quotaTypes,
-        models:selModels,
-        use_global:$("cbGlobal").checked,
-        force_refresh:!!forceRefresh
-      })
+      body:JSON.stringify({access_key:c.access_key,secret_key:c.secret_key,entries:entries,force_refresh:!!forceRefresh})
     });
     $("qLoading").style.display="none";
 
-    if(!d.ok){sR("queryMsg",d.error,"er");$("qEmp").style.display="flex";$("totalInfo").textContent="暂无数据";return}
+    if(!d.ok){sR("queryMsg",d.error||"查询失败","er");$("qEmp").style.display="flex";$("totalInfo").textContent="暂无数据";return}
 
-    _allRows=d.quotas||[];
+    // 把 {region,model_id,tpm,tpd} 转成表格行。
+    // 与默认模型页一致：TPM 和 TPD 都作为独立行，即使值为空也保留（显示 —），
+    // 避免出现"某模型只有 TPM 行、TPD 行整条消失"的问题。
+    (d.results||[]).forEach(function(res){
+      var label=labelById[res.model_id]||res.model_id;
+      var quotaModel="anthropic "+label.toLowerCase();
+      if(showTpd){
+        _allRows.push({region:res.region,name:"global cross-region model inference tokens per day for "+quotaModel,value:parseQuotaVal(res.tpd),default_value:null});
+      }
+      if(showTpm){
+        _allRows.push({region:res.region,name:"global cross-region model inference tokens per minute for "+quotaModel,value:parseQuotaVal(res.tpm),default_value:null});
+      }
+    });
 
     if(!_allRows.length){
       $("qEmp").style.display="flex";
-      $("qEmp").innerHTML='<div>未查到相关配额</div>'
-        +(d.debug_model_kws?'<div style="font-size:10px;color:var(--t3);margin-top:4px">匹配关键词: '+es(d.debug_model_kws.join(", "))+'</div>':"")
-        +(d.debug_map_size?'<div style="font-size:10px;color:var(--t3)">配额代码库共 '+d.debug_map_size+' 条</div>':"");
+      $("qEmp").textContent="未查到所选模型的配额";
       $("totalInfo").textContent="暂无数据";
-      if(d.debug_map_size){
-        sR("queryMsg","未匹配到配额，可以点击「刷新配额代码」拉取最新数据后重试","wa");
+      var failed=(d.results||[]).filter(function(res){return res.error});
+      if(failed.length){
+        sR("queryMsg",failed.map(function(res){return (labelById[res.model_id]||res.model_id)+"："+res.error}).join("\n"),"wa");
       }
     }else{
-      renderGroups(_allRows, d.use_global, d.regions||regions);
-      var modeLabel=d.use_global?" · global 模式":" · cross-region 模式";
-      $("totalInfo").textContent="共 "+_allRows.length+" 条 · "+regions.length+" 个区域"+modeLabel;
-      var refreshHint=forceRefresh?" [已刷新配额代码]":"";
-      sR("queryMsg","查询完成，"+regions.length+" 个区域，共 "+_allRows.length+" 条"+refreshHint,"ok");
+      renderGroups(_allRows, true, regions);
+      $("totalInfo").textContent="共 "+_allRows.length+" 条 · "+regions.length+" 个区域";
+      sR("queryMsg","查询完成，"+regions.length+" 个区域 × "+models.length+" 个模型"+(forceRefresh?" [已刷新]":""),"ok");
       $("btnExport").style.display="inline-flex";
-    }
-
-    if(d.errors&&d.errors.length){
-      var permErrors=d.errors.filter(function(e){return e.type==="permission"});
-      var otherErrors=d.errors.filter(function(e){return e.type!=="permission"});
-      var errHtml='<div style="margin:8px 12px 12px">';
-      if(permErrors.length){
-        errHtml+='<div class="st er" style="flex-direction:column;align-items:flex-start;gap:4px;margin-bottom:6px">';
-        errHtml+='<strong>⚠️ 权限不足，无法查询以下区域的配额：</strong>';
-        errHtml+='<div style="font-weight:400;font-size:11px">请检查 IAM 权限是否包含 <code>servicequotas:GetServiceQuota</code> 和 <code>servicequotas:GetAWSDefaultServiceQuota</code></div>';
-        permErrors.forEach(function(e){
-          errHtml+='<div style="font-weight:400;font-size:11px;font-family:\'SF Mono\',monospace">'+es(e.region)+'</div>';
-        });
-        errHtml+='</div>';
-      }
-      if(otherErrors.length){
-        errHtml+='<div class="st wa" style="flex-direction:column;align-items:flex-start;gap:3px">';
-        errHtml+='<strong>'+otherErrors.length+' 个区域查询失败：</strong>';
-        otherErrors.forEach(function(e){errHtml+='<div style="font-weight:400;font-size:10px;color:var(--t2)">'+es(e.region)+'：'+es(e.error)+'</div>'});
-        errHtml+='</div>';
-      }
-      errHtml+='</div>';
-      $("errSummary").innerHTML=errHtml;
     }
   }catch(e){
     $("qLoading").style.display="none";
@@ -568,16 +571,22 @@ function renderGroups(rows, useGlobal, regions){
     var regionRows=byRegion[region];
     if(!regionRows||!regionRows.length)return;
 
-    // 去重：同一模型同一指标只保留优先级最高的一条
-    // 优先级：global > cross-region > bedrock-mantle > on-demand
+    // 去重：同一模型同一指标只保留一条
+    // 优先级：有账户实际值 > global > cross-region > on-demand
+    // 关键点：若 global 那条 TPD 账户值为空(—)，而 doubled/cross-region 那条有
+    // 实际值(如 200M)，必须保留有值的那条，否则会错误显示 —。
     var deduped={};
     regionRows.forEach(function(q){
       var p=parseQuotaName(q.name);
       var key=p.model+'|'+p.type;
       var nl=(q.name||"").toLowerCase();
+      var hasValue=q.value!==null&&q.value!==undefined;
       var priority=nl.startsWith("global")?3:nl.startsWith("cross-region")?2:nl.startsWith("on-demand")?1:0;
-      if(!deduped[key]||priority>deduped[key].priority){
-        deduped[key]={row:q,priority:priority};
+      var prev=deduped[key];
+      if(!prev ||
+         (hasValue&&!prev.hasValue) ||
+         (hasValue===prev.hasValue&&priority>prev.priority)){
+        deduped[key]={row:q,hasValue:hasValue,priority:priority};
       }
     });
     var regionRows=Object.values(deduped).map(function(x){return x.row;});
