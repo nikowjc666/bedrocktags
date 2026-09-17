@@ -1554,7 +1554,16 @@ def query_model_quotas():
     else:
         # 确保 code_map 已加载，且包含 GPT/OpenAI 模型配额
         has_openai = any("openai" in k or ("gpt" in k and "anthropic" not in k) for k in _quota_code_map)
-        if not _quota_code_map or not has_openai:
+        # 账户级跨模型总 TPD 是新版 AWS 配额。旧缓存是在该功能上线前建立的，
+        # 特征是：整个 code_map 里连一条 account-level/cross-model 的键都没有
+        # （新版 AWS 一定会返回这类配额名，无论账户是否开通对应额度）。
+        # 只有这种"旧格式缓存"才自动重建，避免账户本身无此额度时反复重建。
+        cache_is_stale = _quota_code_map and not any(
+            ("account-level" in k or "account level" in k
+             or "cross-model" in k or "cross model" in k)
+            for k in _quota_code_map
+        )
+        if not _quota_code_map or not has_openai or cache_is_stale:
             _build_code_map(ak, sk)
     
     def _format_quota(value):
