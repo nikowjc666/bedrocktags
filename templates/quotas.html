@@ -492,6 +492,16 @@ async function queryQuotas(forceRefresh){
       }
     });
 
+    // 账户级跨模型总 TPD（新版 AWS：所有模型共享的每日 token 总量）
+    // 单独一行显示，模型名标注为"账户总量（跨模型）"
+    if(showTpd&&d.account_tpd&&d.account_tpd.length){
+      d.account_tpd.forEach(function(a){
+        if(a.tpd){
+          _allRows.push({region:a.region,name:"account-level cross-model tokens per day for 账户总量（跨模型）",value:parseQuotaVal(a.tpd),default_value:null});
+        }
+      });
+    }
+
     if(!_allRows.length){
       $("qEmp").style.display="flex";
       $("qEmp").textContent="未查到所选模型的配额";

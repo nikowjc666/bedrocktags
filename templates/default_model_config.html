@@ -336,6 +336,11 @@ table tbody tr:last-child td{border-bottom:none}
           </button>
         </div>
       </div>
+      <!-- 账户级跨模型总 TPD 说明栏 -->
+      <div id="acctTpdBar" style="display:none;margin-bottom:8px;padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--r-sm);font-size:11px;color:#1e40af">
+        <strong>账户级每日 Token 总额（TPD）</strong>：AWS 已取消单个模型的 TPD，改为账户下<strong>所有模型共享</strong>的每日总量。以下为各区域的共享总额，<strong>不是每个模型各自拥有</strong>。
+        <div id="acctTpdList" style="margin-top:5px;display:flex;flex-wrap:wrap;gap:6px"></div>
+      </div>
       <!-- 表格 -->
       <div id="cfgTableWrap" style="display:none">
         <div class="tw">
@@ -345,7 +350,7 @@ table tbody tr:last-child td{border-bottom:none}
                 <th style="width:110px">区域</th>
                 <th style="width:140px">模型类型</th>
                 <th>默认 model id</th>
-                <th style="width:80px">TPD</th>
+                <th style="width:80px">TPD<br><span style="font-weight:400;font-size:9px;color:var(--t3)">单模型</span></th>
                 <th style="width:80px">TPM</th>
                 <th style="width:140px">标签</th>
                 <th style="width:80px">可用性</th>
@@ -669,17 +674,27 @@ async function queryQuotas(){
       resMap[key]=res;
     });
 
+    // 账户级跨模型总 TPD（新版 AWS：所有模型共享每日 token 总量）
+    // 按区域单独展示，绝不填到每个模型行里（避免误导客户以为每个模型都有这么多）
+    var acctTpdByRegion={};
+    (j.account_tpd||[]).forEach(function(a){
+      if(a.tpd)acctTpdByRegion[a.region]=a.tpd;
+    });
+    window._acctTpdByRegion=acctTpdByRegion;
+
     configEntries.forEach(function(e){
       var key=e.region+"|"+e.model_id;
       var res=resMap[key];
       if(res){
         e.tpm=res.tpm||"—";
+        // 模型自身 TPD 保持真实值（AWS 取消单模型 TPD 后即为空）
         e.tpd=res.tpd||"—";
       }
     });
 
     fill.style.width="100%";pct.textContent="100%";
     cur.textContent="配额查询完成";
+    renderAccountTpd();
     renderTable();
     setTimeout(function(){pw.classList.remove("show")},2000);
   }catch(err){
@@ -687,6 +702,22 @@ async function queryQuotas(){
     setTimeout(function(){pw.classList.remove("show")},3000);
   }
   btn.disabled=false;btn.textContent="生成配置列表并查询配额";
+}
+
+// ── 渲染账户级跨模型总 TPD 说明栏 ──────────────────────────────────
+function renderAccountTpd(){
+  var bar=$("acctTpdBar"),list=$("acctTpdList");
+  var map=window._acctTpdByRegion||{};
+  var regions=Object.keys(map);
+  if(!regions.length){bar.style.display="none";return;}
+  bar.style.display="";
+  list.innerHTML="";
+  regions.forEach(function(r){
+    var chip=document.createElement("span");
+    chip.style.cssText="padding:2px 8px;border-radius:4px;background:#fff;border:1px solid #bfdbfe;font-family:'SF Mono',Consolas,monospace;font-size:11px";
+    chip.innerHTML='<span style="color:var(--t2)">'+es(r)+'</span>：<strong style="color:#1e40af">'+es(map[r])+'</strong>';
+    list.appendChild(chip);
+  });
 }
 
 // ── 渲染表格 ──────────────────────────────────────────────────────
@@ -755,8 +786,12 @@ async function exportExcel(){
     var exportEntries=configEntries.map(function(e){
       return Object.assign({},e,{model_id:e.display_id||e.model_id});
     });
+    // 账户级跨模型总 TPD（各区域），单独传给后端，Excel 里独立说明
+    var acctTpd=[];
+    var map=window._acctTpdByRegion||{};
+    Object.keys(map).forEach(function(r){acctTpd.push({region:r,tpd:map[r]})});
     var r=await fetch("/api/export_default_config_excel",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({entries:exportEntries,account_id:AID,access_key:AK,secret_key:SK})});
+      body:JSON.stringify({entries:exportEntries,account_id:AID,access_key:AK,secret_key:SK,account_tpd:acctTpd})});
     if(!r.ok){
       var errText="";
       try{var ej=await r.json();errText=ej.error||JSON.stringify(ej);}catch(e2){errText=await r.text();}

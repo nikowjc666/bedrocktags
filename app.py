@@ -1748,8 +1748,50 @@ def query_model_quotas():
                 results.append(future.result())
             except Exception:
                 pass
-    
-    return jsonify({"ok": True, "results": results})
+
+    # ── 账户级跨模型总 TPD（新版 AWS Bedrock）─────────────────────
+    # AWS 已取消按模型的 TPD，改为账户级共享总量：
+    # "Cross-Model Account-Level Tokens Per Day"。按区域各查一次。
+    account_tpd = []
+    account_tpd_code = None
+    for nm, code in _quota_code_map.items():
+        if ("account-level" in nm or "account level" in nm
+                or "cross-model" in nm or "cross model" in nm) and "tokens per day" in nm:
+            account_tpd_code = code
+            break
+
+    if account_tpd_code:
+        regions_seen = []
+        for e in entries:
+            r = e.get("region", "")
+            if r and r not in regions_seen:
+                regions_seen.append(r)
+
+        def _query_account_tpd(region):
+            try:
+                cli = _get_client("service-quotas", ak, sk, region)
+                v = None
+                try:
+                    v = cli.get_service_quota(ServiceCode="bedrock", QuotaCode=account_tpd_code).get("Quota", {}).get("Value")
+                except Exception:
+                    pass
+                if v is None:
+                    try:
+                        v = cli.get_aws_default_service_quota(ServiceCode="bedrock", QuotaCode=account_tpd_code).get("Quota", {}).get("Value")
+                    except Exception:
+                        pass
+                return {"region": region, "tpd": _format_quota(v) if v is not None else ""}
+            except Exception:
+                return {"region": region, "tpd": ""}
+
+        with _cf.ThreadPoolExecutor(max_workers=min(10, len(regions_seen) or 1)) as pool:
+            for future in _cf.as_completed([pool.submit(_query_account_tpd, r) for r in regions_seen]):
+                try:
+                    account_tpd.append(future.result())
+                except Exception:
+                    pass
+
+    return jsonify({"ok": True, "results": results, "account_tpd": account_tpd})
 
 
 @app.route("/api/verify_default_model", methods=["POST"])
@@ -1927,18 +1969,64 @@ def export_default_config_excel():
     full_border = _border()
 
     headers = ["AWS账户ID", "登录URL", "账号", "密码", "Access Key", "Secret Key",
-               "模型类型", "默认 Model ID", "区域", "TPD", "TPM", "标签"]
+               "模型类型", "默认 Model ID", "区域", "单模型TPD", "TPM", "标签"]
+    ncol = len(headers)
 
+    # ── 顶部：账户级跨模型总 TPD 说明区（先于主表，一进 Excel 先看到）──
+    account_tpd = data.get("account_tpd") or []   # [{region, tpd}]
+    note_font  = Font(name="Calibri", size=11, bold=True, color="1E40AF")
+    note_fill  = PatternFill("solid", fgColor="EFF6FF")
+    header_row = 1
+
+    if account_tpd:
+        # 标题行（跨全部列合并）
+        title_cell = ws.cell(
+            row=1, column=1,
+            value="账户级每日 Token 总额（TPD）— 账户下所有模型共享，非每个模型各自拥有"
+        )
+        title_cell.font = note_font
+        title_cell.alignment = val_align
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncol)
+        for ci in range(1, ncol + 1):
+            ws.cell(row=1, column=ci).fill = note_fill
+            ws.cell(row=1, column=ci).border = full_border
+        ws.row_dimensions[1].height = 22
+
+        # 小表头：区域 | 账户共享每日 Token 总额
+        sub_hdr_row = 2
+        c1 = ws.cell(row=sub_hdr_row, column=1, value="区域")
+        c1.font = hdr_font; c1.alignment = hdr_align; c1.border = full_border
+        c2 = ws.cell(row=sub_hdr_row, column=2, value="账户共享每日 Token 总额（所有模型合计）")
+        c2.font = hdr_font; c2.alignment = hdr_align; c2.border = full_border
+        ws.merge_cells(start_row=sub_hdr_row, start_column=2, end_row=sub_hdr_row, end_column=ncol)
+        for ci in range(1, ncol + 1):
+            ws.cell(row=sub_hdr_row, column=ci).border = full_border
+
+        # 各区域账户级 TPD 明细
+        for k, item in enumerate(account_tpd):
+            r = sub_hdr_row + 1 + k
+            rc = ws.cell(row=r, column=1, value=item.get("region", ""))
+            rc.alignment = center_align; rc.border = full_border
+            vc = ws.cell(row=r, column=2, value=item.get("tpd", ""))
+            vc.alignment = val_align; vc.border = full_border
+            ws.merge_cells(start_row=r, start_column=2, end_row=r, end_column=ncol)
+            for ci in range(1, ncol + 1):
+                ws.cell(row=r, column=ci).border = full_border
+
+        # 主表头行 = 说明区之后 + 空一行
+        header_row = sub_hdr_row + len(account_tpd) + 2
+
+    # ── 主表头 ────────────────────────────────────────────────
     for ci, h in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=ci, value=h)
+        cell = ws.cell(row=header_row, column=ci, value=h)
         cell.font      = hdr_font
         cell.alignment = hdr_align
         cell.border    = full_border
-    ws.row_dimensions[1].height = 20
+    ws.row_dimensions[header_row].height = 20
 
     # 居中列：C(3) D(4) G(7) H(8) I(9)
     CENTER_COLS = {3, 4, 7, 8, 9}
-    data_start  = 2
+    data_start  = header_row + 1
     total_rows  = len(rows)
 
     for ri, row in enumerate(rows):
@@ -2031,7 +2119,7 @@ def export_default_config_excel():
         _apply_merge(r1, r2, 12, rows[i]["tags"], center_align)
         i = j
 
-    ws.freeze_panes = "A2"
+    ws.freeze_panes = f"A{data_start}"
 
     output = BytesIO()
     wb.save(output)
@@ -2502,7 +2590,12 @@ def _build_code_map(ak, sk):
                             code = q.get("QuotaCode")
                             if not code:
                                 continue
-                            if not ("claude" in nl or "anthropic" in nl
+                            # 账户级跨模型总配额（新版 AWS Bedrock）：
+                            # "Cross-Model Account-Level Tokens Per Day" 等，
+                            # 不含具体模型名，需单独放行。
+                            is_account_level = ("account-level" in nl or "account level" in nl
+                                                or "cross-model" in nl or "cross model" in nl)
+                            if not is_account_level and not ("claude" in nl or "anthropic" in nl
                                     or "openai" in nl or "gpt" in nl):
                                 continue
                             if any(kw in nl for kw in EXCLUDE_KEYWORDS):
