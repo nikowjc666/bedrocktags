@@ -43,6 +43,15 @@ REGIONS = [
 # sources: 系统 Inference Profile ID，用于 copyFrom（新版模型不支持直接用 foundation model）
 CLAUDE_VERSIONS = [
     {
+        "id": "anthropic.claude-opus-5-5",
+        "label": "Claude Opus 5.5",
+        "sources": {
+            "us": "us.anthropic.claude-opus-5-5",
+            "eu": "eu.anthropic.claude-opus-5-5",
+            "global": "global.anthropic.claude-opus-5-5",
+        },
+    },
+    {
         "id": "anthropic.claude-sonnet-5",
         "label": "Claude Sonnet 5",
         "sources": {
