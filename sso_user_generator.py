@@ -31,9 +31,11 @@ from typing import Optional
 
 try:
     import boto3
+    from botocore.config import Config
     from botocore.exceptions import ClientError, BotoCoreError
 except ImportError:  # 允许在未安装 boto3 时至少能跑 --dry-run
     boto3 = None
+    Config = None
     ClientError = BotoCoreError = Exception
 
 
@@ -194,6 +196,48 @@ def create_user(identitystore, identity_store_id: str, user: PlannedUser) -> str
         Emails=[{"Value": user.email, "Type": "work", "Primary": True}],
     )
     return resp["UserId"]
+
+
+def create_or_get_user(
+    identitystore, identity_store_id: str, user: PlannedUser
+) -> tuple[str, bool]:
+    """先建后查: 直接 create_user, 撞 ConflictException 再回查已存在的 UserId。
+
+    返回 (user_id, created)。
+
+    相比"先 get_user_id 探测再 create"的写法省掉一次 API 往返。批量场景下
+    新建用户是常态, 冲突是少数, 所以把额外的一次调用挪到冲突分支上更划算:
+    每个用户 4 次请求降到 3 次。幂等语义不变。
+    """
+    try:
+        return create_user(identitystore, identity_store_id, user), True
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ConflictException":
+            raise
+        uid = find_existing_user(identitystore, identity_store_id, user.username)
+        if not uid:
+            # 撞了冲突却查不到, 说明冲突来自别的唯一性约束 (如邮箱重复), 原样抛出
+            raise
+        return uid, False
+
+
+def client_config(concurrency: int = 8):
+    """构造 identitystore 客户端配置。
+
+    两个关键点:
+    1. max_pool_connections 必须 >= 并发数, 否则线程会堵在 botocore 的连接池上,
+       并发就成了假的 (默认值只有 10)。
+    2. adaptive 重试模式带客户端限流侧的退避, 撞上 ThrottlingException 时自动
+       降速重试, 而不是直接算作失败。AWS 未公开 Identity Store 写操作的 TPS,
+       所以靠退避兜底比猜一个并发上限可靠。
+    """
+    if Config is None:
+        return None
+    return Config(
+        max_pool_connections=max(concurrency, 10),
+        retries={"max_attempts": 5, "mode": "adaptive"},
+        tcp_keepalive=True,
+    )
 
 
 def delete_user(identitystore, identity_store_id: str, user_id: str) -> None:
@@ -497,18 +541,18 @@ def main(argv=None) -> int:
             "status": "",
         }
         try:
-            existing = find_existing_user(identitystore, identity_store_id, u.username)
-            if existing:
-                row["user_id"] = existing
-                row["status"] = "skipped_exists"
-                skipped += 1
-                print(f"  跳过 (已存在): {u.username}")
-            else:
-                user_id = create_user(identitystore, identity_store_id, u)
-                row["user_id"] = user_id
+            user_id, was_created = create_or_get_user(
+                identitystore, identity_store_id, u
+            )
+            row["user_id"] = user_id
+            if was_created:
                 row["status"] = "created"
                 created += 1
                 print(f"  已创建: {u.username} -> {user_id}")
+            else:
+                row["status"] = "skipped_exists"
+                skipped += 1
+                print(f"  跳过 (已存在): {u.username}")
 
             if group_id and row["user_id"]:
                 add_to_group(identitystore, identity_store_id, group_id, row["user_id"])

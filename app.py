@@ -3338,8 +3338,9 @@ def change_password():
     return jsonify({"ok": True})
 
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001, debug=False, use_reloader=False, threaded=True)
+# 注意：开发服务器的启动入口在本文件最末尾。
+# 早期版本把 app.run() 放在这里，导致下方 GPT / SSO 模块的路由在
+# `python app.py` 方式下永远不会注册（gunicorn 走 import 才正常）。
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -3848,39 +3849,63 @@ def sso_whoami():
     return jsonify(result)
 
 
-@app.route("/api/sso/run", methods=["POST"])
-def sso_run():
-    """批量创建 SSO 用户并生成一次性密码，一步返回完整结果。"""
-    data = request.get_json() or {}
-    s, err = _sso_session(data)
-    if err: return jsonify({"ok": False, "error": err}), 400
+SSO_CONCURRENCY_DEFAULT = 8
+SSO_CONCURRENCY_MAX = 16
 
-    # 解析参数
+
+def _sso_parse_params(data: dict):
+    """解析并校验批量创建参数，返回 (params, error)。两个创建路由共用。"""
     try:
         prefix = (data.get("prefix") or "").strip()
         domain = (data.get("domain") or "").strip()
         count  = int(data.get("count"))
         start  = int(data.get("start", 1))
         pad    = int(data.get("pad", 2))
+        conc   = int(data.get("concurrency") or SSO_CONCURRENCY_DEFAULT)
     except (TypeError, ValueError):
-        return jsonify({"ok": False, "error": "参数格式不正确"}), 400
-    if not prefix: return jsonify({"ok": False, "error": "前缀不能为空"}), 400
-    if not domain: return jsonify({"ok": False, "error": "域名不能为空"}), 400
-    if count < 1:  return jsonify({"ok": False, "error": "数量必须 >= 1"}), 400
+        return None, "参数格式不正确"
+    if not prefix: return None, "前缀不能为空"
+    if not domain: return None, "域名不能为空"
+    if count < 1:  return None, "数量必须 >= 1"
+    return {
+        "prefix": prefix, "domain": domain, "count": count,
+        "start": start, "pad": pad,
+        "concurrency": max(1, min(conc, SSO_CONCURRENCY_MAX)),
+        "group":        (data.get("group") or "").strip() or None,
+        "create_group": bool(data.get("create_group")),
+        "store_id_in":  (data.get("identity_store_id") or "").strip() or None,
+        "skip_pwd":     bool(data.get("skip_passwords")),
+        "region":       (data.get("region") or "").strip(),
+    }, None
 
-    group        = (data.get("group") or "").strip() or None
-    create_group = bool(data.get("create_group"))
-    store_id_in  = (data.get("identity_store_id") or "").strip() or None
-    skip_pwd     = bool(data.get("skip_passwords"))
 
+def _sso_batch_events(s, p: dict):
+    """批量创建 SSO 用户的核心流程，逐个 yield 事件字典。
+
+    用户之间用线程池并发（IO 密集，绝大部分时间在等 AWS 响应），每完成一个
+    立即产出一条 item 事件。gunicorn 跑 gevent worker 时 monkey.patch_all()
+    会把线程换成 greenlet，开销更低，行为一致。
+
+    事件类型：stage / start / item / done / error。
+    /api/sso/run_stream 把它编码成 SSE 逐条下发，/api/sso/run 收敛成一次性 JSON。
+    """
+    import concurrent.futures as _cf
+
+    conc = p["concurrency"]
+
+    # ── 准备：用户列表 / identity store ──────────────────────
+    yield {"type": "stage", "stage": "init", "message": "解析 identity store..."}
     try:
-        users    = sso_core.build_users(prefix, domain, count, start, pad)
-        store_id = sso_core.resolve_identity_store_id(s, store_id_in)
-        ids_cli  = s.client("identitystore")
+        users    = sso_core.build_users(p["prefix"], p["domain"], p["count"],
+                                       p["start"], p["pad"])
+        store_id = sso_core.resolve_identity_store_id(s, p["store_id_in"])
+        # 连接池要开到并发数以上，否则线程会堵在 botocore 的连接池上
+        ids_cli  = s.client("identitystore", config=sso_core.client_config(conc))
     except Exception as e:
-        return jsonify({"ok": False, "error": f"初始化失败: {e}"}), 500
+        yield {"type": "error", "error": f"初始化失败: {e}"}
+        return
 
-    # 登录地址
+    # ── 登录地址 ─────────────────────────────────────────────
     portal_url    = sso_core.build_portal_url(store_id)
     dualstack_url = ""
     try:
@@ -3888,69 +3913,179 @@ def sso_run():
             if inst.get("IdentityStoreId") == store_id:
                 arn = inst.get("InstanceArn", "")
                 dualstack_url = sso_core.build_dualstack_portal_url(
-                    arn.split("/")[-1] if "/" in arn else "",
-                    (data.get("region") or "").strip())
+                    arn.split("/")[-1] if "/" in arn else "", p["region"])
                 break
     except Exception:
         pass
 
-    # 组
+    # ── 组 ───────────────────────────────────────────────────
+    group    = p["group"]
     group_id = None
     if group:
+        yield {"type": "stage", "stage": "group", "message": f"处理组 {group}..."}
         try:
-            if create_group:
+            if p["create_group"]:
                 group_id, _ = sso_core.ensure_group(ids_cli, store_id, group)
             else:
                 group_id = sso_core.find_group_id(ids_cli, store_id, group)
         except Exception as e:
-            return jsonify({"ok": False, "error": f"处理组失败: {e}"}), 500
+            yield {"type": "error", "error": f"处理组失败: {e}"}
+            return
 
-    # 创建用户
-    results = []
-    created = skipped = failed = 0
-    for u in users:
-        row = {"username": u.username, "email": u.email,
+    total    = len(users)
+    skip_pwd = p["skip_pwd"]
+    workers  = min(conc, total)
+
+    yield {
+        "type": "start", "total": total, "concurrency": workers,
+        "identity_store_id": store_id,
+        "portal_url": portal_url, "dualstack_url": dualstack_url,
+        "group": group or "", "skip_passwords": skip_pwd,
+        "usernames": [u.username for u in users],
+    }
+
+    # 一次性密码走的是自签名的 SWBUPService 接口，用带连接池的 http session
+    # 复用 TLS 连接，省掉每个用户一次握手
+    http = None if skip_pwd else sso_pwd.new_http_session(workers)
+
+    def _one(idx, u):
+        """处理单个用户：创建 → 加组 → 生成密码。不抛异常，失败信息塞进 row。"""
+        row = {"type": "item", "index": idx,
+               "username": u.username, "email": u.email,
                "user_id": "", "portal_url": portal_url,
                "portal_url_dualstack": dualstack_url,
                "group": group or "",
-               "one_time_password": "", "status": ""}
+               "one_time_password": "", "status": "", "ok": False,
+               "kind": "failed"}
         try:
-            uid = sso_core.find_existing_user(ids_cli, store_id, u.username)
-            if uid:
-                row["user_id"] = uid
-                row["status"]  = "已存在(跳过)"
-                skipped += 1
-            else:
-                row["user_id"] = sso_core.create_user(ids_cli, store_id, u)
-                row["status"]  = "已创建"
-                created += 1
-            if group_id and row["user_id"]:
-                sso_core.add_to_group(ids_cli, store_id, group_id, row["user_id"])
+            # 先建后查：直接 create_user，冲突了才回查，省一次往返
+            uid, created = sso_core.create_or_get_user(ids_cli, store_id, u)
+            row["user_id"] = uid
+            row["ok"]      = True
+            row["kind"]    = "created" if created else "skipped"
+            row["status"]  = "已创建" if created else "已存在(跳过)"
+            if group_id:
+                sso_core.add_to_group(ids_cli, store_id, group_id, uid)
                 row["status"] += f" / 已加入组 {group}"
         except Exception as e:
             row["status"] = f"失败: {e}"
-            failed += 1
-        results.append(row)
+            row["ok"]     = False
+            row["kind"]   = "failed"
 
-    # 生成一次性密码（纯 API）
-    if not skip_pwd:
-        for r in results:
-            if not r["user_id"]: continue
+        if not skip_pwd and row["user_id"]:
             try:
-                r["one_time_password"] = sso_pwd.generate_otp(
-                    s, (data.get("region") or "").strip(),
-                    r["user_id"], store_id)
+                row["one_time_password"] = sso_pwd.generate_otp(
+                    s, p["region"], row["user_id"], store_id, http=http)
+                row["pwd"] = True
             except Exception as e:
-                r["one_time_password"] = ""
-                r["status"] += f" / 密码失败: {e}"
+                row["one_time_password"] = ""
+                row["status"] += f" / 密码失败: {e}"
+        return row
 
+    # ── 并发处理，谁先完成先推谁 ──────────────────────────────
+    created = skipped = failed = pwd_ok = done = 0
+    try:
+        with _cf.ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(_one, i, u) for i, u in enumerate(users, 1)]
+            for fut in _cf.as_completed(futures):
+                row = fut.result()
+                # 计数只在这里做，避免多线程累加出竞态
+                if   row["kind"] == "created": created += 1
+                elif row["kind"] == "skipped": skipped += 1
+                else:                          failed  += 1
+                if row.pop("pwd", False): pwd_ok += 1
+                done += 1
+                row.update({"done": done, "total": total, "created": created,
+                            "skipped": skipped, "failed": failed, "pwd_ok": pwd_ok})
+                yield row
+    finally:
+        if http is not None:
+            http.close()
+
+    yield {
+        "type": "done", "total": total, "done": done,
+        "identity_store_id": store_id,
+        "portal_url": portal_url, "dualstack_url": dualstack_url,
+        "group": group or "", "concurrency": workers,
+        "summary": {"created": created, "skipped": skipped,
+                    "failed": failed, "pwd_ok": pwd_ok},
+    }
+
+
+@app.route("/api/sso/run", methods=["POST"])
+def sso_run():
+    """批量创建 SSO 用户并生成一次性密码，一步返回完整结果（非流式）。
+
+    页面用的是 /api/sso/run_stream，这个保留给脚本类调用。两者共用
+    _sso_batch_events，所以并发与请求数优化对二者同时生效。
+    """
+    data = request.get_json() or {}
+    s, err = _sso_session(data)
+    if err: return jsonify({"ok": False, "error": err}), 400
+    p, err = _sso_parse_params(data)
+    if err: return jsonify({"ok": False, "error": err}), 400
+
+    results, meta = [], {}
+    for evt in _sso_batch_events(s, p):
+        t = evt.get("type")
+        if t == "error":
+            return jsonify({"ok": False, "error": evt["error"]}), 500
+        if t == "item":
+            results.append(evt)
+        elif t == "done":
+            meta = evt
+
+    # 并发下完成顺序是乱的，按原始序号还原，保证导出顺序稳定
+    results.sort(key=lambda r: r.get("index", 0))
     return jsonify({
         "ok": True,
-        "identity_store_id": store_id,
-        "portal_url":    portal_url,
-        "dualstack_url": dualstack_url,
-        "group":         group,
-        "summary":       {"created": created, "skipped": skipped, "failed": failed},
+        "identity_store_id": meta.get("identity_store_id", ""),
+        "portal_url":    meta.get("portal_url", ""),
+        "dualstack_url": meta.get("dualstack_url", ""),
+        "group":         meta.get("group") or None,
+        "summary":       meta.get("summary", {}),
         "results":       results,
     })
 
+
+@app.route("/api/sso/run_stream", methods=["POST"])
+def sso_run_stream():
+    """流式批量创建 SSO 用户 —— 每处理完一个用户立即推送 SSE。
+
+    与 /api/sso/run 的区别：前端能实时看到"已创建 x / 共 N"的进度，
+    不必等全部跑完才有反馈。事件类型：
+      stage  准备阶段提示（解析 identity store / 处理组）
+      start  总数、实际并发数与登录地址等元信息
+      item   单个用户处理完成（含累计 created/skipped/failed/pwd_ok）
+      done   全部结束，带最终汇总
+      error  致命错误，流终止
+    并发下 item 的到达顺序不等于用户序号，前端按 index 定位。
+    """
+    data = request.get_json() or {}
+
+    def _sse(payload):
+        return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    def _err_resp(msg):
+        return Response(_sse({"type": "error", "error": msg}),
+                        mimetype="text/event-stream", status=400)
+
+    s, err = _sso_session(data)
+    if err: return _err_resp(err)
+    p, err = _sso_parse_params(data)
+    if err: return _err_resp(err)
+
+    def _generate():
+        for evt in _sso_batch_events(s, p):
+            yield _sse(evt)
+
+    return Response(
+        stream_with_context(_generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ── 开发服务器入口（必须放在文件最末尾，确保所有路由已注册）────────────────
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5001, debug=False, use_reloader=False, threaded=True)

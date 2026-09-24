@@ -79,6 +79,30 @@ input,textarea,select{font-family:inherit;text-transform:none}
 .rtbl tr:last-child td{border-bottom:none}
 .rtbl .pwd-cell{font-family:monospace;font-size:11px;font-weight:600;color:#b45309}
 .rtbl .miss{color:var(--er);font-size:10px}
+/* 创建进度可视化 */
+.prog{margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface2)}
+.prog-top{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--t2);margin-bottom:6px}
+.prog-top .pct{margin-left:auto;font-weight:700;color:var(--pr);font-size:12px;font-variant-numeric:tabular-nums}
+.prog-bar{height:8px;border-radius:99px;background:#dfe6f0;overflow:hidden}
+.prog-fill{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--sso) 0%,var(--pr) 100%);transition:width .25s ease}
+.stat-grid{display:flex;gap:7px;margin-top:9px;flex-wrap:wrap}
+.stat{flex:1;min-width:62px;text-align:center;padding:5px 4px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface)}
+.stat-n{display:block;font-size:17px;font-weight:700;line-height:1.25;font-variant-numeric:tabular-nums}
+.stat-l{font-size:10px;color:var(--t2)}
+.stat.s-ok .stat-n{color:var(--ok)}
+.stat.s-sk .stat-n{color:var(--wa)}
+.stat.s-er .stat-n{color:var(--er)}
+.stat.s-pw .stat-n{color:#b45309}
+.cells{display:flex;flex-wrap:wrap;gap:3px;margin-top:9px}
+.cells.dense .cell{width:9px;height:9px;border-radius:2px}
+.cell{width:14px;height:14px;border-radius:3px;background:#e2e8f0;border:1px solid #cbd5e1;transition:background .2s,border-color .2s}
+.cell.run{background:var(--pl);border-color:var(--pr);animation:cpulse 1s ease-in-out infinite}
+.cell.ok{background:#22c55e;border-color:#16a34a}
+.cell.sk{background:#fbbf24;border-color:#d97706}
+.cell.er{background:#ef4444;border-color:#dc2626}
+@keyframes cpulse{0%,100%{opacity:1}50%{opacity:.35}}
+.cells-legend{display:flex;gap:12px;margin-top:7px;font-size:10px;color:var(--t2);flex-wrap:wrap}
+.cells-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 .summary-bar{display:flex;gap:16px;padding:8px 12px;background:var(--surface2);border-radius:var(--r-sm);font-size:12px;margin-bottom:10px;border:1px solid var(--border)}
 .summary-bar b{font-size:16px;display:block}
 .export-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
@@ -160,6 +184,9 @@ input,textarea,select{font-family:inherit;text-transform:none}
       <div class="fr">
         <div class="fg"><label>sso 组名</label><input id="group" value="Kiro-Users" placeholder="Kiro-Users"></div>
         <div class="fg"><label>identity store id（可选）</label><input id="store_id" placeholder="留空自动发现"></div>
+        <div class="fg" style="max-width:96px" title="用户之间并发处理的数量。越大越快，但撞 aws 限流的概率也越高；撞到会自动退避重试。">
+          <label>并发数</label><input id="concurrency" type="number" min="1" max="16" value="8">
+        </div>
       </div>
       <div class="chk-row">
         <input type="checkbox" id="create_group" checked><span>组不存在时自动创建</span>
@@ -172,6 +199,30 @@ input,textarea,select{font-family:inherit;text-transform:none}
         <button class="btn bp" id="runBtn" onclick="runCreate()">开始执行（创建 + 生成密码）</button>
       </div>
       <div id="runMsg"></div>
+
+      <!-- 进度可视化 -->
+      <div class="prog" id="progWrap" style="display:none">
+        <div class="prog-top">
+          <span id="progLabel">准备中...</span>
+          <span class="pct" id="progPct">0%</span>
+        </div>
+        <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
+        <div class="stat-grid">
+          <div class="stat s-ok"><span class="stat-n" id="stCreated">0</span><span class="stat-l">已创建</span></div>
+          <div class="stat s-sk"><span class="stat-n" id="stSkipped">0</span><span class="stat-l">已跳过</span></div>
+          <div class="stat s-er"><span class="stat-n" id="stFailed">0</span><span class="stat-l">失败</span></div>
+          <div class="stat s-pw"><span class="stat-n" id="stPwd">0</span><span class="stat-l">已生成密码</span></div>
+          <div class="stat"><span class="stat-n" id="stDone">0</span><span class="stat-l">已处理 / 总数</span></div>
+        </div>
+        <div class="cells" id="progCells"></div>
+        <div class="cells-legend">
+          <span><i style="background:#e2e8f0;border:1px solid #cbd5e1"></i>待处理</span>
+          <span><i style="background:#eff6ff;border:1px solid #2563eb"></i>处理中</span>
+          <span><i style="background:#22c55e"></i>已创建</span>
+          <span><i style="background:#fbbf24"></i>已存在(跳过)</span>
+          <span><i style="background:#ef4444"></i>失败</span>
+        </div>
+      </div>
 
       <!-- 结果区 -->
       <div id="resultBox" style="display:none;margin-top:12px">
@@ -211,7 +262,7 @@ document.addEventListener("DOMContentLoaded", function(){
 
 // ── 工具函数 ──────────────────────────────────────────────
 function creds(){ return { access_key_id: G("ak"), secret_access_key: G("sk"), region: G("region"), session_token: G("tok") }; }
-function userParams(){ return { prefix: G("prefix"), domain: G("domain"), count: G("count"), start: G("start"), pad: G("pad"), group: G("group"), identity_store_id: G("store_id"), create_group: G2("create_group"), skip_passwords: G2("skip_pwd") }; }
+function userParams(){ return { prefix: G("prefix"), domain: G("domain"), count: G("count"), start: G("start"), pad: G("pad"), group: G("group"), identity_store_id: G("store_id"), concurrency: G("concurrency"), create_group: G2("create_group"), skip_passwords: G2("skip_pwd") }; }
 function G(id){ return document.getElementById(id).value.trim(); }
 function G2(id){ return document.getElementById(id).checked; }
 function setMsg(id, html, cls){ var el=document.getElementById(id); el.innerHTML='<div class="st '+cls+'">'+html+'</div>'; }
@@ -239,43 +290,162 @@ async function preview(){
   setMsg("runMsg", "预览：共 "+res.users.length+" 个用户 — "+res.users.map(u=>esc(u.username)).join(", "), "info");
 }
 
-// ── 执行创建 ──────────────────────────────────────────────
+// ── 进度条辅助 ────────────────────────────────────────────
+function $(id){ return document.getElementById(id); }
+
+function progReset(total){
+  $("progWrap").style.display = "";
+  $("progFill").style.width = "0%";
+  $("progPct").textContent = "0%";
+  $("progLabel").textContent = "准备中...";
+  ["stCreated","stSkipped","stFailed","stPwd"].forEach(id => $(id).textContent = "0");
+  $("stDone").textContent = total ? ("0 / " + total) : "0";
+  progBuildCells(total);
+}
+
+function progBuildCells(total){
+  const box = $("progCells");
+  box.className = "cells" + (total > 60 ? " dense" : "");
+  let html = "";
+  for (let i = 0; i < total; i++) html += '<div class="cell" id="c'+i+'"></div>';
+  box.innerHTML = html;
+}
+
+function progMark(i, cls){
+  const c = $("c"+i);
+  if (c) c.className = "cell" + (cls ? " "+cls : "");
+}
+
+function progUpdate(evt){
+  const pct = evt.total ? Math.round(evt.done / evt.total * 100) : 0;
+  $("progFill").style.width = pct + "%";
+  $("progPct").textContent = pct + "%";
+  $("stCreated").textContent = evt.created;
+  $("stSkipped").textContent = evt.skipped;
+  $("stFailed").textContent  = evt.failed;
+  $("stPwd").textContent     = evt.pwd_ok;
+  $("stDone").textContent    = evt.done + " / " + evt.total;
+  $("progLabel").textContent = "（"+evt.done+"/"+evt.total+"）刚完成 "+evt.username+" · "+evt.status;
+}
+
+// ── 执行创建（流式，实时进度） ──────────────────────────────
 let lastResult = null;
 
 async function runCreate(){
   if (!confirm("将在 AWS 上实际创建用户，确认继续？")) return;
-  const btn = document.getElementById("runBtn");
+  const btn = $("runBtn");
   btn.disabled = true; btn.textContent = "执行中...";
   setMsg("runMsg", '<span class="sp"></span> 创建用户并生成密码（纯 API）...', "info");
-  document.getElementById("resultBox").style.display = "none";
+  $("resultBox").style.display = "none";
+  $("resultBody").innerHTML = "";
+
+  progReset(parseInt(G("count"), 10) || 0);
+
+  lastResult = {ok:true, results:[], identity_store_id:"", portal_url:"",
+                dualstack_url:"", group:"",
+                summary:{created:0, skipped:0, failed:0, pwd_ok:0}};
+
   try {
-    const res = await api("/api/sso/run", {...creds(), ...userParams()});
-    if (!res.ok){ setMsg("runMsg", res.error, "er"); return; }
-    lastResult = res;
-    const s = res.summary;
-    let smsg = '完成: 创建 <b>'+s.created+'</b> 跳过 <b>'+s.skipped+'</b> 失败 <b>'+s.failed+'</b>';
-    smsg += ' &nbsp;|&nbsp; identity store: '+esc(res.identity_store_id);
-    if (res.portal_url) smsg += ' &nbsp;|&nbsp; <a href="'+esc(res.portal_url)+'" target="_blank" style="color:var(--pr)">登录地址</a>';
-    setMsg("runMsg", smsg, s.failed>0?"wa":"ok");
-    renderResults(res);
+    const resp = await fetch("/api/sso/run_stream", {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({...creds(), ...userParams()})
+    });
+    if (!resp.body){ setMsg("runMsg", "浏览器不支持流式响应", "er"); return; }
+
+    const reader = resp.body.getReader(), dec = new TextDecoder();
+    let buf = "";
+    while (true){
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buf += dec.decode(chunk.value, {stream:true});
+      const parts = buf.split("\n\n");
+      buf = parts.pop();
+      for (const part of parts){
+        const line = part.trim();
+        if (!line.startsWith("data:")) continue;
+        let evt; try { evt = JSON.parse(line.slice(5).trim()); } catch(e){ continue; }
+        handleRunEvent(evt);
+      }
+    }
+  } catch(e){
+    setMsg("runMsg", "错误：" + e.message, "er");
+    $("progLabel").textContent = "✗ 已中断";
   } finally {
     btn.disabled = false; btn.textContent = "开始执行（创建 + 生成密码）";
   }
 }
 
-function renderResults(res){
-  document.getElementById("resultBox").style.display = "";
-  const s = res.summary;
-  document.getElementById("summaryBar").innerHTML =
-    '<div>已创建<b>'+s.created+'</b></div><div>跳过<b>'+s.skipped+'</b></div><div>失败<b>'+s.failed+'</b></div>'+
-    (res.portal_url?'<div style="margin-left:auto;font-size:11px;color:var(--t2)">登录: <a href="'+esc(res.portal_url)+'" target="_blank" style="color:var(--pr)">'+esc(res.portal_url)+'</a></div>':'');
-  document.getElementById("resultBody").innerHTML = res.results.map(r =>
-    '<tr><td>'+esc(r.username)+'</td><td>'+esc(r.email)+'</td>'+
+// 下一个还没开跑的格子。并发时同时有多个格子处于"处理中"，
+// 每完成一个就把这个指针往后推一格点亮。
+let nextCell = 0;
+
+function handleRunEvent(evt){
+  if (evt.type === "stage"){
+    $("progLabel").textContent = evt.message || "处理中...";
+
+  } else if (evt.type === "start"){
+    progReset(evt.total);
+    lastResult.identity_store_id = evt.identity_store_id || "";
+    lastResult.portal_url        = evt.portal_url || "";
+    lastResult.dualstack_url     = evt.dualstack_url || "";
+    lastResult.group             = evt.group || "";
+    $("resultBox").style.display = "";
+    updateSummaryBar(lastResult.summary);
+    const conc = evt.concurrency || 1;
+    $("progLabel").textContent = "共 "+evt.total+" 个用户，并发 "+conc+"，开始处理...";
+    nextCell = 0;
+    while (nextCell < Math.min(conc, evt.total)) progMark(nextCell++, "run");
+
+  } else if (evt.type === "item"){
+    lastResult.results.push(evt);
+    lastResult.summary = {created:evt.created, skipped:evt.skipped,
+                          failed:evt.failed, pwd_ok:evt.pwd_ok};
+    progMark(evt.index - 1, evt.kind === "failed" ? "er"
+                          : (evt.kind === "skipped" ? "sk" : "ok"));
+    if (nextCell < evt.total) progMark(nextCell++, "run");
+    progUpdate(evt);
+    appendResultRow(evt);
+    updateSummaryBar(lastResult.summary);
+
+  } else if (evt.type === "done"){
+    const s = evt.summary;
+    lastResult.summary = s;
+    // 并发下到达顺序是乱的，收尾时按序号重排，导出和查看都稳定
+    lastResult.results.sort((a, b) => (a.index || 0) - (b.index || 0));
+    $("resultBody").innerHTML = "";
+    lastResult.results.forEach(appendResultRow);
+    let msg = '完成: 创建 <b>'+s.created+'</b> 跳过 <b>'+s.skipped+'</b> 失败 <b>'+s.failed+'</b>';
+    msg += ' &nbsp;|&nbsp; 密码 <b>'+s.pwd_ok+'</b>';
+    msg += ' &nbsp;|&nbsp; identity store: '+esc(evt.identity_store_id);
+    if (evt.portal_url) msg += ' &nbsp;|&nbsp; <a href="'+esc(evt.portal_url)+'" target="_blank" style="color:var(--pr)">登录地址</a>';
+    setMsg("runMsg", msg, s.failed > 0 ? "wa" : "ok");
+    $("progFill").style.width = "100%";
+    $("progPct").textContent = "100%";
+    $("progLabel").textContent = "✓ 全部完成，实际新建 "+s.created+" 个用户";
+    updateSummaryBar(s);
+
+  } else if (evt.type === "error"){
+    setMsg("runMsg", esc(evt.error), "er");
+    $("progLabel").textContent = "✗ " + evt.error;
+  }
+}
+
+function updateSummaryBar(s){
+  $("summaryBar").innerHTML =
+    '<div>已创建<b>'+s.created+'</b></div><div>跳过<b>'+s.skipped+'</b></div>'+
+    '<div>失败<b>'+s.failed+'</b></div>'+
+    (lastResult.portal_url?'<div style="margin-left:auto;font-size:11px;color:var(--t2)">登录: <a href="'+esc(lastResult.portal_url)+'" target="_blank" style="color:var(--pr)">'+esc(lastResult.portal_url)+'</a></div>':'');
+}
+
+function appendResultRow(r){
+  const tr = document.createElement("tr");
+  tr.innerHTML =
+    '<td>'+esc(r.username)+'</td><td>'+esc(r.email)+'</td>'+
     '<td class="'+(r.one_time_password?'pwd-cell':'')+'">'+
     (r.one_time_password ? esc(r.one_time_password) : '<span class="miss">(未获取)</span>')+
     '</td><td style="font-size:10px;color:var(--t2)">'+(r.portal_url_dualstack?esc(r.portal_url_dualstack):'')+'</td>'+
-    '<td>'+esc(r.status)+'</td></tr>'
-  ).join('');
+    '<td>'+esc(r.status)+'</td>';
+  $("resultBody").appendChild(tr);
 }
 
 // ── 导出 TXT ──────────────────────────────────────────────

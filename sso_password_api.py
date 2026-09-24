@@ -15,18 +15,45 @@
 from __future__ import annotations
 
 import re
-import urllib.request
-import urllib.error
 import json
-from typing import Any
+from typing import Any, Optional
 
 try:
     import boto3
+    import requests
+    from requests.adapters import HTTPAdapter
     from botocore.auth import SigV4Auth
     from botocore.awsrequest import AWSRequest
     from botocore.credentials import Credentials
 except ImportError as e:
-    raise ImportError("请先 pip install boto3") from e
+    raise ImportError("请先 pip install boto3 requests") from e
+
+
+def new_http_session(concurrency: int = 8) -> "requests.Session":
+    """创建一个连接池按并发数调好的 requests.Session。
+
+    原先用 urllib.request.urlopen, 每个用户都要重新完成一次 TCP + TLS 握手;
+    跨洋链路上单次握手就是好几个 RTT, 批量创建时这部分开销很可观。
+    换成带连接池的 Session 后, 同一批用户复用同一条 TLS 连接。
+
+    调用方负责 close(), 或者用 with 语句。
+    """
+    sess = requests.Session()
+    pool = max(concurrency, 10)
+    adapter = HTTPAdapter(pool_connections=pool, pool_maxsize=pool, max_retries=0)
+    sess.mount("https://", adapter)
+    return sess
+
+
+# 未显式传入 http session 时用的兜底实例（命令行脚本、单发调用场景）
+_default_http: Optional["requests.Session"] = None
+
+
+def _get_default_http() -> "requests.Session":
+    global _default_http
+    if _default_http is None:
+        _default_http = new_http_session()
+    return _default_http
 
 # 从响应里找密码的候选字段
 _PASSWORD_FIELDS = [
@@ -42,6 +69,7 @@ def generate_otp(
     region: str,
     user_id: str,
     identity_store_id: str,
+    http: Optional["requests.Session"] = None,
 ) -> str:
     """为指定用户生成一次性密码并返回。
 
@@ -51,6 +79,8 @@ def generate_otp(
     region:               Identity Center 所在区域, 如 us-east-1
     user_id:              目标用户的 UserId (来自 identitystore:CreateUser 返回)
     identity_store_id:    Identity Store ID, 如 d-90661f32af
+    http:                 可选, 复用的 requests.Session (见 new_http_session);
+                          批量调用时传入可省掉每次的 TLS 握手
 
     Returns
     -------
@@ -66,11 +96,12 @@ def generate_otp(
         "PasswordMode": "OTP",
         "IdentityStoreId": identity_store_id,
     })
+    payload_bytes = body.encode("utf-8")
 
     aws_req = AWSRequest(
         method="POST",
         url=endpoint,
-        data=body.encode("utf-8"),
+        data=payload_bytes,
         headers={
             "Content-Type": "application/x-amz-json-1.1",
             "X-Amz-Target": "SWBUPService.UpdatePassword",
@@ -83,18 +114,12 @@ def generate_otp(
         creds.get_frozen_credentials(), "userpool", region
     ).add_auth(aws_req)
 
-    http_req = urllib.request.Request(
-        endpoint,
-        data=body.encode("utf-8"),
-        headers=dict(aws_req.headers),
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(http_req, timeout=30) as resp:
-            raw = resp.read().decode("utf-8")
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"HTTP {e.code}: {detail}") from None
+    cli = http or _get_default_http()
+    resp = cli.post(endpoint, data=payload_bytes,
+                    headers=dict(aws_req.headers), timeout=30)
+    if resp.status_code >= 400:
+        raise RuntimeError(f"HTTP {resp.status_code}: {resp.text}")
+    raw = resp.text
 
     payload: Any = {}
     try:
