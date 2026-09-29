@@ -5,11 +5,16 @@ After=network.target
 [Service]
 User=ec2-user
 WorkingDirectory=/home/ec2-user/bedrocktags
+# Linux glibc 默认为每个线程分配独立内存区（arena），多线程并发查询后
+# 内存碎片化且不归还系统。限制为 2 个是 Python 服务的常用做法。
+Environment=MALLOC_ARENA_MAX=2
+# --workers 2：服务器仅 1.86GB 内存，每个 worker 都完整加载一份应用；
+#   gevent 是异步 worker，2 个 × 100 连接足够内部工具使用。
 # --max-requests：每个 worker 处理约 500 个请求后优雅重启，回收累积内存
 # --graceful-timeout：重启前等待进行中的请求完成（与 --timeout 一致，
 #   保证批量创建、多区域配额查询等长请求不会被中途打断）
 ExecStart=/usr/local/bin/gunicorn \
-    --workers 4 \
+    --workers 2 \
     --worker-class gevent \
     --worker-connections 100 \
     --bind 127.0.0.1:5001 \
