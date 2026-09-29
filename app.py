@@ -52,6 +52,15 @@ CLAUDE_VERSIONS = [
         },
     },
     {
+        "id": "anthropic.claude-sonnet-5-5",
+        "label": "Claude Sonnet 5.5",
+        "sources": {
+            "us": "us.anthropic.claude-sonnet-5-5",
+            "eu": "eu.anthropic.claude-sonnet-5-5",
+            "global": "global.anthropic.claude-sonnet-5-5",
+        },
+    },
+    {
         "id": "anthropic.claude-sonnet-5",
         "label": "Claude Sonnet 5",
         "sources": {

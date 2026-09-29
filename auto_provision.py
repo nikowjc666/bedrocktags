@@ -75,6 +75,11 @@ MODEL_ALIAS = {
     "4.8": "anthropic.claude-opus-4-8",
     "opus 4.8": "anthropic.claude-opus-4-8",
     "opus4.8": "anthropic.claude-opus-4-8",
+    "sonnet 5.5": "anthropic.claude-sonnet-5-5",
+    "sonnet5.5": "anthropic.claude-sonnet-5-5",
+    "claude sonnet 5.5": "anthropic.claude-sonnet-5-5",
+    "sonnet 5": "anthropic.claude-sonnet-5",
+    "sonnet5": "anthropic.claude-sonnet-5",
     "opus 5.5": "anthropic.claude-opus-5-5",
     "opus5.5": "anthropic.claude-opus-5-5",
     "claude opus 5.5": "anthropic.claude-opus-5-5",
@@ -99,6 +104,23 @@ MODEL_ALIAS = {
 
 # 完整模型信息（同步自 app.py）
 CLAUDE_VERSIONS = [
+    {
+        "id": "anthropic.claude-sonnet-5-5",
+        "label": "Claude Sonnet 5.5",
+        "sources": {
+            "us": "us.anthropic.claude-sonnet-5-5",
+            "eu": "eu.anthropic.claude-sonnet-5-5",
+            "global": "global.anthropic.claude-sonnet-5-5",
+        },
+    },
+    {
+        "id": "anthropic.claude-sonnet-5",
+        "label": "Claude Sonnet 5",
+        "sources": {
+            "us": "us.anthropic.claude-sonnet-5",
+            "global": "global.anthropic.claude-sonnet-5",
+        },
+    },
     {
         "id": "anthropic.claude-opus-5-5",
         "label": "Claude Opus 5.5",
