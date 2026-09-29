@@ -5,13 +5,19 @@ After=network.target
 [Service]
 User=ec2-user
 WorkingDirectory=/home/ec2-user/bedrocktags
+# --max-requests：每个 worker 处理约 500 个请求后优雅重启，回收累积内存
+# --graceful-timeout：重启前等待进行中的请求完成（与 --timeout 一致，
+#   保证批量创建、多区域配额查询等长请求不会被中途打断）
 ExecStart=/usr/local/bin/gunicorn \
     --workers 4 \
     --worker-class gevent \
     --worker-connections 100 \
     --bind 127.0.0.1:5001 \
     --timeout 300 \
+    --graceful-timeout 300 \
     --keep-alive 10 \
+    --max-requests 500 \
+    --max-requests-jitter 50 \
     --log-level info \
     --access-logfile /var/log/bedrock-app/access.log \
     --error-logfile  /var/log/bedrock-app/error.log \

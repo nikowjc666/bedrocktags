@@ -353,21 +353,56 @@ def _creds(data):
     return ak, sk, user_id
 
 
-# ── boto3 客户端缓存（相同 ak/sk/region 复用连接，避免重复握手）──
-_client_cache: dict = {}
+# ── boto3 客户端缓存（LRU，相同 ak/sk/region 复用连接）──────────────
+# 用 OrderedDict 实现 LRU：超出上限时淘汰最久未使用的 client 并关闭其连接池。
+# 不做上限会导致内存持续增长：每个 client 自带连接池（socket）+ botocore 元数据，
+# 而 key 组合 = 服务 × 区域(28) × 每个客户的 AK/SK，数量会无限膨胀。
+import collections as _collections
+import threading as _threading
+
+_CLIENT_CACHE_MAX = 120          # 最多保留的 client 数量
+_client_cache: "_collections.OrderedDict" = _collections.OrderedDict()
+_client_cache_lock = _threading.Lock()
+
 
 def _get_client(service, ak, sk, region):
     key = (service, ak, sk, region)
-    if key not in _client_cache:
-        cfg = botocore.config.Config(
-            max_pool_connections=20,        # 连接池大小（支持并发）
-            connect_timeout=5,
-            read_timeout=30,
-            retries={"max_attempts": 2},
-        )
-        sess = boto3.Session(aws_access_key_id=ak, aws_secret_access_key=sk)
-        _client_cache[key] = sess.client(service, region_name=region, config=cfg)
-    return _client_cache[key]
+    with _client_cache_lock:
+        if key in _client_cache:
+            _client_cache.move_to_end(key)     # 标记为最近使用
+            return _client_cache[key]
+
+    cfg = botocore.config.Config(
+        max_pool_connections=20,        # 连接池大小（支持并发）
+        connect_timeout=5,
+        read_timeout=30,
+        retries={"max_attempts": 2},
+    )
+    sess = boto3.Session(aws_access_key_id=ak, aws_secret_access_key=sk)
+    client = sess.client(service, region_name=region, config=cfg)
+
+    with _client_cache_lock:
+        # 并发下可能已被其它线程创建，直接复用已有的
+        if key in _client_cache:
+            _client_cache.move_to_end(key)
+            return _client_cache[key]
+        _client_cache[key] = client
+        _client_cache.move_to_end(key)
+        # 淘汰最久未用的 client：只移除缓存引用，不主动关闭连接。
+        # 被淘汰的 client 可能仍被其它线程的进行中请求使用，强制关闭会导致
+        # 该请求失败（配额会显示成 —）。没有引用后由 Python 自动回收释放。
+        while len(_client_cache) > _CLIENT_CACHE_MAX:
+            _client_cache.popitem(last=False)
+    return client
+
+
+def _clear_client_cache():
+    """清空 client 缓存引用（供运维/诊断使用）。
+    不强制关闭连接：进行中的请求仍持有 client 引用，可正常完成后再被回收。"""
+    with _client_cache_lock:
+        n = len(_client_cache)
+        _client_cache.clear()
+    return n
 
 
 def _bedrock(ak, sk, region):
@@ -511,6 +546,42 @@ def get_iam_tags():
 @app.route("/api/regions", methods=["GET"])
 def regions():
     return jsonify({"ok": True, "regions": REGIONS})
+
+
+@app.route("/api/_diag/memory", methods=["GET"])
+def diag_memory():
+    """内存诊断：查看进程内存与各缓存占用（排查内存持续增长时使用）"""
+    import os as _o
+    info = {
+        "pid": _o.getpid(),
+        "client_cache_size": len(_client_cache),
+        "client_cache_max": _CLIENT_CACHE_MAX,
+        "quota_code_map_size": len(_quota_code_map),
+        "quota_value_map_size": len(_quota_value_map),
+    }
+    # 进程内存（优先 psutil，回退到 Linux /proc）
+    try:
+        import psutil as _ps
+        info["rss_mb"] = round(_ps.Process().memory_info().rss / 1024 / 1024, 1)
+    except Exception:
+        try:
+            with open(f"/proc/{_o.getpid()}/status") as f:
+                for line in f:
+                    if line.startswith("VmRSS:"):
+                        info["rss_mb"] = round(int(line.split()[1]) / 1024, 1)
+                        break
+        except Exception:
+            info["rss_mb"] = None
+    return jsonify({"ok": True, **info})
+
+
+@app.route("/api/_diag/clear_cache", methods=["POST"])
+def diag_clear_cache():
+    """手动释放 boto3 client 连接池缓存（内存偏高时可先调用此接口）"""
+    closed = _clear_client_cache()
+    import gc as _gc
+    collected = _gc.collect()
+    return jsonify({"ok": True, "clients_closed": closed, "gc_collected": collected})
 
 
 @app.route("/api/claude_versions", methods=["GET"])
