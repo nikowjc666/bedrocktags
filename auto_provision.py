@@ -96,6 +96,9 @@ MODEL_ALIAS = {
     "opus4.5": "anthropic.claude-opus-4-5-20251101-v1:0",
     "opus 4.6": "anthropic.claude-opus-4-6-v1",
     "opus4.6": "anthropic.claude-opus-4-6-v1",
+    "haiku 5.5": "anthropic.claude-haiku-5-5",
+    "haiku5.5": "anthropic.claude-haiku-5-5",
+    "claude haiku 5.5": "anthropic.claude-haiku-5-5",
     "haiku 4.5": "anthropic.claude-haiku-4-5-20251001-v1:0",
     "haiku4.5": "anthropic.claude-haiku-4-5-20251001-v1:0",
     "opus 4": "anthropic.claude-opus-4-20250514-v1:0",
@@ -203,6 +206,15 @@ CLAUDE_VERSIONS = [
             "us": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
             "eu": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
             "global": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        },
+    },
+    {
+        "id": "anthropic.claude-haiku-5-5",
+        "label": "Claude Haiku 5.5",
+        "sources": {
+            "us": "us.anthropic.claude-haiku-5-5",
+            "eu": "eu.anthropic.claude-haiku-5-5",
+            "global": "global.anthropic.claude-haiku-5-5",
         },
     },
     {
@@ -873,7 +885,7 @@ textarea{resize:vertical;min-height:60px}
       </div>
       <div class="form-grid full" style="margin-top:12px">
         <div><label>模型</label><input id="models" placeholder="例: 4.5, 4.6, 4.7, 4.8, fable 5">
-          <div class="help">支持简写: 4.5/4.6/4.7/4.8/fable 5/opus 4.5/haiku 4.5...</div>
+          <div class="help">支持简写: 4.5/4.6/4.7/4.8/fable 5/opus 4.5/haiku 4.5/haiku 5.5...</div>
         </div>
       </div>
       <div class="form-grid" style="margin-top:12px">

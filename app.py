@@ -139,6 +139,15 @@ CLAUDE_VERSIONS = [
         },
     },
     {
+        "id": "anthropic.claude-haiku-5-5",
+        "label": "Claude Haiku 5.5",
+        "sources": {
+            "us": "us.anthropic.claude-haiku-5-5",
+            "eu": "eu.anthropic.claude-haiku-5-5",
+            "global": "global.anthropic.claude-haiku-5-5",
+        },
+    },
+    {
         "id": "anthropic.claude-haiku-4-5-20251001-v1:0",
         "label": "Claude Haiku 4.5",
         "sources": {
@@ -602,6 +611,44 @@ def diag_clear_cache():
     import gc as _gc
     collected = _gc.collect()
     return jsonify({"ok": True, "clients_closed": closed, "gc_collected": collected})
+
+
+@app.route("/api/_diag/search_quota", methods=["POST"])
+def diag_search_quota():
+    """诊断工具：搜索配额代码映射中包含指定关键词的所有配额"""
+    data = request.get_json() or {}
+    ak, sk, _ = _creds(data)
+    keyword = (data.get("keyword") or "").strip().lower()
+    force_refresh = bool(data.get("force_refresh", False))
+    
+    if not ak or not sk:
+        return jsonify({"ok": False, "error": "请提供 AK/SK"}), 400
+    if not keyword:
+        return jsonify({"ok": False, "error": "请提供搜索关键词"}), 400
+    
+    # 确保 code_map 已加载
+    if force_refresh or not _quota_code_map:
+        _build_code_map(ak, sk)
+    
+    # 搜索包含关键词的所有配额
+    matches = {}
+    for name, code in _quota_code_map.items():
+        if keyword in name:
+            # 获取配额值（如果有）
+            val_info = _quota_value_map.get(name, {})
+            matches[name] = {
+                "code": code,
+                "value": val_info.get("value"),
+                "default": val_info.get("default"),
+            }
+    
+    return jsonify({
+        "ok": True,
+        "keyword": keyword,
+        "total_quotas": len(_quota_code_map),
+        "matches": len(matches),
+        "results": dict(sorted(matches.items())),
+    })
 
 
 @app.route("/api/claude_versions", methods=["GET"])
@@ -1786,13 +1833,27 @@ def query_model_quotas():
                 if " v1" not in label_no_claude:
                     label_variants.append(f"{label_no_claude} v1")
             
+            # 对于新模型（如 Haiku 5.5），添加更多可能的命名格式
             if "sonnet" in label or "fable" in label or "opus" in label or "haiku" in label:
                 import re as _re
-                match = _re.search(r'(sonnet|fable|opus|haiku)\s+(\d+)', label_no_claude)
+                match = _re.search(r'(sonnet|fable|opus|haiku)\s+([\d.]+)', label_no_claude)
                 if match:
-                    short_label = f"{match.group(1)} {match.group(2)}"
+                    model_type = match.group(1)
+                    version = match.group(2)
+                    # 添加不同格式：haiku 5.5, haiku 5-5, haiku-5-5, haiku55 等
+                    short_label = f"{model_type} {version}"
                     if short_label not in label_variants:
                         label_variants.append(short_label)
+                    # 添加破折号格式（AWS 可能用 5-5 而不是 5.5）
+                    version_dash = version.replace(".", "-")
+                    if version_dash != version:
+                        label_variants.append(f"{model_type} {version_dash}")
+                        label_variants.append(f"{model_type}-{version_dash}")
+                    # 添加无分隔符格式
+                    version_compact = version.replace(".", "")
+                    if version_compact != version:
+                        label_variants.append(f"{model_type}{version_compact}")
+                        label_variants.append(f"{model_type} {version_compact}")
             
             tpm_value = None
             tpd_value = None
