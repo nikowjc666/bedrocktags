@@ -622,6 +622,7 @@ async function whoami(){
   setMsg("whoamiMsg", '<span class="sp"></span> 检测中...', "info");
   const res = await api("/api/sso/whoami", creds());
   if (!res.ok){ setMsg("whoamiMsg", res.error, "er"); return; }
+  window._accountId = res.account || "";  // 保存账户ID供导出使用
   let html = '账号: <strong>'+esc(res.account)+'</strong> &nbsp;|&nbsp; 身份: '+esc(res.arn)+' &nbsp;|&nbsp; 区域: '+esc(res.region);
   if (res.identity_center && res.identity_center.length){
     html += '<br>identity store: <strong>'+esc(res.identity_center[0].identity_store_id)+'</strong>';
@@ -836,6 +837,15 @@ function appendResultRow(r){
   $("resultBody").appendChild(tr);
 }
 
+// ── 导出文件名生成：交付日期_账户ID_kiro数量 ────────────────
+function exportFilename(ext) {
+  const d = new Date(), p = n => String(n).padStart(2,'0');
+  const date = d.getFullYear()+p(d.getMonth()+1)+p(d.getDate());
+  const acct = (window._accountId || lastResult.identity_store_id || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '');
+  const count = (lastResult.summary && lastResult.summary.created) || lastResult.results.length;
+  return `${date}_${acct}_${count}.${ext}`;
+}
+
 // ── 导出 TXT ──────────────────────────────────────────────
 function exportTxt(){
   if (!lastResult) return;
@@ -847,35 +857,27 @@ function exportTxt(){
     if (d) lines.push('双栈 AWS access portal URL: '+d);
     lines.push('用户名: '+r.username);
     lines.push('一次性密码: '+(r.one_time_password||'(未获取)'));
-    // 个性化模式：显示每个用户的订阅方案
-    const userPlan = mode === 'individual' ? (r.subscription_plan || '') : (lastResult.subscription_plan || '');
-    if (userPlan) lines.push('Kiro 订阅方案: '+userPlan);
     return lines.join('\r\n');
   });
-  dl('sso_登录信息_'+ts()+'.txt', blocks.join('\r\n\r\n'), 'text/plain');
+  dl(exportFilename('txt'), blocks.join('\r\n\r\n'), 'text/plain');
 }
 
 // ── 导出 CSV ──────────────────────────────────────────────
 function exportCsv(){
   if (!lastResult) return;
   const q = v => '"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-  const hdr = ['username','email','portal_url','dualstack_url','one_time_password','subscription_plan','group','status'];
+  const hdr = ['username','email','portal_url','dualstack_url','one_time_password','group','status'];
   const lines = [hdr.join(',')];
   const mode = lastResult.subscription_mode || 'unified';
   lastResult.results.forEach(r => {
     lines.push(hdr.map(h => {
       if (h==='portal_url') return q(lastResult.portal_url||'');
       if (h==='dualstack_url') return q(lastResult.dualstack_url||'');
-      if (h==='subscription_plan') {
-        // 个性化模式：使用每个用户的订阅方案
-        const userPlan = mode === 'individual' ? (r.subscription_plan || '') : (lastResult.subscription_plan || '');
-        return q(userPlan);
-      }
       if (h==='group') return q(lastResult.group||'');
       return q(r[h]);
     }).join(','));
   });
-  dl('sso_users_'+ts()+'.csv', '\ufeff'+lines.join('\r\n'), 'text/csv');
+  dl(exportFilename('csv'), '\ufeff'+lines.join('\r\n'), 'text/csv');
 }
 
 function dl(name, content, mime){
