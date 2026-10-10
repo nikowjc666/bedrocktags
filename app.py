@@ -4263,6 +4263,9 @@ def _kiro_management_request(boto_session, region: str, method: str, path: str, 
     except Exception as e:
         app.logger.error(f"_kiro_management_request {method} {path} → {type(e).__name__}: {e}")
         raise
+
+
+def assign_subscription(boto_session, region: str,
                         principal_type: str, principal_id: str, plan: str) -> dict:
     """
     通过 q:CreateAssignment 为用户或组分配 Kiro 企业订阅。
