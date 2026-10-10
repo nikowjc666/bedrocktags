@@ -170,9 +170,9 @@ input,textarea,select{font-family:inherit;text-transform:none}
     </div>
   </div>
 
-  <!-- 2. 批量创建 + 密码 -->
+  <!-- 2. 批量创建 + 密码 + 订阅 -->
   <div class="card">
-    <div class="sht"><span class="sht-step">2</span> 批量创建用户 + 生成密码<span class="sht-sub">纯 api 调用，无需浏览器</span></div>
+    <div class="sht"><span class="sht-step">2</span> 批量创建用户 + 生成密码 + 分配企业订阅<span class="sht-sub">通过 aws iam identity center 管理员分配企业版订阅</span></div>
     <div class="sb">
       <div class="fr">
         <div class="fg"><label>用户名前缀 *</label><input id="prefix" value="kiro" placeholder="kiro"></div>
@@ -188,15 +188,69 @@ input,textarea,select{font-family:inherit;text-transform:none}
           <label>并发数</label><input id="concurrency" type="number" min="1" max="16" value="8">
         </div>
       </div>
+      
+      <!-- 新增：Kiro 订阅配置 -->
+      <div id="subsConfigSection">
+      <div class="fr" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <div class="fg" style="flex:2">
+          <label>订阅分配模式</label>
+          <select id="subscription_mode" onchange="toggleSubscriptionMode()">
+            <option value="unified">统一分配（所有用户相同方案）</option>
+            <option value="individual">个性化分配（每个用户单独配置）⭐</option>
+          </select>
+        </div>
+        <button class="btn" onclick="viewSubscriptions()" style="margin-top:auto">查看已有订阅</button>
+      </div>
+      
+      <!-- 统一分配模式 -->
+      <div id="unified_mode" class="fr">
+        <div class="fg" style="flex:2">
+          <label>企业订阅方案 *</label>
+          <select id="subscription_plan">
+            <option value="">-- 请选择订阅方案 --</option>
+            <option value="pro">Pro（$20/用户/月，1,000 credits）</option>
+            <option value="pro_plus">Pro+（$40/用户/月，2,000 credits）</option>
+            <option value="pro_max">Pro Max（$100/用户/月，5,000 credits）</option>
+            <option value="power">Power（$200/用户/月，10,000 credits）</option>
+          </select>
+        </div>
+        <div class="fg" style="flex:1">
+          <label>订阅主体</label>
+          <select id="subscription_principal" onchange="togglePrincipalHint()">
+            <option value="USER">用户订阅（按人分配）</option>
+            <option value="GROUP">组订阅（按组分配）</option>
+          </select>
+        </div>
+      </div>
+      <div id="principalHint" style="display:none" class="st info" style="margin:4px 0 0">
+        组订阅：将对上方"sso 组名"整组分配一次，组内所有用户自动继承。
+      </div>
+      
+      <!-- 个性化分配模式 -->
+      <div id="individual_mode" style="display:none">
+        <div class="st info" style="margin:8px 0">
+          点击"配置个性化订阅"按钮，为每个用户单独设置订阅方案
+        </div>
+        <button class="btn bp" onclick="openIndividualConfig()" style="margin-bottom:8px">
+          ⚙️ 配置个性化订阅
+        </button>
+        <div id="individual_summary" style="font-size:11px;color:var(--t2)"></div>
+      </div>
+      
+      </div><!-- /subsConfigSection -->
+
       <div class="chk-row">
         <input type="checkbox" id="create_group" checked><span>组不存在时自动创建</span>
       </div>
       <div class="chk-row">
         <input type="checkbox" id="skip_pwd"><span>只创建用户，不生成密码</span>
       </div>
+      <div class="chk-row">
+        <input type="checkbox" id="auto_assign_subscription" checked onchange="toggleAutoAssign()"><span>自动为所有用户分配订阅</span>
+      </div>
       <div class="fr" style="margin-top:10px">
         <button class="btn" onclick="preview()">预览</button>
-        <button class="btn bp" id="runBtn" onclick="runCreate()">开始执行（创建 + 生成密码）</button>
+        <button class="btn bp" id="runBtn" onclick="runCreate()">开始执行（创建 + 生成密码 + 分配订阅）</button>
       </div>
       <div id="runMsg"></div>
 
@@ -212,6 +266,7 @@ input,textarea,select{font-family:inherit;text-transform:none}
           <div class="stat s-sk"><span class="stat-n" id="stSkipped">0</span><span class="stat-l">已跳过</span></div>
           <div class="stat s-er"><span class="stat-n" id="stFailed">0</span><span class="stat-l">失败</span></div>
           <div class="stat s-pw"><span class="stat-n" id="stPwd">0</span><span class="stat-l">已生成密码</span></div>
+          <div class="stat" style="background:#f0f6ff"><span class="stat-n" id="stSubs" style="color:var(--pr)">0</span><span class="stat-l">已分配订阅</span></div>
           <div class="stat"><span class="stat-n" id="stDone">0</span><span class="stat-l">已处理 / 总数</span></div>
         </div>
         <div class="cells" id="progCells"></div>
@@ -229,7 +284,7 @@ input,textarea,select{font-family:inherit;text-transform:none}
         <div id="summaryBar" class="summary-bar"></div>
         <table class="rtbl">
           <thead><tr>
-            <th>用户名</th><th>邮箱</th><th>一次性密码</th><th>双栈登录地址</th><th>状态</th>
+            <th>用户名</th><th>邮箱</th><th>一次性密码</th><th>订阅方案</th><th>双栈登录地址</th><th>状态</th>
           </tr></thead>
           <tbody id="resultBody"></tbody>
         </table>
@@ -241,7 +296,120 @@ input,textarea,select{font-family:inherit;text-transform:none}
     </div>
   </div>
 
+  <!-- 3. 删除用户 -->
+  <div class="card danger-zone">
+    <div class="sht"><span class="sht-step" style="background:var(--er)">3</span> 删除用户<span class="sht-sub">按用户名或前缀批量查找并删除</span></div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:3">
+          <label>用户名列表（逗号或换行分隔，留空则按下方前缀生成）</label>
+          <textarea id="delNames" rows="3" style="width:100%;padding:6px 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;resize:vertical;font-family:inherit" placeholder="kiro01,kiro02,kiro03&#10;或留空 → 按上方前缀/数量/起始值自动生成"></textarea>
+        </div>
+      </div>
+      <div class="fr">
+        <button class="btn" id="delPreviewBtn" onclick="deletePreview()">预览待删除</button>
+        <div style="flex:1"></div>
+      </div>
+      <div id="delMsg"></div>
+
+      <!-- 删除结果预览 -->
+      <div id="delResultBox" style="display:none;margin-top:10px">
+        <div id="delSummary" class="summary-bar"></div>
+        <table class="rtbl">
+          <thead><tr><th>用户名</th><th>user id</th><th>操作</th></tr></thead>
+          <tbody id="delBody"></tbody>
+        </table>
+        <div class="del-confirm-row">
+          <input type="checkbox" id="delConfirm">
+          <span>我确认要删除以上用户，此操作不可撤销</span>
+        </div>
+        <div style="margin-top:8px">
+          <button class="btn bd" id="delBtn" onclick="deleteRun()">确认删除</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. 取消订阅 -->
+  <div class="card danger-zone">
+    <div class="sht"><span class="sht-step" style="background:var(--wa)">4</span> 取消订阅<span class="sht-sub">批量取消用户或组的 kiro 企业订阅</span></div>
+    <div class="sb">
+      <div class="fr">
+        <div class="fg" style="flex:2">
+          <label>取消主体</label>
+          <select id="cancelPrincipalType">
+            <option value="USER">用户（按 user id 取消）</option>
+            <option value="GROUP">组（按 group id 取消）</option>
+          </select>
+        </div>
+        <div class="fg" style="flex:2">
+          <label>取消时机</label>
+          <select id="cancelType">
+            <option value="END_OF_MONTH">月底取消（当月仍可使用）</option>
+            <option value="IMMEDIATELY">立即取消（马上失去访问）</option>
+          </select>
+        </div>
+      </div>
+      <div class="fr">
+        <div class="fg">
+          <label>用户名列表（逗号/换行分隔；留空则按上方前缀自动生成；选组时填写组 DisplayName）</label>
+          <textarea id="cancelNames" rows="3" style="width:100%;padding:6px 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;resize:vertical;font-family:inherit"
+            placeholder="kiro01,kiro02,kiro03&#10;或留空 → 按上方前缀/数量/起始值自动生成&#10;选组时：Kiro-Users（组 DisplayName）"></textarea>
+        </div>
+      </div>
+      <div class="fr">
+        <button class="btn" id="cancelPreviewBtn" onclick="cancelPreview()">查找并预览</button>
+      </div>
+      <div id="cancelMsg"></div>
+      <div id="cancelResultBox" style="display:none;margin-top:10px">
+        <div id="cancelSummary" class="summary-bar"></div>
+        <table class="rtbl">
+          <thead><tr><th>名称</th><th>principal id</th><th>类型</th><th>当前订阅</th><th>操作</th></tr></thead>
+          <tbody id="cancelBody"></tbody>
+        </table>
+        <div class="del-confirm-row" style="margin-top:8px">
+          <input type="checkbox" id="cancelConfirm">
+          <span>我确认要取消以上订阅</span>
+        </div>
+        <div style="margin-top:8px">
+          <button class="btn bd" id="cancelRunBtn" onclick="cancelRun()">确认取消订阅</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="footer">sso 用户管理 · aws iam identity center · 纯 api 调用</div>
+</div>
+<div id="subsModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:1000;padding:20px;overflow:auto" onclick="if(event.target===this)closeSubsModal()">
+  <div style="max-width:800px;margin:40px auto;background:var(--surface);border-radius:var(--r);box-shadow:0 10px 40px rgba(0,0,0,.3)">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <h2 style="font-size:16px;font-weight:600">已有订阅列表</h2>
+      <button onclick="closeSubsModal()" style="border:none;background:none;font-size:24px;cursor:pointer;color:var(--t2)">&times;</button>
+    </div>
+    <div style="padding:20px;max-height:60vh;overflow:auto">
+      <div id="subsContent">加载中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 个性化订阅配置模态框 ⭐ 新增 -->
+<div id="individualModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:1001;padding:20px;overflow:auto" onclick="if(event.target===this)closeIndividualModal()">
+  <div style="max-width:900px;margin:20px auto;background:var(--surface);border-radius:var(--r);box-shadow:0 10px 40px rgba(0,0,0,.3)">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <h2 style="font-size:16px;font-weight:600">⚙️ 个性化订阅配置</h2>
+      <button onclick="closeIndividualModal()" style="border:none;background:none;font-size:24px;cursor:pointer;color:var(--t2)">&times;</button>
+    </div>
+    <div style="padding:20px;max-height:70vh;overflow:auto">
+      <div class="st info" style="margin-bottom:12px">
+        为每个用户单独配置订阅方案。留空表示不分配订阅。
+      </div>
+      <div id="individualConfig">加载中...</div>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="closeIndividualModal()">取消</button>
+      <button class="btn bp" onclick="saveIndividualConfig()">保存配置</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -262,12 +430,192 @@ document.addEventListener("DOMContentLoaded", function(){
 
 // ── 工具函数 ──────────────────────────────────────────────
 function creds(){ return { access_key_id: G("ak"), secret_access_key: G("sk"), region: G("region"), session_token: G("tok") }; }
-function userParams(){ return { prefix: G("prefix"), domain: G("domain"), count: G("count"), start: G("start"), pad: G("pad"), group: G("group"), identity_store_id: G("store_id"), concurrency: G("concurrency"), create_group: G2("create_group"), skip_passwords: G2("skip_pwd") }; }
+function userParams(){ 
+  const mode = G("subscription_mode");
+  const params = { 
+    prefix: G("prefix"), 
+    domain: G("domain"), 
+    count: G("count"), 
+    start: G("start"), 
+    pad: G("pad"), 
+    group: G("group"), 
+    identity_store_id: G("store_id"), 
+    concurrency: G("concurrency"), 
+    create_group: G2("create_group"), 
+    skip_passwords: G2("skip_pwd"),
+    auto_assign_subscription: G2("auto_assign_subscription")
+  };
+  
+  if (mode === 'unified') {
+    // 统一分配模式
+    params.subscription_mode = 'unified';
+    params.subscription_plan = G("subscription_plan");
+    params.subscription_principal = G("subscription_principal") || 'USER';
+  } else {
+    // 个性化分配模式
+    params.subscription_mode = 'individual';
+    params.individual_subscriptions = window.individualSubscriptions || {};
+  }
+  
+  return params;
+}
 function G(id){ return document.getElementById(id).value.trim(); }
 function G2(id){ return document.getElementById(id).checked; }
 function setMsg(id, html, cls){ var el=document.getElementById(id); el.innerHTML='<div class="st '+cls+'">'+html+'</div>'; }
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 async function api(path, body){ const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); return r.json(); }
+
+// ── 个性化订阅配置 ⭐ 新增 ──────────────────────────────────
+// localStorage key，刷新后恢复配置
+const SUBS_STORAGE_KEY = 'kiro_individual_subscriptions';
+window.individualSubscriptions = (() => {
+  try { return JSON.parse(localStorage.getItem(SUBS_STORAGE_KEY) || '{}'); } catch(e){ return {}; }
+})();
+
+function toggleSubscriptionMode() {
+  const mode = G("subscription_mode");
+  document.getElementById("unified_mode").style.display = mode === 'unified' ? '' : 'none';
+  document.getElementById("individual_mode").style.display = mode === 'individual' ? '' : 'none';
+  updateIndividualSummary();
+  if (mode === 'unified') togglePrincipalHint();
+}
+
+function togglePrincipalHint() {
+  const el = document.getElementById("principalHint");
+  if (!el) return;
+  const principal = G("subscription_principal");
+  el.style.display = principal === 'GROUP' ? '' : 'none';
+}
+
+// 取消「自动分配订阅」时折叠订阅区
+function toggleAutoAssign() {
+  const on = G2("auto_assign_subscription");
+  const subsSection = document.getElementById("subsConfigSection");
+  if (subsSection) subsSection.style.opacity = on ? '1' : '0.4';
+  const btn = $("runBtn");
+  btn.textContent = on
+    ? "开始执行（创建 + 生成密码 + 分配订阅）"
+    : "开始执行（创建 + 生成密码）";
+}
+
+function openIndividualConfig() {
+  document.getElementById('individualModal').style.display = '';
+  generateIndividualConfig();
+}
+
+function closeIndividualModal() {
+  document.getElementById('individualModal').style.display = 'none';
+}
+
+function generateIndividualConfig() {
+  try {
+    const prefix = G("prefix");
+    const domain = G("domain");
+    const count = parseInt(G("count"));
+    const start = parseInt(G("start")) || 1;
+    const pad = parseInt(G("pad")) || 2;
+    
+    if (!prefix || !domain || count < 1) {
+      document.getElementById('individualConfig').innerHTML = 
+        '<div class="st er">请先填写用户名前缀、邮箱域名和数量</div>';
+      return;
+    }
+    
+    const users = [];
+    for (let i = 0; i < count; i++) {
+      const seq = start + i;
+      const username = count === 1 && start === 1 ? prefix : `${prefix}${String(seq).padStart(pad, '0')}`;
+      users.push({username, email: `${username}@${domain}`});
+    }
+    
+    let html = '<table class="rtbl"><thead><tr><th style="width:30%">用户名</th><th style="width:40%">邮箱</th><th style="width:30%">订阅方案</th></tr></thead><tbody>';
+    
+    users.forEach((u, idx) => {
+      const saved = window.individualSubscriptions[u.username] || {};
+      const plan = saved.plan || '';
+      
+      html += '<tr>';
+      html += '<td><strong>'+esc(u.username)+'</strong></td>';
+      html += '<td style="font-size:11px;color:var(--t2)">'+esc(u.email)+'</td>';
+      html += '<td><select id="plan_'+idx+'" data-username="'+esc(u.username)+'" style="width:100%;height:28px;font-size:11px;padding:0 6px">';
+      html += '<option value="">不分配</option>';
+      html += '<option value="pro" '+(plan==='pro'?'selected':'')+'>Pro（$20/用户/月，1,000 credits）</option>';
+      html += '<option value="pro_plus" '+(plan==='pro_plus'?'selected':'')+'>Pro+（$40/用户/月，2,000 credits）</option>';
+      html += '<option value="pro_max" '+(plan==='pro_max'?'selected':'')+'>Pro Max（$100/用户/月，5,000 credits）</option>';
+      html += '<option value="power" '+(plan==='power'?'selected':'')+'>Power（$200/用户/月，10,000 credits）</option>';
+      html += '</select></td>';
+      html += '</tr>';
+    });
+    
+    html += '</tbody></table>';
+    
+    // 快速操作按钮
+    html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">';
+    html += '<div style="font-size:11px;color:var(--t2);margin-bottom:6px">快速操作：</div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+    html += '<button class="btn bsm" onclick="batchSetPlan(\'pro\')">全部: Pro</button>';
+    html += '<button class="btn bsm" onclick="batchSetPlan(\'pro_plus\')">全部: Pro+</button>';
+    html += '<button class="btn bsm" onclick="batchSetPlan(\'pro_max\')">全部: Pro Max</button>';
+    html += '<button class="btn bsm" onclick="batchSetPlan(\'power\')">全部: Power</button>';
+    html += '<button class="btn bsm" onclick="batchSetPlan(\'\')">全部清空</button>';
+    html += '</div></div>';
+    
+    document.getElementById('individualConfig').innerHTML = html;
+    
+  } catch(e) {
+    document.getElementById('individualConfig').innerHTML = 
+      '<div class="st er">配置生成失败: '+esc(e.message)+'</div>';
+  }
+}
+
+function batchSetPlan(plan) {
+  const selects = document.querySelectorAll('[id^="plan_"]');
+  selects.forEach(sel => sel.value = plan);
+}
+
+function saveIndividualConfig() {
+  const selects = document.querySelectorAll('[id^="plan_"]');
+  const config = {};
+  let count = 0;
+  
+  selects.forEach((sel) => {
+    const username = sel.dataset.username;
+    const plan = sel.value;
+    if (plan) {
+      config[username] = {plan};
+      count++;
+    }
+  });
+  
+  window.individualSubscriptions = config;
+  try { localStorage.setItem(SUBS_STORAGE_KEY, JSON.stringify(config)); } catch(e){}
+  closeIndividualModal();
+  updateIndividualSummary();
+  
+  setMsg("runMsg", '已保存 <b>'+count+'</b> 个用户的订阅配置', "ok");
+}
+
+function updateIndividualSummary() {
+  const mode = G("subscription_mode");
+  if (mode !== 'individual') return;
+  
+  const count = Object.keys(window.individualSubscriptions || {}).length;
+  const el = document.getElementById('individual_summary');
+  
+  if (count === 0) {
+    el.innerHTML = '⚠️ 未配置任何订阅';
+    el.style.color = 'var(--wa)';
+  } else {
+    const plans = {};
+    Object.values(window.individualSubscriptions).forEach(s => {
+      plans[s.plan] = (plans[s.plan] || 0) + 1;
+    });
+    const summary = Object.entries(plans).map(([p, c]) => `${p}: ${c}个`).join(', ');
+    el.innerHTML = '✓ 已配置 <b>'+count+'</b> 个用户订阅 ('+summary+')';
+    el.style.color = 'var(--ok)';
+  }
+}
+
 
 // ── 检测凭证 ──────────────────────────────────────────────
 async function whoami(){
@@ -298,7 +646,7 @@ function progReset(total){
   $("progFill").style.width = "0%";
   $("progPct").textContent = "0%";
   $("progLabel").textContent = "准备中...";
-  ["stCreated","stSkipped","stFailed","stPwd"].forEach(id => $(id).textContent = "0");
+  ["stCreated","stSkipped","stFailed","stPwd","stSubs"].forEach(id => $(id).textContent = "0");
   $("stDone").textContent = total ? ("0 / " + total) : "0";
   progBuildCells(total);
 }
@@ -324,6 +672,7 @@ function progUpdate(evt){
   $("stSkipped").textContent = evt.skipped;
   $("stFailed").textContent  = evt.failed;
   $("stPwd").textContent     = evt.pwd_ok;
+  $("stSubs").textContent    = evt.subscription_ok || 0;
   $("stDone").textContent    = evt.done + " / " + evt.total;
   $("progLabel").textContent = "（"+evt.done+"/"+evt.total+"）刚完成 "+evt.username+" · "+evt.status;
 }
@@ -332,18 +681,48 @@ function progUpdate(evt){
 let lastResult = null;
 
 async function runCreate(){
-  if (!confirm("将在 AWS 上实际创建用户，确认继续？")) return;
+  const mode = G("subscription_mode");
+  const autoAssign = G2("auto_assign_subscription");
+  
+  if (autoAssign) {
+    if (mode === 'unified') {
+      const plan = G("subscription_plan");
+      if (!plan) {
+        alert("请选择 Kiro 订阅方案，或取消勾选「自动为所有用户分配订阅」");
+        return;
+      }
+    } else if (mode === 'individual') {
+      const count = Object.keys(window.individualSubscriptions || {}).length;
+      if (count === 0) {
+        alert("请先配置个性化订阅，或取消勾选「自动为所有用户分配订阅」");
+        return;
+      }
+    }
+  }
+  
+  const msg = mode === 'individual' 
+    ? "将在 AWS 上实际创建用户并为每个用户分配对应的订阅，确认继续？"
+    : (autoAssign ? "将在 AWS 上实际创建用户并分配订阅，确认继续？" : "将在 AWS 上实际创建用户，确认继续？");
+  
+  if (!confirm(msg)) return;
+  
   const btn = $("runBtn");
   btn.disabled = true; btn.textContent = "执行中...";
-  setMsg("runMsg", '<span class="sp"></span> 创建用户并生成密码（纯 API）...', "info");
+  
+  const statusMsg = mode === 'individual'
+    ? '<span class="sp"></span> 创建用户并生成密码 + 分配个性化订阅（纯 API）...'
+    : (autoAssign ? '<span class="sp"></span> 创建用户并生成密码 + 分配订阅（纯 API）...' : '<span class="sp"></span> 创建用户并生成密码（纯 API）...');
+  
+  setMsg("runMsg", statusMsg, "info");
   $("resultBox").style.display = "none";
   $("resultBody").innerHTML = "";
 
   progReset(parseInt(G("count"), 10) || 0);
 
+  const plan = mode === 'unified' ? G("subscription_plan") : '';
   lastResult = {ok:true, results:[], identity_store_id:"", portal_url:"",
-                dualstack_url:"", group:"",
-                summary:{created:0, skipped:0, failed:0, pwd_ok:0}};
+                dualstack_url:"", group:"", subscription_plan: plan, subscription_mode: mode,
+                summary:{created:0, skipped:0, failed:0, pwd_ok:0, subscription_ok:0}};
 
   try {
     const resp = await fetch("/api/sso/run_stream", {
@@ -371,7 +750,7 @@ async function runCreate(){
     setMsg("runMsg", "错误：" + e.message, "er");
     $("progLabel").textContent = "✗ 已中断";
   } finally {
-    btn.disabled = false; btn.textContent = "开始执行（创建 + 生成密码）";
+    btn.disabled = false; btn.textContent = "开始执行（创建 + 生成密码 + 分配订阅）";
   }
 }
 
@@ -389,6 +768,7 @@ function handleRunEvent(evt){
     lastResult.portal_url        = evt.portal_url || "";
     lastResult.dualstack_url     = evt.dualstack_url || "";
     lastResult.group             = evt.group || "";
+    lastResult.subscription_plan = evt.subscription_plan || "";
     $("resultBox").style.display = "";
     updateSummaryBar(lastResult.summary);
     const conc = evt.concurrency || 1;
@@ -399,7 +779,7 @@ function handleRunEvent(evt){
   } else if (evt.type === "item"){
     lastResult.results.push(evt);
     lastResult.summary = {created:evt.created, skipped:evt.skipped,
-                          failed:evt.failed, pwd_ok:evt.pwd_ok};
+                          failed:evt.failed, pwd_ok:evt.pwd_ok, subscription_ok:evt.subscription_ok||0};
     progMark(evt.index - 1, evt.kind === "failed" ? "er"
                           : (evt.kind === "skipped" ? "sk" : "ok"));
     if (nextCell < evt.total) progMark(nextCell++, "run");
@@ -416,12 +796,13 @@ function handleRunEvent(evt){
     lastResult.results.forEach(appendResultRow);
     let msg = '完成: 创建 <b>'+s.created+'</b> 跳过 <b>'+s.skipped+'</b> 失败 <b>'+s.failed+'</b>';
     msg += ' &nbsp;|&nbsp; 密码 <b>'+s.pwd_ok+'</b>';
+    msg += ' &nbsp;|&nbsp; 订阅 <b>'+(s.subscription_ok||0)+'</b>';
     msg += ' &nbsp;|&nbsp; identity store: '+esc(evt.identity_store_id);
     if (evt.portal_url) msg += ' &nbsp;|&nbsp; <a href="'+esc(evt.portal_url)+'" target="_blank" style="color:var(--pr)">登录地址</a>';
     setMsg("runMsg", msg, s.failed > 0 ? "wa" : "ok");
     $("progFill").style.width = "100%";
     $("progPct").textContent = "100%";
-    $("progLabel").textContent = "✓ 全部完成，实际新建 "+s.created+" 个用户";
+    $("progLabel").textContent = "✓ 全部完成，实际新建 "+s.created+" 个用户，已分配 "+(s.subscription_ok||0)+" 个订阅";
     updateSummaryBar(s);
 
   } else if (evt.type === "error"){
@@ -439,11 +820,18 @@ function updateSummaryBar(s){
 
 function appendResultRow(r){
   const tr = document.createElement("tr");
+  const mode = lastResult.subscription_mode || 'unified';
+  const subsPlan = mode === 'individual' 
+    ? (r.subscription_plan || '—')
+    : (r.subscription_plan || lastResult.subscription_plan || '—');
+  const subsDisplay = subsPlan === '—' ? '<span style="color:var(--t3)">—</span>' : 
+    '<span style="color:var(--pr);font-weight:600">'+esc(subsPlan)+'</span>';
   tr.innerHTML =
     '<td>'+esc(r.username)+'</td><td>'+esc(r.email)+'</td>'+
     '<td class="'+(r.one_time_password?'pwd-cell':'')+'">'+
     (r.one_time_password ? esc(r.one_time_password) : '<span class="miss">(未获取)</span>')+
-    '</td><td style="font-size:10px;color:var(--t2)">'+(r.portal_url_dualstack?esc(r.portal_url_dualstack):'')+'</td>'+
+    '</td><td>'+subsDisplay+'</td>'+
+    '<td style="font-size:10px;color:var(--t2)">'+(r.portal_url_dualstack?esc(r.portal_url_dualstack):'')+'</td>'+
     '<td>'+esc(r.status)+'</td>';
   $("resultBody").appendChild(tr);
 }
@@ -452,12 +840,16 @@ function appendResultRow(r){
 function exportTxt(){
   if (!lastResult) return;
   const p = lastResult.portal_url || '', d = lastResult.dualstack_url || '';
+  const mode = lastResult.subscription_mode || 'unified';
   const blocks = lastResult.results.map(r => {
     const lines = [];
     if (p) lines.push('默认 AWS access portal URL（仅限 IPv4）: '+p);
     if (d) lines.push('双栈 AWS access portal URL: '+d);
     lines.push('用户名: '+r.username);
     lines.push('一次性密码: '+(r.one_time_password||'(未获取)'));
+    // 个性化模式：显示每个用户的订阅方案
+    const userPlan = mode === 'individual' ? (r.subscription_plan || '') : (lastResult.subscription_plan || '');
+    if (userPlan) lines.push('Kiro 订阅方案: '+userPlan);
     return lines.join('\r\n');
   });
   dl('sso_登录信息_'+ts()+'.txt', blocks.join('\r\n\r\n'), 'text/plain');
@@ -467,12 +859,18 @@ function exportTxt(){
 function exportCsv(){
   if (!lastResult) return;
   const q = v => '"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-  const hdr = ['username','email','portal_url','dualstack_url','one_time_password','group','status'];
+  const hdr = ['username','email','portal_url','dualstack_url','one_time_password','subscription_plan','group','status'];
   const lines = [hdr.join(',')];
+  const mode = lastResult.subscription_mode || 'unified';
   lastResult.results.forEach(r => {
     lines.push(hdr.map(h => {
       if (h==='portal_url') return q(lastResult.portal_url||'');
       if (h==='dualstack_url') return q(lastResult.dualstack_url||'');
+      if (h==='subscription_plan') {
+        // 个性化模式：使用每个用户的订阅方案
+        const userPlan = mode === 'individual' ? (r.subscription_plan || '') : (lastResult.subscription_plan || '');
+        return q(userPlan);
+      }
       if (h==='group') return q(lastResult.group||'');
       return q(r[h]);
     }).join(','));
@@ -486,6 +884,43 @@ function dl(name, content, mime){
   a.download=name; a.click(); URL.revokeObjectURL(a.href);
 }
 function ts(){ const d=new Date(),p=n=>String(n).padStart(2,'0'); return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds()); }
+
+// ── 查看订阅 ──────────────────────────────────────────────
+async function viewSubscriptions(){
+  document.getElementById('subsModal').style.display = '';
+  document.getElementById('subsContent').innerHTML = '<span class="sp"></span> 加载中...';
+  
+  try {
+    const res = await fetch('/api/sso/subscriptions');
+    const data = await res.json();
+    
+    if (!data.ok) {
+      document.getElementById('subsContent').innerHTML = '<div class="st er">'+esc(data.error)+'</div>';
+      return;
+    }
+    
+    if (!data.subscriptions || data.subscriptions.length === 0) {
+      document.getElementById('subsContent').innerHTML = '<div class="st info">暂无订阅记录</div>';
+      return;
+    }
+    
+    let html = '<table class="rtbl"><thead><tr><th>邮箱</th><th>订阅方案</th><th>分配时间</th></tr></thead><tbody>';
+    data.subscriptions.forEach(s => {
+      html += '<tr><td>'+esc(s.email)+'</td>';
+      html += '<td><span style="color:var(--pr);font-weight:600">'+esc(s.plan)+'</span></td>';
+      html += '<td style="color:var(--t2)">'+esc((s.updated_at||'').replace('T',' ').slice(0,16))+'</td></tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('subsContent').innerHTML = html;
+    
+  } catch (e) {
+    document.getElementById('subsContent').innerHTML = '<div class="st er">加载失败: '+esc(e.message)+'</div>';
+  }
+}
+
+function closeSubsModal(){
+  document.getElementById('subsModal').style.display = 'none';
+}
 
 // ── 删除预览 ──────────────────────────────────────────────
 let delPreviewData = null;
@@ -530,6 +965,123 @@ async function deleteRun(){
     document.getElementById("delConfirm").checked = false;
   } finally {
     btn.disabled = false; btn.textContent = "确认删除";
+  }
+}
+
+// ── 取消订阅 ──────────────────────────────────────────────
+let cancelPreviewData = null;
+
+async function cancelPreview() {
+  cancelPreviewData = null;
+  setMsg("cancelMsg", '<span class="sp"></span> 查询中...', "info");
+  document.getElementById("cancelResultBox").style.display = "none";
+
+  const ptype     = G("cancelPrincipalType");
+  const rawNames  = G("cancelNames");
+  const region    = G("region");
+
+  // 解析名称列表（逗号 / 换行分隔）
+  let names = rawNames.split(/[,\n\r]+/).map(s => s.trim()).filter(Boolean);
+
+  // 留空时按上方前缀自动生成用户名
+  if (names.length === 0) {
+    const prefix = G("prefix"), domain = G("domain");
+    const count  = parseInt(G("count")||0), start = parseInt(G("start")||1), pad = parseInt(G("pad")||2);
+    if (!prefix || !domain || count < 1) {
+      setMsg("cancelMsg", "请填写名称列表，或在上方填写前缀/域名/数量后留空自动生成", "er");
+      return;
+    }
+    for (let i = 0; i < count; i++) {
+      const seq = start + i;
+      names.push(`${prefix}${String(seq).padStart(pad, '0')}`);
+    }
+  }
+
+  // 查询 Identity Store，把名称→ principal id
+  const previewPayload = {
+    ...creds(),
+    principal_type: ptype,
+    names: names,
+    identity_store_id: G("store_id"),
+  };
+
+  const res = await api("/api/sso/cancel_preview", previewPayload);
+  if (!res.ok) { setMsg("cancelMsg", res.error, "er"); return; }
+
+  cancelPreviewData = res;
+  const canCancel = res.can_cancel || 0;
+  const noSub     = res.no_sub || 0;
+  const notFound  = res.not_found || 0;
+
+  let msgCls = canCancel > 0 ? "wa" : "ok";
+  setMsg("cancelMsg",
+    '共 '+res.items.length+' 个 — 可取消 <b>'+canCancel+'</b> 个，无订阅 '+noSub+' 个，用户不存在 '+notFound+' 个',
+    msgCls);
+
+  document.getElementById("cancelResultBox").style.display = "";
+  document.getElementById("cancelSummary").innerHTML =
+    '<div>可取消 <b>'+canCancel+'</b> 个</div>' +
+    '<div>无订阅 <b>'+noSub+'</b> 个</div>' +
+    '<div>不存在 <b>'+notFound+'</b> 个</div>';
+
+  const cancelTypeLabel = G("cancelType") === 'IMMEDIATELY' ? '立即取消' : '月底取消';
+  document.getElementById("cancelBody").innerHTML = res.items.map(i => {
+    let actionHtml;
+    if (i.can_cancel) {
+      actionHtml = '<span style="color:var(--wa);font-weight:600">'+cancelTypeLabel+'</span>';
+    } else if (i.id_found) {
+      actionHtml = '<span style="color:var(--t2)">无订阅，跳过</span>';
+    } else {
+      actionHtml = '<span style="color:var(--t3)">用户不存在</span>';
+    }
+    return '<tr><td>'+esc(i.name)+'</td>' +
+      '<td style="font-size:10px;color:var(--t3)">'+esc(i.id||'—')+'</td>' +
+      '<td style="font-size:10px">'+esc(ptype)+'</td>' +
+      '<td>'+esc(i.subscription||'')+'</td>' +
+      '<td>'+actionHtml+'</td></tr>';
+  }).join('');
+}
+
+async function cancelRun() {
+  if (!cancelPreviewData) { setMsg("cancelMsg", "请先点「查找并预览」", "er"); return; }
+  if (!document.getElementById("cancelConfirm").checked) {
+    setMsg("cancelMsg", "请先勾选确认框", "er"); return;
+  }
+
+  const targets = cancelPreviewData.items
+    .filter(i => i.can_cancel && i.id)
+    .map(i => ({ type: G("cancelPrincipalType"), id: i.id, name: i.name }));
+
+  if (!targets.length) { setMsg("cancelMsg", "没有可取消的订阅", "er"); return; }
+
+  const btn = document.getElementById("cancelRunBtn");
+  btn.disabled = true; btn.textContent = "取消中...";
+
+  try {
+    const payload = {
+      ...creds(),
+      principals: targets,
+      cancel_type: G("cancelType"),
+    };
+    const res = await api("/api/sso/cancel_subscription_batch", payload);
+    if (!res.ok) { setMsg("cancelMsg", res.error, "er"); return; }
+    const s = res.summary;
+    const label = res.cancel_type === 'IMMEDIATELY' ? '立即取消' : '月底取消';
+    setMsg("cancelMsg",
+      '完成（'+label+'）: 成功 <b>'+s.ok+'</b> 失败 <b>'+s.failed+'</b>',
+      s.failed > 0 ? "wa" : "ok");
+    document.getElementById("cancelBody").innerHTML = res.results.map(r =>
+      '<tr><td>'+esc(r.name)+'</td>' +
+      '<td style="font-size:10px;color:var(--t3)">'+esc(r.id||'—')+'</td>' +
+      '<td style="font-size:10px">'+esc(r.type||'')+'</td>' +
+      '<td>'+(r.ok
+        ? '<span style="color:var(--ok)">'+esc(r.status)+'</span>'
+        : '<span style="color:var(--er)">'+esc(r.status)+'</span>')+'</td></tr>'
+    ).join('');
+    cancelPreviewData = null;
+    document.getElementById("cancelConfirm").checked = false;
+  } finally {
+    btn.disabled = false; btn.textContent = "确认取消订阅";
   }
 }
 </script>

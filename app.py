@@ -16,6 +16,11 @@ import auth
 
 app = Flask(__name__)
 app.secret_key = auth.get_secret_key()
+
+# 强制输出 INFO 级别日志（包括订阅分配的详细信息）
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+app.logger.setLevel(logging.INFO)
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
 # CloudFront 转发时带 X-Forwarded-Proto: https，但 EC2 只有 HTTP
 # 强制 Flask 生成的 URL 始终用 http，避免重定向到 https 导致连接失败
@@ -3504,20 +3509,134 @@ def change_password():
 #  GPT 模块  —  通过 AWS Bedrock 调用 OpenAI 模型（AK/SK 认证）
 # ══════════════════════════════════════════════════════════════════
 
-# Bedrock 上可用的 OpenAI 模型列表
+# Bedrock 上可用的 OpenAI 模型列表（与 Claude 格式统一）
 # Model ID 格式：openai.xxx（Bedrock Foundation Model ID）
+# sources: 系统 Inference Profile ID，用于 copyFrom
 # quota_key: 对应 AWS Service Quotas quota name 里的关键词（小写，精确匹配）
 GPT_MODELS = [
-    {"id": "openai.gpt-6",                 "label": "GPT-6",                "series": "gpt-6",   "quota_key": "gpt-6"},
-    {"id": "openai.gpt-5-6-sol",           "label": "GPT-5.6 Sol",          "series": "gpt-5",   "quota_key": "gpt-5.6 sol"},
-    {"id": "openai.gpt-5-6-terra",         "label": "GPT-5.6 Terra",        "series": "gpt-5",   "quota_key": "gpt-5.6 terra"},
-    {"id": "openai.gpt-5-6-luna",          "label": "GPT-5.6 Luna",         "series": "gpt-5",   "quota_key": "gpt-5.6 luna"},
-    {"id": "openai.gpt-5-5",               "label": "GPT-5.5",              "series": "gpt-5",   "quota_key": "gpt-5.5"},
-    {"id": "openai.gpt-5-4",               "label": "GPT-5.4",              "series": "gpt-5",   "quota_key": "gpt-5.4"},
-    {"id": "openai.gpt-oss-20b-1:0",       "label": "GPT OSS 20B",          "series": "gpt-oss", "quota_key": "gpt oss 20b"},
-    {"id": "openai.gpt-oss-120b-1:0",      "label": "GPT OSS 120B",         "series": "gpt-oss", "quota_key": "gpt oss 120b"},
-    {"id": "openai.gpt-oss-safeguard-20b", "label": "GPT OSS Safeguard 20B","series": "gpt-oss", "quota_key": "gpt oss safeguard 20b"},
-    {"id": "openai.gpt-oss-safeguard-120b","label": "GPT OSS Safeguard 120B","series":"gpt-oss", "quota_key": "gpt oss safeguard 120b"},
+    # GPT-6 系列（2026年9月发布）
+    {
+        "id": "openai.gpt-6-astra",
+        "label": "GPT-6 Astra",
+        "series": "gpt-6",
+        "quota_key": "gpt-6 astra",
+        "sources": {
+            "us": "us.openai.gpt-6-astra",
+            "global": "global.openai.gpt-6-astra",
+        },
+    },
+    {
+        "id": "openai.gpt-6-sol",
+        "label": "GPT-6 Sol",
+        "series": "gpt-6",
+        "quota_key": "gpt-6 sol",
+        "sources": {
+            "us": "us.openai.gpt-6-sol",
+            "global": "global.openai.gpt-6-sol",
+        },
+    },
+    {
+        "id": "openai.gpt-6-luna",
+        "label": "GPT-6 Luna",
+        "series": "gpt-6",
+        "quota_key": "gpt-6 luna",
+        "sources": {
+            "us": "us.openai.gpt-6-luna",
+            "global": "global.openai.gpt-6-luna",
+        },
+    },
+    # GPT-6.1 系列
+    {
+        "id": "openai.gpt-6-1-sol",
+        "label": "GPT-6.1 Sol",
+        "series": "gpt-6",
+        "quota_key": "gpt-6.1 sol",
+        "sources": {
+            "us": "us.openai.gpt-6-1-sol",
+            "global": "global.openai.gpt-6-1-sol",
+        },
+    },
+    # GPT-5.6 系列（2026年7月发布）
+    {
+        "id": "openai.gpt-5-6-sol",
+        "label": "GPT-5.6 Sol",
+        "series": "gpt-5",
+        "quota_key": "gpt-5.6 sol",
+        "sources": {
+            "us": "us.openai.gpt-5-6-sol",
+            "global": "global.openai.gpt-5-6-sol",
+        },
+    },
+    {
+        "id": "openai.gpt-5-6-terra",
+        "label": "GPT-5.6 Terra",
+        "series": "gpt-5",
+        "quota_key": "gpt-5.6 terra",
+        "sources": {
+            "us": "us.openai.gpt-5-6-terra",
+            "global": "global.openai.gpt-5-6-terra",
+        },
+    },
+    {
+        "id": "openai.gpt-5-6-luna",
+        "label": "GPT-5.6 Luna",
+        "series": "gpt-5",
+        "quota_key": "gpt-5.6 luna",
+        "sources": {
+            "us": "us.openai.gpt-5-6-luna",
+            "global": "global.openai.gpt-5-6-luna",
+        },
+    },
+    # GPT-5 系列（2026年6月发布）
+    {
+        "id": "openai.gpt-5-5",
+        "label": "GPT-5.5",
+        "series": "gpt-5",
+        "quota_key": "gpt-5.5",
+        "sources": {
+            "us": "us.openai.gpt-5-5",
+            "global": "global.openai.gpt-5-5",
+        },
+    },
+    {
+        "id": "openai.gpt-5-4",
+        "label": "GPT-5.4",
+        "series": "gpt-5",
+        "quota_key": "gpt-5.4",
+        "sources": {
+            "us": "us.openai.gpt-5-4",
+            "global": "global.openai.gpt-5-4",
+        },
+    },
+    # GPT OSS 系列
+    {
+        "id": "openai.gpt-oss-20b-1:0",
+        "label": "GPT OSS 20B",
+        "series": "gpt-oss",
+        "quota_key": "gpt oss 20b",
+        "sources": {},
+    },
+    {
+        "id": "openai.gpt-oss-120b-1:0",
+        "label": "GPT OSS 120B",
+        "series": "gpt-oss",
+        "quota_key": "gpt oss 120b",
+        "sources": {},
+    },
+    {
+        "id": "openai.gpt-oss-safeguard-20b",
+        "label": "GPT OSS Safeguard 20B",
+        "series": "gpt-oss",
+        "quota_key": "gpt oss safeguard 20b",
+        "sources": {},
+    },
+    {
+        "id": "openai.gpt-oss-safeguard-120b",
+        "label": "GPT OSS Safeguard 120B",
+        "series": "gpt-oss",
+        "quota_key": "gpt oss safeguard 120b",
+        "sources": {},
+    },
 ]
 GPT_MODEL_BY_ID = {m["id"]: m for m in GPT_MODELS}
 
@@ -3652,10 +3771,21 @@ def gpt_test_model():
     prompt   = (data.get("prompt") or "hi").strip()
     if not all([ak, sk, region, model_id]):
         return jsonify({"ok": False, "error": "参数不完整"}), 400
+
+    # GPT 模型（openai. 前缀）必须通过 Inference Profile ID 调用，
+    # 裸的 foundation model ID 不被 Bedrock converse API 接受。
+    # 优先用 global 前缀（跨区域），其次 us 前缀，找不到则直接透传。
+    call_model_id = model_id
+    if model_id.startswith("openai."):
+        meta = GPT_MODEL_BY_ID.get(model_id) or {}
+        sources = meta.get("sources") or {}
+        call_model_id = (sources.get("global") or sources.get("us") or
+                         f"global.{model_id}")
+
     try:
         brt = _bedrock_runtime(ak, sk, region)
         resp = brt.converse(
-            modelId=model_id,
+            modelId=call_model_id,
             messages=[{"role": "user", "content": [{"text": prompt}]}],
             inferenceConfig={"maxTokens": 64},
         )
@@ -4010,6 +4140,199 @@ SSO_CONCURRENCY_DEFAULT = 8
 SSO_CONCURRENCY_MAX = 16
 
 
+
+# Kiro 企业订阅方案 → q:CreateAssignment subscriptionType 映射
+_KIRO_PLAN_TO_SUBSCRIPTION_TYPE = {
+    "pro":     "Q_DEVELOPER_STANDALONE_PRO",
+    "pro_plus": "Q_DEVELOPER_STANDALONE_PRO_PLUS",
+    "pro_max": "Q_DEVELOPER_STANDALONE_PRO_MAX",
+    "power":   "Q_DEVELOPER_STANDALONE_POWER",
+}
+
+
+def _kiro_request(boto_session, region: str, method: str, path: str, payload: dict) -> dict:
+    """
+    向 codewhisperer.{region}.amazonaws.com 发 SigV4 签名请求（Coral/JSON 1.0 协议）。
+    Enterprise/IAM Identity Center 账户必须使用此端点（management.kiro.dev 对 IdC token 返回 400/403）。
+    使用 Coral 协议：x-amz-target + Content-Type: application/x-amz-json-1.0。
+    成功返回响应 dict，失败抛出 RuntimeError。
+    """
+    import json
+    import botocore.auth
+    import botocore.awsrequest
+    import urllib.request
+
+    # Coral 操作名 → x-amz-target 映射
+    _SERVICE_TARGET_MAP = {
+        "/CreateAssignment": "AmazonCodeWhisperer.CreateAssignment",
+        "/DeleteAssignment": "AmazonCodeWhisperer.DeleteAssignment",
+        "/ListAssignments":  "AmazonCodeWhisperer.ListAssignments",
+    }
+    target = _SERVICE_TARGET_MAP.get(path, f"AmazonCodeWhisperer.{path.lstrip('/')}")
+
+    url = f"https://codewhisperer.{region}.amazonaws.com{path}"
+    body = json.dumps(payload).encode() if payload else b""
+    app.logger.info(f"_kiro_request → {method} {url} target={target} payload={json.dumps(payload)}")
+
+    credentials = boto_session.get_credentials().get_frozen_credentials()
+    request = botocore.awsrequest.AWSRequest(
+        method=method,
+        url=url,
+        data=body,
+        headers={
+            "Content-Type":  "application/x-amz-json-1.0",
+            "Accept":        "application/json",
+            "x-amz-target":  target,
+        },
+    )
+    botocore.auth.SigV4Auth(credentials, "q", region).add_auth(request)
+    prepared = request.prepare()
+
+    req = urllib.request.Request(
+        url=prepared.url,
+        data=prepared.body if isinstance(prepared.body, bytes) else (prepared.body or b""),
+        headers=dict(prepared.headers),
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = resp.read()
+            result = json.loads(raw) if raw else {}
+            app.logger.info(f"_kiro_request {method} {path} → {resp.status} body={raw[:500]}")
+            return result
+    except urllib.error.HTTPError as e:
+        body_txt = e.read().decode(errors="replace")
+        app.logger.error(f"_kiro_request {method} {path} → HTTP {e.code}: {body_txt}")
+        raise RuntimeError(f"HTTP {e.code}: {body_txt}") from e
+    except Exception as e:
+        app.logger.error(f"_kiro_request {method} {path} → {type(e).__name__}: {e}")
+        raise
+
+
+def _kiro_management_request(boto_session, region: str, method: str, path: str, payload: dict) -> dict:
+    """
+    向 management.{region}.kiro.dev 发 SigV4 签名请求（Coral/JSON 1.0 协议）。
+    用于订阅删除等管理操作（DeleteAssignment 等），service = "q"。
+    """
+    import json
+    import botocore.auth
+    import botocore.awsrequest
+    import urllib.request
+
+    _SERVICE_TARGET_MAP = {
+        "/DeleteAssignment": "KiroControlPlaneService.DeleteAssignment",
+        "/CreateAssignment": "KiroControlPlaneService.CreateAssignment",
+        "/ListAssignments":  "KiroControlPlaneService.ListAssignments",
+    }
+    target = _SERVICE_TARGET_MAP.get(path, f"KiroControlPlaneService.{path.lstrip('/')}")
+
+    url = f"https://management.{region}.kiro.dev{path}"
+    body = json.dumps(payload).encode() if payload else b""
+    app.logger.info(f"_kiro_management_request → {method} {url} target={target} payload={json.dumps(payload)}")
+
+    credentials = boto_session.get_credentials().get_frozen_credentials()
+    request = botocore.awsrequest.AWSRequest(
+        method=method,
+        url=url,
+        data=body,
+        headers={
+            "Content-Type": "application/x-amz-json-1.0",
+            "Accept":       "application/json",
+            "x-amz-target": target,
+        },
+    )
+    botocore.auth.SigV4Auth(credentials, "q", region).add_auth(request)
+    prepared = request.prepare()
+
+    req = urllib.request.Request(
+        url=prepared.url,
+        data=prepared.body if isinstance(prepared.body, bytes) else (prepared.body or b""),
+        headers=dict(prepared.headers),
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = resp.read()
+            result = json.loads(raw) if raw else {}
+            app.logger.info(f"_kiro_management_request {method} {path} → {resp.status} body={raw[:500]}")
+            return result
+    except urllib.error.HTTPError as e:
+        body_txt = e.read().decode(errors="replace")
+        app.logger.error(f"_kiro_management_request {method} {path} → HTTP {e.code}: {body_txt}")
+        raise RuntimeError(f"HTTP {e.code}: {body_txt}") from e
+    except Exception as e:
+        app.logger.error(f"_kiro_management_request {method} {path} → {type(e).__name__}: {e}")
+        raise
+                        principal_type: str, principal_id: str, plan: str) -> dict:
+    """
+    通过 q:CreateAssignment 为用户或组分配 Kiro 企业订阅。
+
+    参数:
+        boto_session   : 包含 AK/SK 的 boto3.Session
+        region         : us-east-1 / eu-central-1
+        principal_type : "USER" 或 "GROUP"
+        principal_id   : IAM Identity Center 的 UserId 或 GroupId
+        plan           : pro / pro_plus / pro_max / power
+
+    返回响应 dict；失败抛出 RuntimeError。
+    """
+    import uuid
+
+    subscription_type = _KIRO_PLAN_TO_SUBSCRIPTION_TYPE.get(plan)
+    if not subscription_type:
+        raise ValueError(f"未知订阅方案: {plan}，合法值: {list(_KIRO_PLAN_TO_SUBSCRIPTION_TYPE)}")
+    if principal_type not in ("USER", "GROUP"):
+        raise ValueError(f"principal_type 必须是 USER 或 GROUP，收到: {principal_type}")
+
+    result = _kiro_request(boto_session, region, "POST", "/CreateAssignment", {
+        "principalId":       principal_id,
+        "principalType":     principal_type,
+        "subscriptionType":  subscription_type,
+        "clientToken":       str(uuid.uuid4()),
+    })
+    app.logger.info(f"q:CreateAssignment OK — {principal_type} {principal_id} → {plan} ({subscription_type})")
+    return result
+
+
+def cancel_subscription(boto_session, region: str,
+                        principal_type: str, principal_id: str,
+                        cancel_type: str = "END_OF_MONTH") -> dict:
+    """
+    通过 q:DeleteAssignment 取消用户或组的 Kiro 企业订阅。
+
+    参数:
+        boto_session   : 包含 AK/SK 的 boto3.Session
+        region         : us-east-1 / eu-central-1
+        principal_type : "USER" 或 "GROUP"
+        principal_id   : IAM Identity Center 的 UserId 或 GroupId
+        cancel_type    : "END_OF_MONTH"（月底生效） 或 "IMMEDIATELY"（立即生效）
+
+    返回响应 dict；失败抛出 RuntimeError。
+    """
+    if cancel_type not in ("END_OF_MONTH", "IMMEDIATELY", "IMMEDIATE"):
+        raise ValueError(f"cancel_type 必须是 END_OF_MONTH 或 IMMEDIATELY，收到: {cancel_type}")
+    if principal_type not in ("USER", "GROUP"):
+        raise ValueError(f"principal_type 必须是 USER 或 GROUP，收到: {principal_type}")
+
+    # 正确字段名是 deletionMode，值是 IMMEDIATE / END_OF_MONTH
+    deletion_mode = "IMMEDIATE" if cancel_type in ("IMMEDIATELY", "IMMEDIATE") else "END_OF_MONTH"
+
+    # 发到 management.kiro.dev，才能真正执行立即删除
+    result = _kiro_management_request(boto_session, region, "POST", "/DeleteAssignment", {
+        "principalId":   principal_id,
+        "principalType": principal_type,
+        "deletionMode":  deletion_mode,
+    })
+    app.logger.info(f"q:DeleteAssignment OK — {principal_type} {principal_id} deletionMode={deletion_mode}")
+    return result
+
+
+# 向后兼容别名（_one 函数里之前用的是 assign_subscription_to_user）
+def assign_subscription_to_user(boto_session, region: str, user_id: str, plan: str) -> dict:
+    return assign_subscription(boto_session, region, "USER", user_id, plan)
+
+
+
 def _sso_parse_params(data: dict):
     """解析并校验批量创建参数，返回 (params, error)。两个创建路由共用。"""
     try:
@@ -4024,16 +4347,45 @@ def _sso_parse_params(data: dict):
     if not prefix: return None, "前缀不能为空"
     if not domain: return None, "域名不能为空"
     if count < 1:  return None, "数量必须 >= 1"
-    return {
-        "prefix": prefix, "domain": domain, "count": count,
-        "start": start, "pad": pad,
-        "concurrency": max(1, min(conc, SSO_CONCURRENCY_MAX)),
-        "group":        (data.get("group") or "").strip() or None,
-        "create_group": bool(data.get("create_group")),
-        "store_id_in":  (data.get("identity_store_id") or "").strip() or None,
-        "skip_pwd":     bool(data.get("skip_passwords")),
-        "region":       (data.get("region") or "").strip(),
-    }, None
+    
+    # 订阅配置参数
+    subscription_mode = (data.get("subscription_mode") or "unified").strip()
+    auto_assign = bool(data.get("auto_assign_subscription"))
+    
+    if subscription_mode == "unified":
+        subscription_plan = (data.get("subscription_plan") or "").strip() or None
+        return {
+            "prefix": prefix, "domain": domain, "count": count,
+            "start": start, "pad": pad,
+            "concurrency": max(1, min(conc, SSO_CONCURRENCY_MAX)),
+            "group":        (data.get("group") or "").strip() or None,
+            "create_group": bool(data.get("create_group")),
+            "store_id_in":  (data.get("identity_store_id") or "").strip() or None,
+            "skip_pwd":     bool(data.get("skip_passwords")),
+            "region":       (data.get("region") or "").strip(),
+            "subscription_mode": "unified",
+            "subscription_plan": subscription_plan,
+            "subscription_principal": (data.get("subscription_principal") or "USER").upper(),
+            "auto_assign_subscription": auto_assign,
+            "individual_subscriptions": None,
+        }, None
+    else:
+        individual_subs = data.get("individual_subscriptions") or {}
+        return {
+            "prefix": prefix, "domain": domain, "count": count,
+            "start": start, "pad": pad,
+            "concurrency": max(1, min(conc, SSO_CONCURRENCY_MAX)),
+            "group":        (data.get("group") or "").strip() or None,
+            "create_group": bool(data.get("create_group")),
+            "store_id_in":  (data.get("identity_store_id") or "").strip() or None,
+            "skip_pwd":     bool(data.get("skip_passwords")),
+            "region":       (data.get("region") or "").strip(),
+            "subscription_mode": "individual",
+            "subscription_plan": None,
+            "subscription_principal": "USER",   # 个性化模式固定 USER
+            "auto_assign_subscription": auto_assign,
+            "individual_subscriptions": individual_subs,
+        }, None
 
 
 def _sso_batch_events(s, p: dict):
@@ -4092,12 +4444,22 @@ def _sso_batch_events(s, p: dict):
     total    = len(users)
     skip_pwd = p["skip_pwd"]
     workers  = min(conc, total)
+    
+    # 订阅配置
+    subscription_mode = p.get("subscription_mode", "unified")
+    auto_assign_subscription = p.get("auto_assign_subscription", False)
+    individual_subscriptions = p.get("individual_subscriptions") or {}
+    subscription_plan = p.get("subscription_plan") if subscription_mode == "unified" else None
+    subscription_principal = p.get("subscription_principal", "USER")  # USER 或 GROUP
 
     yield {
         "type": "start", "total": total, "concurrency": workers,
         "identity_store_id": store_id,
         "portal_url": portal_url, "dualstack_url": dualstack_url,
         "group": group or "", "skip_passwords": skip_pwd,
+        "subscription_mode": subscription_mode,
+        "subscription_plan": subscription_plan or "",
+        "auto_assign_subscription": auto_assign_subscription,
         "usernames": [u.username for u in users],
     }
 
@@ -4106,12 +4468,13 @@ def _sso_batch_events(s, p: dict):
     http = None if skip_pwd else sso_pwd.new_http_session(workers)
 
     def _one(idx, u):
-        """处理单个用户：创建 → 加组 → 生成密码。不抛异常，失败信息塞进 row。"""
+        """处理单个用户：创建 → 加组 → 生成密码 → 分配订阅。不抛异常，失败信息塞进 row。"""
         row = {"type": "item", "index": idx,
                "username": u.username, "email": u.email,
                "user_id": "", "portal_url": portal_url,
                "portal_url_dualstack": dualstack_url,
                "group": group or "",
+               "subscription_plan": "",
                "one_time_password": "", "status": "", "ok": False,
                "kind": "failed"}
         try:
@@ -4137,10 +4500,51 @@ def _sso_batch_events(s, p: dict):
             except Exception as e:
                 row["one_time_password"] = ""
                 row["status"] += f" / 密码失败: {e}"
+        
+        # 分配订阅（支持统一和个性化两种模式，支持 USER / GROUP 两种主体）
+        if auto_assign_subscription and row["user_id"]:
+            app.logger.info(f"订阅分配触发 user={u.username} user_id={row['user_id']} mode={subscription_mode} plan={subscription_plan} principal={subscription_principal}")
+            try:
+
+                if subscription_mode == "individual":
+                    user_sub = individual_subscriptions.get(u.username)
+                    if user_sub:
+                        user_plan = user_sub.get("plan")
+                        if user_plan:
+                            assign_subscription(s, p["region"], "USER", row["user_id"], user_plan)
+                            row["subscription_assigned"] = True
+                            row["subscription_plan"] = user_plan
+                            row["status"] += f" / 已分配订阅 {user_plan}（用户）"
+                    else:
+                        row["subscription_assigned"] = False
+                        row["subscription_plan"] = ""
+                elif subscription_mode == "unified" and subscription_plan:
+                    if subscription_principal == "GROUP" and group_id:
+                        # 组订阅：只在第一个用户时分配一次，后续用户通过组继承
+                        # 用 user index 判断，idx==1 时分配组订阅
+                        if idx == 1:
+                            assign_subscription(s, p["region"], "GROUP", group_id, subscription_plan)
+                            row["status"] += f" / 已分配组订阅 {subscription_plan}"
+                        row["subscription_assigned"] = True
+                        row["subscription_plan"] = subscription_plan
+                    else:
+                        # 用户订阅：每个用户单独分配
+                        assign_subscription(s, p["region"], "USER", row["user_id"], subscription_plan)
+                        row["subscription_assigned"] = True
+                        row["subscription_plan"] = subscription_plan
+                        row["status"] += f" / 已分配订阅 {subscription_plan}（用户）"
+            except Exception as e:
+                row["subscription_assigned"] = False
+                row["status"] += f" / 订阅分配失败: {e}"
+                app.logger.error(f"订阅分配失败 user_id={row['user_id']} plan={subscription_plan} principal={subscription_principal}: {e}")
+        else:
+            row["subscription_assigned"] = False
+            app.logger.info(f"订阅分配跳过 user={u.username} auto_assign={auto_assign_subscription} user_id={row['user_id']!r} mode={subscription_mode} plan={subscription_plan!r}")
+        
         return row
 
     # ── 并发处理，谁先完成先推谁 ──────────────────────────────
-    created = skipped = failed = pwd_ok = done = 0
+    created = skipped = failed = pwd_ok = subscription_ok = done = 0
     try:
         with _cf.ThreadPoolExecutor(max_workers=workers) as pool:
             futures = [pool.submit(_one, i, u) for i, u in enumerate(users, 1)]
@@ -4151,9 +4555,11 @@ def _sso_batch_events(s, p: dict):
                 elif row["kind"] == "skipped": skipped += 1
                 else:                          failed  += 1
                 if row.pop("pwd", False): pwd_ok += 1
+                if row.pop("subscription_assigned", False): subscription_ok += 1
                 done += 1
                 row.update({"done": done, "total": total, "created": created,
-                            "skipped": skipped, "failed": failed, "pwd_ok": pwd_ok})
+                            "skipped": skipped, "failed": failed, "pwd_ok": pwd_ok,
+                            "subscription_ok": subscription_ok})
                 yield row
     finally:
         if http is not None:
@@ -4164,8 +4570,10 @@ def _sso_batch_events(s, p: dict):
         "identity_store_id": store_id,
         "portal_url": portal_url, "dualstack_url": dualstack_url,
         "group": group or "", "concurrency": workers,
+        "subscription_mode": subscription_mode,
+        "subscription_plan": subscription_plan or "",
         "summary": {"created": created, "skipped": skipped,
-                    "failed": failed, "pwd_ok": pwd_ok},
+                    "failed": failed, "pwd_ok": pwd_ok, "subscription_ok": subscription_ok},
     }
 
 
@@ -4232,6 +4640,9 @@ def sso_run_stream():
     p, err = _sso_parse_params(data)
     if err: return _err_resp(err)
 
+    app.logger.info(f"run_stream raw: auto_assign={data.get('auto_assign_subscription')!r} mode={data.get('subscription_mode')!r} plan={data.get('subscription_plan')!r} principal={data.get('subscription_principal')!r}")
+    app.logger.info(f"run_stream parsed: auto_assign={p.get('auto_assign_subscription')} mode={p.get('subscription_mode')} plan={p.get('subscription_plan')} principal={p.get('subscription_principal')}")
+
     def _generate():
         for evt in _sso_batch_events(s, p):
             yield _sse(evt)
@@ -4241,6 +4652,352 @@ def sso_run_stream():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.route("/api/sso/subscriptions", methods=["GET"])
+def list_subscriptions():
+    """查询所有订阅分配记录"""
+    import sqlite3
+    try:
+        conn = sqlite3.connect('users.db')
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT email, plan, assigned_at, updated_at
+            FROM subscriptions
+            ORDER BY updated_at DESC
+        ''')
+        rows = cursor.fetchall()
+        conn.close()
+        subscriptions = [
+            {"email": r[0], "plan": r[1], "assigned_at": r[2], "updated_at": r[3]}
+            for r in rows
+        ]
+        return jsonify({"ok": True, "subscriptions": subscriptions})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+def _sso_resolve_delete_targets(data: dict, s, store_id: str) -> list[str]:
+    """从请求体解析出要删除的用户名列表。
+
+    优先用 ``usernames`` 字段（逗号/换行分隔或列表），
+    若为空则按 prefix/count/start/pad 生成（复用创建逻辑）。
+    """
+    raw = data.get("usernames") or ""
+    if isinstance(raw, list):
+        names = [n.strip() for n in raw if n.strip()]
+    else:
+        import re
+        names = [n.strip() for n in re.split(r"[,\n\r]+", raw) if n.strip()]
+
+    if not names:
+        # 按前缀生成
+        prefix = (data.get("prefix") or "").strip()
+        domain = (data.get("domain") or "").strip()
+        if not prefix:
+            raise ValueError("usernames 和 prefix 均为空，无法确定要删除的用户")
+        try:
+            count = int(data.get("count", 0))
+            start = int(data.get("start", 1))
+            pad   = int(data.get("pad", 2))
+        except (TypeError, ValueError):
+            raise ValueError("count/start/pad 格式不正确")
+        if count < 1:
+            raise ValueError("count 必须 >= 1")
+        users = sso_core.build_users(prefix, domain, count, start, pad)
+        names = [u.username for u in users]
+
+    return names
+
+
+@app.route("/api/sso/test_subscribe", methods=["POST"])
+def sso_test_subscribe():
+    """
+    快速测试 q:CreateAssignment，直接返回原始响应，方便诊断订阅失败原因。
+
+    请求体: access_key_id / secret_access_key / session_token / region
+            user_id / plan / principal_type(可选，默认USER)
+    """
+    data = request.get_json() or {}
+    s, err = _sso_session(data)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+
+    user_id  = (data.get("user_id") or "").strip()
+    plan     = (data.get("plan") or "pro").strip()
+    ptype    = (data.get("principal_type") or "USER").upper()
+    region   = (data.get("region") or "").strip()
+
+    if not user_id:
+        return jsonify({"ok": False, "error": "user_id 不能为空"}), 400
+
+    import uuid
+    sub_type = _KIRO_PLAN_TO_SUBSCRIPTION_TYPE.get(plan)
+    if not sub_type:
+        return jsonify({"ok": False, "error": f"未知 plan: {plan}"}), 400
+
+    payload = {
+        "principal": {"type": ptype, "id": user_id},
+        "subscriptionType": sub_type,
+        "clientToken": str(uuid.uuid4()),
+    }
+
+    app.logger.info(f"test_subscribe → POST /CreateAssignment payload={payload}")
+    try:
+        result = _kiro_request(s, region, "POST", "/CreateAssignment", payload)
+        return jsonify({"ok": True, "result": result, "payload_sent": payload})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "payload_sent": payload}), 500
+
+
+@app.route("/api/sso/cancel_preview", methods=["POST"])
+def sso_cancel_preview():
+    """
+    根据用户名/组名列表，查询 Identity Store 中的 principal id，
+    再调用 user-subscriptions:ListUserSubscriptions 查询当前订阅状态，
+    供前端预览「有订阅可取消 / 无订阅 / 用户不存在」三种状态。
+
+    请求体:
+        access_key_id / secret_access_key / session_token / region : 凭证
+        principal_type   : "USER" 或 "GROUP"
+        names            : ["kiro01","kiro02",...] 或 ["Kiro-Users",...]
+        identity_store_id (可选) : 留空自动发现
+    """
+    data = request.get_json() or {}
+    s, err = _sso_session(data)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+
+    ptype   = (data.get("principal_type") or "USER").upper()
+    names   = data.get("names") or []
+    region  = (data.get("region") or "").strip()
+    if not names:
+        return jsonify({"ok": False, "error": "names 不能为空"}), 400
+
+    try:
+        store_id = sso_core.resolve_identity_store_id(
+            s, (data.get("identity_store_id") or "").strip() or None)
+        ids_cli  = s.client("identitystore")
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+    # ── 第一步：查 principal id ────────────────────────────
+    items = []
+    for name in names:
+        name = name.strip()
+        if not name:
+            continue
+        try:
+            if ptype == "USER":
+                pid = sso_core.find_existing_user(ids_cli, store_id, name)
+            else:
+                pid = sso_core.find_group_id(ids_cli, store_id, name)
+            items.append({"name": name, "id": pid, "id_found": bool(pid),
+                          "subscription": None, "status": "user_not_found" if not pid else "checking"})
+        except Exception as e:
+            items.append({"name": name, "id": None, "id_found": False,
+                          "subscription": None, "status": f"查询失败: {e}"})
+
+    # ── 第二步：对找到 id 的条目标记为可取消（API 无 ListAssignments 端点，跳过订阅查询）
+    for item in items:
+        if not item["id_found"] or not item["id"]:
+            item["status"] = "用户/组不存在于 Identity Store"
+            item["can_cancel"] = False
+            item["subscription"] = ""
+        else:
+            # 只要用户存在就允许尝试取消，实际取消时若无订阅 API 会返回错误
+            item["status"] = "已找到，可尝试取消"
+            item["can_cancel"] = True
+            item["subscription"] = "—"
+
+    can_cancel = sum(1 for i in items if i.get("can_cancel"))
+    no_sub     = sum(1 for i in items if not i.get("can_cancel") and i["id_found"])
+    not_found  = sum(1 for i in items if not i["id_found"])
+
+    return jsonify({
+        "ok": True, "items": items,
+        "can_cancel": can_cancel, "no_sub": no_sub, "not_found": not_found,
+        "principal_type": ptype,
+    })
+
+
+@app.route("/api/sso/cancel_subscription", methods=["POST"])
+def sso_cancel_subscription():
+    """
+    取消单个用户或组的 Kiro 订阅。
+
+    请求体:
+        access_key_id / secret_access_key / session_token / region : 凭证
+        principal_type  : "USER" 或 "GROUP"
+        principal_id    : IAM Identity Center UserId 或 GroupId
+        principal_name  : 显示名（可选，仅用于日志）
+        cancel_type     : "END_OF_MONTH"（月底） 或 "IMMEDIATELY"（立即）
+    """
+    data = request.get_json() or {}
+    s, err = _sso_session(data)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+
+    principal_type = (data.get("principal_type") or "USER").upper()
+    principal_id   = (data.get("principal_id") or "").strip()
+    cancel_type    = (data.get("cancel_type") or "END_OF_MONTH").upper()
+    region         = (data.get("region") or "").strip()
+
+    if not principal_id:
+        return jsonify({"ok": False, "error": "principal_id 不能为空"}), 400
+    if principal_type not in ("USER", "GROUP"):
+        return jsonify({"ok": False, "error": "principal_type 必须是 USER 或 GROUP"}), 400
+    if cancel_type not in ("END_OF_MONTH", "IMMEDIATELY"):
+        return jsonify({"ok": False, "error": "cancel_type 必须是 END_OF_MONTH 或 IMMEDIATELY"}), 400
+    if not region:
+        return jsonify({"ok": False, "error": "region 不能为空"}), 400
+
+    try:
+        result = cancel_subscription(s, region, principal_type, principal_id, cancel_type)
+        label = "月底生效" if cancel_type == "END_OF_MONTH" else "立即生效"
+        return jsonify({"ok": True, "result": result,
+                        "principal_type": principal_type,
+                        "principal_id": principal_id,
+                        "cancel_type": cancel_type,
+                        "message": f"订阅已取消（{label}）"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/sso/cancel_subscription_batch", methods=["POST"])
+def sso_cancel_subscription_batch():
+    """
+    批量取消订阅（用户或组混合列表）。
+
+    请求体:
+        access_key_id / secret_access_key / session_token / region : 凭证
+        principals  : [{"type":"USER","id":"...","name":"..."},
+                        {"type":"GROUP","id":"...","name":"..."},...]
+        cancel_type : "END_OF_MONTH" 或 "IMMEDIATELY"
+    """
+    data = request.get_json() or {}
+    s, err = _sso_session(data)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+
+    principals  = data.get("principals") or []
+    cancel_type = (data.get("cancel_type") or "END_OF_MONTH").upper()
+    region      = (data.get("region") or "").strip()
+
+    if not principals:
+        return jsonify({"ok": False, "error": "principals 不能为空"}), 400
+    if cancel_type not in ("END_OF_MONTH", "IMMEDIATELY"):
+        return jsonify({"ok": False, "error": "cancel_type 必须是 END_OF_MONTH 或 IMMEDIATELY"}), 400
+    if not region:
+        return jsonify({"ok": False, "error": "region 不能为空"}), 400
+
+    results = []
+    ok_count = fail_count = 0
+    label = "月底取消" if cancel_type == "END_OF_MONTH" else "已立即取消"
+
+    for item in principals:
+        ptype = (item.get("type") or "USER").upper()
+        pid   = (item.get("id") or "").strip()
+        name  = item.get("name") or pid
+        if not pid:
+            results.append({"name": name, "type": ptype, "id": pid,
+                             "status": "跳过: id 为空", "ok": False})
+            continue
+        try:
+            cancel_subscription(s, region, ptype, pid, cancel_type)
+            ok_count += 1
+            results.append({"name": name, "type": ptype, "id": pid,
+                             "status": label, "ok": True})
+        except Exception as e:
+            fail_count += 1
+            results.append({"name": name, "type": ptype, "id": pid,
+                             "status": f"失败: {e}", "ok": False})
+
+    return jsonify({
+        "ok": True,
+        "cancel_type": cancel_type,
+        "summary": {"ok": ok_count, "failed": fail_count},
+        "results": results,
+    })
+
+
+@app.route("/api/sso/delete_preview", methods=["POST"])
+def sso_delete_preview():
+    """预览将要删除的用户（查询是否存在，不实际删除）。"""
+    data = request.get_json() or {}
+    s, err = _sso_session(data)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    try:
+        store_id = sso_core.resolve_identity_store_id(s, (data.get("identity_store_id") or "").strip() or None)
+        ids_cli  = s.client("identitystore")
+        names    = _sso_resolve_delete_targets(data, s, store_id)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+    items = []
+    found = missing = 0
+    for name in names:
+        uid = sso_core.find_existing_user(ids_cli, store_id, name)
+        if uid:
+            found += 1
+            items.append({"username": name, "user_id": uid, "exists": True})
+        else:
+            missing += 1
+            items.append({"username": name, "user_id": None, "exists": False})
+
+    return jsonify({"ok": True, "items": items, "found": found, "missing": missing})
+
+
+@app.route("/api/sso/delete_run", methods=["POST"])
+def sso_delete_run():
+    """实际删除用户（需前端二次确认）。
+
+    请求体必须包含：
+      - ``usernames_confirmed``：已确认要删除的用户名列表
+      - ``confirm_count``：与列表长度相同的整数（防误触）
+    """
+    data = request.get_json() or {}
+    s, err = _sso_session(data)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+
+    targets = data.get("usernames_confirmed") or []
+    if not isinstance(targets, list) or not targets:
+        return jsonify({"ok": False, "error": "usernames_confirmed 为空"}), 400
+    try:
+        confirm_count = int(data.get("confirm_count", -1))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "confirm_count 格式不正确"}), 400
+    if confirm_count != len(targets):
+        return jsonify({"ok": False, "error": "confirm_count 与实际数量不符，拒绝删除"}), 400
+
+    try:
+        store_id = sso_core.resolve_identity_store_id(s, (data.get("identity_store_id") or "").strip() or None)
+        ids_cli  = s.client("identitystore")
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+    results = []
+    deleted = skipped = failed = 0
+    for name in targets:
+        uid = sso_core.find_existing_user(ids_cli, store_id, name)
+        if not uid:
+            skipped += 1
+            results.append({"username": name, "status": "不存在(跳过)"})
+            continue
+        try:
+            sso_core.delete_user(ids_cli, store_id, uid)
+            deleted += 1
+            results.append({"username": name, "status": "已删除"})
+        except Exception as e:
+            failed += 1
+            results.append({"username": name, "status": f"失败: {e}"})
+
+    return jsonify({
+        "ok": True,
+        "summary": {"deleted": deleted, "skipped": skipped, "failed": failed},
+        "results": results,
+    })
 
 
 # ── 开发服务器入口（必须放在文件最末尾，确保所有路由已注册）────────────────
