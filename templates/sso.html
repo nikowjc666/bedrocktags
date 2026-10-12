@@ -696,9 +696,18 @@ async function runCreate(){
   progReset(parseInt(G("count"), 10) || 0);
 
   const plan = mode === 'unified' ? G("subscription_plan") : '';
-  lastResult = {ok:true, results:[], identity_store_id:"", portal_url:"",
+  lastResult = {ok:true, results:[], identity_store_id:"", account_id:"", portal_url:"",
                 dualstack_url:"", group:"", subscription_plan: plan, subscription_mode: mode,
                 summary:{created:0, skipped:0, failed:0, pwd_ok:0, subscription_ok:0}};
+
+  // 自动获取账号 ID 供导出文件名使用
+  if (!window._accountId) {
+    try {
+      const wi = await api("/api/sso/whoami", creds());
+      if (wi.ok && wi.account) window._accountId = wi.account;
+    } catch(e) {}
+  }
+  lastResult.account_id = window._accountId || "";
 
   try {
     const resp = await fetch("/api/sso/run_stream", {
@@ -816,7 +825,8 @@ function appendResultRow(r){
 function exportFilename(ext) {
   const d = new Date(), p = n => String(n).padStart(2,'0');
   const date = d.getFullYear()+p(d.getMonth()+1)+p(d.getDate());
-  const acct = (window._accountId || lastResult.identity_store_id || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '');
+  // 优先用 whoami 拿到的 12 位账号 ID，其次用 lastResult 里的账号 ID
+  const acct = (window._accountId || lastResult.account_id || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '');
   const count = (lastResult.summary && lastResult.summary.created) || lastResult.results.length;
   return `${date}_${acct}_${count}.${ext}`;
 }
