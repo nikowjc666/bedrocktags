@@ -296,52 +296,11 @@ input,textarea,select{font-family:inherit;text-transform:none}
     </div>
   </div>
 
-  <!-- 3. 删除用户 -->
+  <!-- 3. 用户管理（取消订阅 / 删除用户） -->
   <div class="card danger-zone">
-    <div class="sht"><span class="sht-step" style="background:var(--er)">3</span> 删除用户<span class="sht-sub">按用户名或前缀批量查找并删除</span></div>
+    <div class="sht"><span class="sht-step" style="background:var(--er)">3</span> 用户管理<span class="sht-sub">查询所有用户，批量取消订阅或删除</span></div>
     <div class="sb">
-      <div class="fr">
-        <div class="fg" style="flex:3">
-          <label>用户名列表（逗号或换行分隔，留空则按下方前缀生成）</label>
-          <textarea id="delNames" rows="3" style="width:100%;padding:6px 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;resize:vertical;font-family:inherit" placeholder="kiro01,kiro02,kiro03&#10;或留空 → 按上方前缀/数量/起始值自动生成"></textarea>
-        </div>
-      </div>
-      <div class="fr">
-        <button class="btn" id="delPreviewBtn" onclick="deletePreview()">预览待删除</button>
-        <div style="flex:1"></div>
-      </div>
-      <div id="delMsg"></div>
-
-      <!-- 删除结果预览 -->
-      <div id="delResultBox" style="display:none;margin-top:10px">
-        <div id="delSummary" class="summary-bar"></div>
-        <table class="rtbl">
-          <thead><tr><th>用户名</th><th>user id</th><th>操作</th></tr></thead>
-          <tbody id="delBody"></tbody>
-        </table>
-        <div class="del-confirm-row">
-          <input type="checkbox" id="delConfirm">
-          <span>我确认要删除以上用户，此操作不可撤销</span>
-        </div>
-        <div style="margin-top:8px">
-          <button class="btn bd" id="delBtn" onclick="deleteRun()">确认删除</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 4. 取消订阅 -->
-  <div class="card danger-zone">
-    <div class="sht"><span class="sht-step" style="background:var(--wa)">4</span> 取消订阅<span class="sht-sub">批量取消用户或组的 kiro 企业订阅</span></div>
-    <div class="sb">
-      <div class="fr">
-        <div class="fg" style="flex:2">
-          <label>取消主体</label>
-          <select id="cancelPrincipalType">
-            <option value="USER">用户（按 user id 取消）</option>
-            <option value="GROUP">组（按 group id 取消）</option>
-          </select>
-        </div>
+      <div class="fr" style="align-items:center;gap:10px">
         <div class="fg" style="flex:2">
           <label>取消时机</label>
           <select id="cancelType">
@@ -349,31 +308,47 @@ input,textarea,select{font-family:inherit;text-transform:none}
             <option value="IMMEDIATELY">立即取消（马上失去访问）</option>
           </select>
         </div>
-      </div>
-      <div class="fr">
-        <div class="fg">
-          <label>用户名列表（逗号/换行分隔；留空则按上方前缀自动生成；选组时填写组 DisplayName）</label>
-          <textarea id="cancelNames" rows="3" style="width:100%;padding:6px 9px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:12px;resize:vertical;font-family:inherit"
-            placeholder="kiro01,kiro02,kiro03&#10;或留空 → 按上方前缀/数量/起始值自动生成&#10;选组时：Kiro-Users（组 DisplayName）"></textarea>
+        <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:0">
+          <button class="btn bp" id="listUsersBtn" onclick="listAllUsers()" style="white-space:nowrap">查询所有用户</button>
         </div>
       </div>
-      <div class="fr">
-        <button class="btn" id="cancelPreviewBtn" onclick="cancelPreview()">查找并预览</button>
-      </div>
-      <div id="cancelMsg"></div>
-      <div id="cancelResultBox" style="display:none;margin-top:10px">
-        <div id="cancelSummary" class="summary-bar"></div>
+      <div id="mgmtMsg"></div>
+
+      <div id="mgmtBox" style="display:none;margin-top:10px">
+        <!-- 工具栏 -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:5px;font-weight:600;cursor:pointer">
+            <input type="checkbox" id="mgmtSelectAll" onchange="toggleSelectAll(this.checked)"> 全选
+          </label>
+          <span id="mgmtSelectedCount" style="color:var(--t2);font-size:11px">已选 0 个</span>
+          <div style="flex:1"></div>
+          <button class="btn" style="background:var(--wa);color:#fff;border-color:var(--wa)" id="cancelSelBtn" onclick="cancelSelected()" disabled>取消订阅（已选）</button>
+          <button class="btn bd" id="deleteSelBtn" onclick="deleteSelected()" disabled>删除用户（已选）</button>
+        </div>
+
+        <!-- 用户表格 -->
         <table class="rtbl">
-          <thead><tr><th>名称</th><th>principal id</th><th>类型</th><th>当前订阅</th><th>操作</th></tr></thead>
-          <tbody id="cancelBody"></tbody>
+          <thead><tr>
+            <th style="width:32px"></th>
+            <th>用户名</th>
+            <th>邮箱</th>
+            <th>User ID</th>
+          </tr></thead>
+          <tbody id="mgmtBody"></tbody>
         </table>
-        <div class="del-confirm-row" style="margin-top:8px">
-          <input type="checkbox" id="cancelConfirm">
-          <span>我确认要取消以上订阅</span>
+
+        <!-- 确认区 -->
+        <div id="mgmtConfirmRow" style="display:none;margin-top:10px">
+          <div class="del-confirm-row">
+            <input type="checkbox" id="mgmtConfirm">
+            <span id="mgmtConfirmLabel">我确认要执行以上操作</span>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <button class="btn bd" id="mgmtRunBtn" onclick="mgmtRun()">确认执行</button>
+            <button class="btn" onclick="mgmtCancel()">取消</button>
+          </div>
         </div>
-        <div style="margin-top:8px">
-          <button class="btn bd" id="cancelRunBtn" onclick="cancelRun()">确认取消订阅</button>
-        </div>
+        <div id="mgmtResultMsg"></div>
       </div>
     </div>
   </div>
@@ -924,168 +899,170 @@ function closeSubsModal(){
   document.getElementById('subsModal').style.display = 'none';
 }
 
-// ── 删除预览 ──────────────────────────────────────────────
-let delPreviewData = null;
+// ── 用户管理（查询 / 取消订阅 / 删除用户）────────────────────
+let mgmtUsers = [];       // 所有用户列表
+let mgmtPendingAction = null;  // 'cancel' | 'delete'
 
-async function deletePreview(){
-  delPreviewData = null;
-  setMsg("delMsg", '<span class="sp"></span> 查询中...', "info");
-  document.getElementById("delResultBox").style.display = "none";
-  const payload = {...creds(), usernames: G("delNames"),
-    prefix: G("prefix"), domain: G("domain"), count: G("count"),
-    start: G("start"), pad: G("pad")};
-  const res = await api("/api/sso/delete_preview", payload);
-  if (!res.ok){ setMsg("delMsg", res.error, "er"); return; }
-  delPreviewData = res;
-  setMsg("delMsg", '共 '+res.items.length+' 个，存在 <b>'+res.found+'</b> 个，不存在 '+res.missing+' 个。勾选确认后点删除。', res.found>0?"wa":"ok");
-  document.getElementById("delResultBox").style.display = "";
-  document.getElementById("delSummary").innerHTML = '<div>找到 <b>'+res.found+'</b> 个</div><div>不存在 <b>'+res.missing+'</b> 个</div>';
-  document.getElementById("delBody").innerHTML = res.items.map(i =>
-    '<tr><td>'+esc(i.username)+'</td><td style="font-size:10px;color:var(--t3)">'+esc(i.user_id||'—')+'</td>'+
-    '<td>'+(i.exists?'<span style="color:var(--er);font-weight:600">将删除</span>':'<span style="color:var(--t3)">不存在</span>')+'</td></tr>'
+async function listAllUsers() {
+  const btn = $("listUsersBtn");
+  btn.disabled = true; btn.textContent = "查询中...";
+  setMsg("mgmtMsg", '<span class="sp"></span> 正在从 Identity Store 获取用户列表...', "info");
+  $("mgmtBox").style.display = "none";
+  mgmtUsers = [];
+
+  try {
+    const res = await api("/api/sso/list_users", {
+      ...creds(),
+      identity_store_id: G("store_id"),
+    });
+    if (!res.ok) { setMsg("mgmtMsg", res.error, "er"); return; }
+
+    mgmtUsers = res.users || [];
+    setMsg("mgmtMsg", '共找到 <b>' + mgmtUsers.length + '</b> 个用户', "ok");
+    renderMgmtTable();
+    $("mgmtBox").style.display = "";
+    $("mgmtConfirmRow").style.display = "none";
+    $("mgmtResultMsg").innerHTML = "";
+    $("mgmtSelectAll").checked = false;
+    updateMgmtButtons();
+  } finally {
+    btn.disabled = false; btn.textContent = "查询所有用户";
+  }
+}
+
+function renderMgmtTable() {
+  $("mgmtBody").innerHTML = mgmtUsers.map((u, idx) =>
+    `<tr>
+      <td><input type="checkbox" class="mgmt-chk" data-idx="${idx}" onchange="updateMgmtButtons()"></td>
+      <td>${esc(u.username)}</td>
+      <td style="color:var(--t2)">${esc(u.email || '—')}</td>
+      <td style="font-size:10px;color:var(--t3)">${esc(u.user_id)}</td>
+    </tr>`
   ).join('');
 }
 
-async function deleteRun(){
-  if (!delPreviewData){ setMsg("delMsg","请先点「预览待删除」","er"); return; }
-  const targets = delPreviewData.items.filter(i=>i.exists).map(i=>i.username);
-  if (!targets.length){ setMsg("delMsg","没有可删除的用户","er"); return; }
-  if (!document.getElementById("delConfirm").checked){ setMsg("delMsg","请先勾选上方确认框","er"); return; }
-  const btn = document.getElementById("delBtn");
-  btn.disabled = true; btn.textContent = "删除中...";
-  try {
-    const payload = {...creds(), usernames_confirmed: targets, confirm_count: targets.length,
-      identity_store_id: G("store_id")};
-    const res = await api("/api/sso/delete_run", payload);
-    if (!res.ok){ setMsg("delMsg", res.error, "er"); return; }
-    const s = res.summary;
-    setMsg("delMsg", "完成: 删除 <b>"+s.deleted+"</b> 跳过 <b>"+s.skipped+"</b> 失败 <b>"+s.failed+"</b>", s.failed>0?"wa":"ok");
-    document.getElementById("delBody").innerHTML = res.results.map(r =>
-      '<tr><td>'+esc(r.username)+'</td><td></td><td>'+esc(r.status)+'</td></tr>'
-    ).join('');
-    delPreviewData = null;
-    document.getElementById("delConfirm").checked = false;
-  } finally {
-    btn.disabled = false; btn.textContent = "确认删除";
-  }
+function getSelectedUsers() {
+  return Array.from(document.querySelectorAll('.mgmt-chk:checked'))
+    .map(cb => mgmtUsers[parseInt(cb.dataset.idx)]);
 }
 
-// ── 取消订阅 ──────────────────────────────────────────────
-let cancelPreviewData = null;
+function toggleSelectAll(checked) {
+  document.querySelectorAll('.mgmt-chk').forEach(cb => cb.checked = checked);
+  updateMgmtButtons();
+}
 
-async function cancelPreview() {
-  cancelPreviewData = null;
-  setMsg("cancelMsg", '<span class="sp"></span> 查询中...', "info");
-  document.getElementById("cancelResultBox").style.display = "none";
+function updateMgmtButtons() {
+  const count = getSelectedUsers().length;
+  $("mgmtSelectedCount").textContent = `已选 ${count} 个`;
+  $("cancelSelBtn").disabled = count === 0;
+  $("deleteSelBtn").disabled = count === 0;
+  // 同步全选框状态
+  const all = document.querySelectorAll('.mgmt-chk');
+  $("mgmtSelectAll").checked = all.length > 0 && count === all.length;
+  $("mgmtSelectAll").indeterminate = count > 0 && count < all.length;
+}
 
-  const ptype     = G("cancelPrincipalType");
-  const rawNames  = G("cancelNames");
-  const region    = G("region");
-
-  // 解析名称列表（逗号 / 换行分隔）
-  let names = rawNames.split(/[,\n\r]+/).map(s => s.trim()).filter(Boolean);
-
-  // 留空时按上方前缀自动生成用户名
-  if (names.length === 0) {
-    const prefix = G("prefix"), domain = G("domain");
-    const count  = parseInt(G("count")||0), start = parseInt(G("start")||1), pad = parseInt(G("pad")||2);
-    if (!prefix || !domain || count < 1) {
-      setMsg("cancelMsg", "请填写名称列表，或在上方填写前缀/域名/数量后留空自动生成", "er");
-      return;
-    }
-    for (let i = 0; i < count; i++) {
-      const seq = start + i;
-      names.push(`${prefix}${String(seq).padStart(pad, '0')}`);
-    }
-  }
-
-  // 查询 Identity Store，把名称→ principal id
-  const previewPayload = {
-    ...creds(),
-    principal_type: ptype,
-    names: names,
-    identity_store_id: G("store_id"),
-  };
-
-  const res = await api("/api/sso/cancel_preview", previewPayload);
-  if (!res.ok) { setMsg("cancelMsg", res.error, "er"); return; }
-
-  cancelPreviewData = res;
-  const canCancel = res.can_cancel || 0;
-  const noSub     = res.no_sub || 0;
-  const notFound  = res.not_found || 0;
-
-  let msgCls = canCancel > 0 ? "wa" : "ok";
-  setMsg("cancelMsg",
-    '共 '+res.items.length+' 个 — 可取消 <b>'+canCancel+'</b> 个，无订阅 '+noSub+' 个，用户不存在 '+notFound+' 个',
-    msgCls);
-
-  document.getElementById("cancelResultBox").style.display = "";
-  document.getElementById("cancelSummary").innerHTML =
-    '<div>可取消 <b>'+canCancel+'</b> 个</div>' +
-    '<div>无订阅 <b>'+noSub+'</b> 个</div>' +
-    '<div>不存在 <b>'+notFound+'</b> 个</div>';
-
+function cancelSelected() {
+  const selected = getSelectedUsers();
+  if (!selected.length) return;
+  mgmtPendingAction = 'cancel';
   const cancelTypeLabel = G("cancelType") === 'IMMEDIATELY' ? '立即取消' : '月底取消';
-  document.getElementById("cancelBody").innerHTML = res.items.map(i => {
-    let actionHtml;
-    if (i.can_cancel) {
-      actionHtml = '<span style="color:var(--wa);font-weight:600">'+cancelTypeLabel+'</span>';
-    } else if (i.id_found) {
-      actionHtml = '<span style="color:var(--t2)">无订阅，跳过</span>';
-    } else {
-      actionHtml = '<span style="color:var(--t3)">用户不存在</span>';
+  $("mgmtConfirmLabel").textContent = `我确认要对以上 ${selected.length} 个用户取消 Kiro 订阅（${cancelTypeLabel}），操作不可撤销`;
+  $("mgmtConfirm").checked = false;
+  $("mgmtConfirmRow").style.display = "";
+  $("mgmtResultMsg").innerHTML = "";
+  $("mgmtRunBtn").textContent = `确认取消订阅（${selected.length} 个）`;
+  $("mgmtConfirmRow").scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function deleteSelected() {
+  const selected = getSelectedUsers();
+  if (!selected.length) return;
+  mgmtPendingAction = 'delete';
+  $("mgmtConfirmLabel").textContent = `我确认要删除以上 ${selected.length} 个用户，此操作不可撤销`;
+  $("mgmtConfirm").checked = false;
+  $("mgmtConfirmRow").style.display = "";
+  $("mgmtResultMsg").innerHTML = "";
+  $("mgmtRunBtn").textContent = `确认删除用户（${selected.length} 个）`;
+  $("mgmtConfirmRow").scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function mgmtCancel() {
+  mgmtPendingAction = null;
+  $("mgmtConfirmRow").style.display = "none";
+  $("mgmtConfirm").checked = false;
+}
+
+async function mgmtRun() {
+  if (!$("mgmtConfirm").checked) {
+    $("mgmtResultMsg").innerHTML = '<div class="st er">请先勾选确认框</div>';
+    return;
+  }
+  const selected = getSelectedUsers();
+  if (!selected.length) return;
+
+  const btn = $("mgmtRunBtn");
+  btn.disabled = true;
+
+  if (mgmtPendingAction === 'cancel') {
+    btn.textContent = "取消订阅中...";
+    try {
+      const principals = selected.map(u => ({ type: "USER", id: u.user_id, name: u.username }));
+      const res = await api("/api/sso/cancel_subscription_batch", {
+        ...creds(),
+        principals,
+        cancel_type: G("cancelType"),
+      });
+      if (!res.ok) { $("mgmtResultMsg").innerHTML = '<div class="st er">'+esc(res.error)+'</div>'; return; }
+      const s = res.summary;
+      const label = res.cancel_type === 'IMMEDIATELY' ? '立即取消' : '月底取消';
+      $("mgmtResultMsg").innerHTML = `<div class="st ok">完成（${label}）: 成功 <b>${s.ok}</b> 失败 <b>${s.failed}</b></div>`;
+      if (res.results) {
+        $("mgmtResultMsg").innerHTML += '<table class="rtbl" style="margin-top:8px"><thead><tr><th>用户名</th><th>结果</th></tr></thead><tbody>' +
+          res.results.map(r => `<tr><td>${esc(r.name)}</td><td style="color:${r.ok?'var(--ok)':'var(--er)'}">${esc(r.status)}</td></tr>`).join('') +
+          '</tbody></table>';
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "确认执行";
+      $("mgmtConfirmRow").style.display = "none";
+      $("mgmtConfirm").checked = false;
     }
-    return '<tr><td>'+esc(i.name)+'</td>' +
-      '<td style="font-size:10px;color:var(--t3)">'+esc(i.id||'—')+'</td>' +
-      '<td style="font-size:10px">'+esc(ptype)+'</td>' +
-      '<td>'+esc(i.subscription||'')+'</td>' +
-      '<td>'+actionHtml+'</td></tr>';
-  }).join('');
-}
 
-async function cancelRun() {
-  if (!cancelPreviewData) { setMsg("cancelMsg", "请先点「查找并预览」", "er"); return; }
-  if (!document.getElementById("cancelConfirm").checked) {
-    setMsg("cancelMsg", "请先勾选确认框", "er"); return;
-  }
-
-  const targets = cancelPreviewData.items
-    .filter(i => i.can_cancel && i.id)
-    .map(i => ({ type: G("cancelPrincipalType"), id: i.id, name: i.name }));
-
-  if (!targets.length) { setMsg("cancelMsg", "没有可取消的订阅", "er"); return; }
-
-  const btn = document.getElementById("cancelRunBtn");
-  btn.disabled = true; btn.textContent = "取消中...";
-
-  try {
-    const payload = {
-      ...creds(),
-      principals: targets,
-      cancel_type: G("cancelType"),
-    };
-    const res = await api("/api/sso/cancel_subscription_batch", payload);
-    if (!res.ok) { setMsg("cancelMsg", res.error, "er"); return; }
-    const s = res.summary;
-    const label = res.cancel_type === 'IMMEDIATELY' ? '立即取消' : '月底取消';
-    setMsg("cancelMsg",
-      '完成（'+label+'）: 成功 <b>'+s.ok+'</b> 失败 <b>'+s.failed+'</b>',
-      s.failed > 0 ? "wa" : "ok");
-    document.getElementById("cancelBody").innerHTML = res.results.map(r =>
-      '<tr><td>'+esc(r.name)+'</td>' +
-      '<td style="font-size:10px;color:var(--t3)">'+esc(r.id||'—')+'</td>' +
-      '<td style="font-size:10px">'+esc(r.type||'')+'</td>' +
-      '<td>'+(r.ok
-        ? '<span style="color:var(--ok)">'+esc(r.status)+'</span>'
-        : '<span style="color:var(--er)">'+esc(r.status)+'</span>')+'</td></tr>'
-    ).join('');
-    cancelPreviewData = null;
-    document.getElementById("cancelConfirm").checked = false;
-  } finally {
-    btn.disabled = false; btn.textContent = "确认取消订阅";
+  } else if (mgmtPendingAction === 'delete') {
+    btn.textContent = "删除中...";
+    try {
+      const usernames = selected.map(u => u.username);
+      const res = await api("/api/sso/delete_run", {
+        ...creds(),
+        usernames_confirmed: usernames,
+        confirm_count: usernames.length,
+        identity_store_id: G("store_id"),
+      });
+      if (!res.ok) { $("mgmtResultMsg").innerHTML = '<div class="st er">'+esc(res.error)+'</div>'; return; }
+      const s = res.summary;
+      $("mgmtResultMsg").innerHTML = `<div class="st ok">完成: 删除 <b>${s.deleted}</b> 跳过 <b>${s.skipped}</b> 失败 <b>${s.failed}</b></div>`;
+      if (res.results) {
+        $("mgmtResultMsg").innerHTML += '<table class="rtbl" style="margin-top:8px"><thead><tr><th>用户名</th><th>结果</th></tr></thead><tbody>' +
+          res.results.map(r => `<tr><td>${esc(r.username)}</td><td>${esc(r.status)}</td></tr>`).join('') +
+          '</tbody></table>';
+      }
+      // 删除成功后刷新列表
+      await listAllUsers();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "确认执行";
+      $("mgmtConfirmRow").style.display = "none";
+      $("mgmtConfirm").checked = false;
+    }
   }
 }
+
+// ── 保留旧函数（兼容其他可能调用点）──────────────────────────
+function deletePreview(){ setMsg("delMsg","请使用卡片 3「用户管理」","info"); }
+function deleteRun(){}
+async function cancelPreview(){ setMsg("cancelMsg","请使用卡片 3「用户管理」","info"); }
+async function cancelRun(){}
 </script>
 </body>
 </html>

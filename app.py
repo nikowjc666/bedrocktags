@@ -4752,6 +4752,56 @@ def sso_test_subscribe():
         return jsonify({"ok": False, "error": str(e), "payload_sent": payload}), 500
 
 
+@app.route("/api/sso/list_users", methods=["POST"])
+def sso_list_users():
+    """
+    列出 Identity Store 中所有用户。
+
+    请求体:
+        access_key_id / secret_access_key / session_token / region : 凭证
+        identity_store_id (可选) : 留空自动发现
+        max_results (可选) : 最大返回数量，默认 200
+    """
+    data = request.get_json() or {}
+    s, err = _sso_session(data)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+
+    try:
+        store_id = sso_core.resolve_identity_store_id(
+            s, (data.get("identity_store_id") or "").strip() or None)
+        ids_cli  = s.client("identitystore")
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+    max_results = min(int(data.get("max_results") or 200), 500)
+    users = []
+    try:
+        kwargs = {"IdentityStoreId": store_id, "MaxResults": max_results}
+        while True:
+            resp = ids_cli.list_users(**kwargs)
+            for u in resp.get("Users", []):
+                email = ""
+                for e_item in (u.get("Emails") or []):
+                    if e_item.get("Primary") or not email:
+                        email = e_item.get("Value", "")
+                users.append({
+                    "user_id":    u.get("UserId", ""),
+                    "username":   u.get("UserName", ""),
+                    "display_name": u.get("DisplayName", ""),
+                    "email":      email,
+                })
+            next_token = resp.get("NextToken")
+            if not next_token or len(users) >= max_results:
+                break
+            kwargs["NextToken"] = next_token
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    return jsonify({"ok": True, "users": users, "total": len(users),
+                    "identity_store_id": store_id})
+
+
 @app.route("/api/sso/cancel_preview", methods=["POST"])
 def sso_cancel_preview():
     """
