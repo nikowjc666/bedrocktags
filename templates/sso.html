@@ -291,6 +291,7 @@ input,textarea,select{font-family:inherit;text-transform:none}
         <div class="export-btns">
           <button class="btn" onclick="exportTxt()">导出 TXT</button>
           <button class="btn" onclick="exportCsv()">导出 CSV</button>
+          <button class="btn" onclick="exportJson()">导出 JSON</button>
         </div>
       </div>
     </div>
@@ -863,6 +864,27 @@ function exportCsv(){
     }).join(','));
   });
   dl(exportFilename('csv'), '\ufeff'+lines.join('\r\n'), 'text/csv');
+}
+
+// ── 导出 JSON ──────────────────────────────────────────────
+function exportJson(){
+  if (!lastResult) return;
+  const output = {
+    exported_at: new Date().toISOString(),
+    account_id:  window._accountId || lastResult.account_id || '',
+    portal_url:       lastResult.portal_url || '',
+    dualstack_url:    lastResult.dualstack_url || '',
+    group:            lastResult.group || '',
+    summary:          lastResult.summary || {},
+    users: lastResult.results.map(r => ({
+      username:         r.username,
+      email:            r.email || '',
+      user_id:          r.user_id || '',
+      one_time_password: r.one_time_password || '',
+      status:           r.status || '',
+    }))
+  };
+  dl(exportFilename('json'), JSON.stringify(output, null, 2), 'application/json');
 }
 
 function dl(name, content, mime){
