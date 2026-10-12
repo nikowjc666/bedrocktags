@@ -4774,10 +4774,10 @@ def sso_list_users():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 400
 
-    max_results = min(int(data.get("max_results") or 200), 500)
+    max_results = int(data.get("max_results") or 500)
     users = []
     try:
-        kwargs = {"IdentityStoreId": store_id, "MaxResults": max_results}
+        kwargs = {"IdentityStoreId": store_id, "MaxResults": 100}  # API 限制每页最多 100
         while True:
             resp = ids_cli.list_users(**kwargs)
             for u in resp.get("Users", []):
