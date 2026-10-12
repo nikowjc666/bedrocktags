@@ -4220,13 +4220,13 @@ def _kiro_management_request(boto_session, region: str, method: str, path: str, 
     import urllib.request
 
     _SERVICE_TARGET_MAP = {
-        "/DeleteAssignment": "KiroControlPlaneService.DeleteAssignment",
-        "/CreateAssignment": "KiroControlPlaneService.CreateAssignment",
-        "/ListAssignments":  "KiroControlPlaneService.ListAssignments",
+        "/DeleteAssignment": "KiroControlPlaneQDeveloperService.DeleteAssignment",
+        "/CreateAssignment": "KiroControlPlaneQDeveloperService.CreateAssignment",
+        "/ListAssignments":  "KiroControlPlaneQDeveloperService.ListAssignments",
     }
-    target = _SERVICE_TARGET_MAP.get(path, f"KiroControlPlaneService.{path.lstrip('/')}")
+    target = _SERVICE_TARGET_MAP.get(path, f"KiroControlPlaneQDeveloperService.{path.lstrip('/')}")
 
-    url = f"https://management.{region}.kiro.dev{path}"
+    url = f"https://management.{region}.kiro.dev/"
     body = json.dumps(payload).encode() if payload else b""
     app.logger.info(f"_kiro_management_request → {method} {url} target={target} payload={json.dumps(payload)}")
 
