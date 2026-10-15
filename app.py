@@ -4559,7 +4559,6 @@ def sso_enable_kiro_api():
             "optInFeaturesType":    "KIRO",
             "apiKeys":              {"toggle": "ON"},
             "dashboardAnalytics":   {"toggle": "ON"},
-            "overageConfiguration": {"overageStatus": "DISABLED"},
         },
         "referenceTrackerConfiguration": {"recommendationsWithReferences": "ALLOW"},
         "resourcePolicy": {"effect": "DENY"},
