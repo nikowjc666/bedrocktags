@@ -4163,27 +4163,46 @@ def sso_enable_sso():
 
     region = (data.get("region") or s.region_name or "").strip()
     name   = (data.get("name") or "kiro-auto").strip()
+    force  = bool(data.get("force"))  # 强制开通，忽略残留的幽灵实例
 
     try:
         admin = s.client("sso-admin")
     except Exception as e:
         return jsonify({"ok": False, "error": f"创建 sso-admin 客户端失败: {e}"}), 400
 
-    # ── 第一步：检查是否已有实例（幂等）──────────────────────
+    # ── 第一步：检查是否已有「可用」实例（幂等）──────────────
     try:
         insts = admin.list_instances().get("Instances", [])
     except Exception as e:
         return jsonify({"ok": False, "error": f"查询现有实例失败: {e}"}), 500
 
-    if insts:
-        inst = insts[0]
+    # 验证实例是否真实可用（删除后 list_instances 可能返回残留的幽灵记录）
+    def _instance_alive(inst):
+        sid = inst.get("IdentityStoreId")
+        if not sid:
+            return False
+        try:
+            # 尝试访问 identity store，失败说明实例已失效
+            s.client("identitystore").list_users(IdentityStoreId=sid, MaxResults=1)
+            return True
+        except Exception:
+            return False
+
+    alive_inst = None
+    if insts and not force:
+        for inst in insts:
+            if _instance_alive(inst):
+                alive_inst = inst
+                break
+
+    if alive_inst:
         return jsonify({
             "ok": True,
             "already_exists": True,
-            "instance_arn":      inst.get("InstanceArn"),
-            "identity_store_id": inst.get("IdentityStoreId"),
-            "portal_url": sso_core.build_portal_url(inst.get("IdentityStoreId")),
-            "message": "账户已存在 Identity Center 实例，无需重复开通",
+            "instance_arn":      alive_inst.get("InstanceArn"),
+            "identity_store_id": alive_inst.get("IdentityStoreId"),
+            "portal_url": sso_core.build_portal_url(alive_inst.get("IdentityStoreId")),
+            "message": "账户已存在可用的 Identity Center 实例，无需重复开通",
         })
 
     # ── 第二步：创建账户实例 ────────────────────────────────
