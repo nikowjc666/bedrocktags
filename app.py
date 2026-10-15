@@ -4228,7 +4228,9 @@ def sso_enable_sso():
         app.logger.error(f"enable_sso CreateInstance 失败: {msg} instances={raw}")
 
         # 已存在且可用：AWS 拒绝重复创建，说明确实已开通
-        if "conflict" in low or "already" in low or "exist" in low:
+        # ServiceQuotaExceededException "cannot create more than 1 instance" 也属于此类
+        if ("conflict" in low or "already" in low or "exist" in low
+                or "quota" in low or "more than 1 instance" in low):
             existing = _find("ACTIVE") or (insts[0] if insts else None)
             if existing:
                 sid = existing.get("IdentityStoreId")
