@@ -163,8 +163,9 @@ input,textarea,select{font-family:inherit;text-transform:none}
         <div class="fg" style="flex:1"><label>区域 *</label><input id="region" value="us-east-1" placeholder="us-east-1"></div>
         <div class="fg" style="flex:1"><label>session token（可选）</label><input id="tok" type="password" placeholder="临时凭证时填写" autocomplete="off"></div>
       </div>
-      <div class="fr">
+      <div class="fr" style="gap:8px">
         <button class="btn bp" onclick="whoami()">检测凭证</button>
+        <button class="btn" id="enableSsoBtn" onclick="enableSso()">一键开通 SSO</button>
       </div>
       <div id="whoamiMsg"></div>
     </div>
@@ -606,6 +607,30 @@ async function whoami(){
   }
   if (res.identity_center_error) html += '<br>⚠ '+esc(res.identity_center_error);
   setMsg("whoamiMsg", html, "ok");
+}
+
+// ── 一键开通 SSO ──────────────────────────────────────────
+async function enableSso(){
+  const btn = $("enableSsoBtn");
+  btn.disabled = true; btn.textContent = "开通中...";
+  setMsg("whoamiMsg", '<span class="sp"></span> 正在开通 IAM Identity Center（可能需要几十秒）...', "info");
+  try {
+    const res = await api("/api/sso/enable_sso", creds());
+    if (!res.ok){ setMsg("whoamiMsg", res.error, "er"); return; }
+
+    let html = res.message;
+    if (res.identity_store_id){
+      html += '<br>identity store: <strong>'+esc(res.identity_store_id)+'</strong>';
+      // 自动回填到 store_id 输入框
+      const si = document.getElementById("store_id");
+      if (si) si.value = res.identity_store_id;
+      if (res.portal_url)
+        html += ' &nbsp;|&nbsp; 登录地址: <a href="'+esc(res.portal_url)+'" target="_blank" style="color:var(--pr)">'+esc(res.portal_url)+'</a>';
+    }
+    setMsg("whoamiMsg", html, res.already_exists ? "info" : "ok");
+  } finally {
+    btn.disabled = false; btn.textContent = "一键开通 SSO";
+  }
 }
 
 // ── 预览 ──────────────────────────────────────────────────

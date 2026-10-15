@@ -4136,6 +4136,94 @@ def sso_whoami():
     return jsonify(result)
 
 
+@app.route("/api/sso/enable_sso", methods=["POST"])
+def sso_enable_sso():
+    """
+    自动开通 IAM Identity Center（账户实例）。
+
+    - 若账户已有实例，直接返回现有实例信息（幂等）。
+    - 否则调用 sso-admin:CreateInstance 创建账户实例。
+    - 创建后轮询等待实例就绪，返回 instance_arn 和 identity_store_id。
+
+    请求体:
+        access_key_id / secret_access_key / session_token / region : 凭证
+        name (可选) : 实例名称，默认 "kiro-auto"
+
+    注意:
+        - CreateInstance 只能用于独立账户或 Organizations 成员账户。
+        - Organizations 管理账户需在控制台开启组织实例，此接口会返回明确错误。
+        - 每个账户最多 1 个实例（跨所有区域）。
+    """
+    import time
+
+    data = request.get_json() or {}
+    s, err = _sso_session(data)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+
+    region = (data.get("region") or s.region_name or "").strip()
+    name   = (data.get("name") or "kiro-auto").strip()
+
+    try:
+        admin = s.client("sso-admin")
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"创建 sso-admin 客户端失败: {e}"}), 400
+
+    # ── 第一步：检查是否已有实例（幂等）──────────────────────
+    try:
+        insts = admin.list_instances().get("Instances", [])
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"查询现有实例失败: {e}"}), 500
+
+    if insts:
+        inst = insts[0]
+        return jsonify({
+            "ok": True,
+            "already_exists": True,
+            "instance_arn":      inst.get("InstanceArn"),
+            "identity_store_id": inst.get("IdentityStoreId"),
+            "portal_url": sso_core.build_portal_url(inst.get("IdentityStoreId")),
+            "message": "账户已存在 Identity Center 实例，无需重复开通",
+        })
+
+    # ── 第二步：创建账户实例 ────────────────────────────────
+    try:
+        resp = admin.create_instance(Name=name)
+        instance_arn = resp.get("InstanceArn")
+    except Exception as e:
+        msg = str(e)
+        # 管理账户走组织实例，CreateInstance 会被拒绝
+        if "organization" in msg.lower() or "management account" in msg.lower():
+            return jsonify({"ok": False, "error":
+                "该账户是 Organizations 管理账户，不支持通过 API 创建账户实例，"
+                "请在 AWS 控制台开启组织实例。原始错误: " + msg}), 400
+        return jsonify({"ok": False, "error": f"创建实例失败: {msg}"}), 500
+
+    # ── 第三步：轮询等待实例就绪，拿到 identity_store_id ──────
+    identity_store_id = None
+    for _ in range(15):  # 最多等 ~30 秒
+        try:
+            insts = admin.list_instances().get("Instances", [])
+            match = next((i for i in insts if i.get("InstanceArn") == instance_arn), None)
+            if match and match.get("IdentityStoreId"):
+                identity_store_id = match.get("IdentityStoreId")
+                break
+        except Exception:
+            pass
+        time.sleep(2)
+
+    return jsonify({
+        "ok": True,
+        "already_exists": False,
+        "instance_arn":      instance_arn,
+        "identity_store_id": identity_store_id,
+        "portal_url": sso_core.build_portal_url(identity_store_id) if identity_store_id else "",
+        "message": "Identity Center 实例已创建" + (
+            "，identity_store_id 已就绪" if identity_store_id
+            else "，但 identity_store_id 尚未就绪，请稍后点「检测凭证」刷新"),
+    })
+
+
 SSO_CONCURRENCY_DEFAULT = 8
 SSO_CONCURRENCY_MAX = 16
 
