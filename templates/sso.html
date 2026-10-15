@@ -168,6 +168,7 @@ input,textarea,select{font-family:inherit;text-transform:none}
         <button class="btn" id="enableSsoBtn" onclick="enableSso()">一键开通 SSO</button>
         <button class="btn" id="enableKiroBtn" onclick="enableKiro()">一键开通 Kiro</button>
         <button class="btn" id="enableKiroApiBtn" onclick="enableKiroApi()">开启 Kiro API</button>
+        <button class="btn" id="disableMfaBtn" onclick="disableMfa()">关闭 MFA</button>
       </div>
       <div id="whoamiMsg"></div>
     </div>
@@ -703,6 +704,20 @@ async function enableKiroApi(){
     setMsg("whoamiMsg", html, "ok");
   } finally {
     btn.disabled = false; btn.textContent = "开启 Kiro API";
+  }
+}
+
+// ── 关闭 MFA（设为「从不」）───────────────────────────────
+async function disableMfa(){
+  const btn = $("disableMfaBtn");
+  btn.disabled = true; btn.textContent = "设置中...";
+  setMsg("whoamiMsg", '<span class="sp"></span> 正在将 MFA 改为「从不」...', "info");
+  try {
+    const res = await api("/api/sso/disable_mfa", creds());
+    if (!res.ok){ setMsg("whoamiMsg", res.error, "er"); return; }
+    setMsg("whoamiMsg", esc(res.message), "ok");
+  } finally {
+    btn.disabled = false; btn.textContent = "关闭 MFA";
   }
 }
 

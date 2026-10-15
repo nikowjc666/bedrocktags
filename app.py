@@ -4336,6 +4336,103 @@ def sso_enable_kiro():
         return jsonify({"ok": False, "error": msg}), 500
 
 
+def _sso_swb_request(boto_session, region: str, target: str, payload: dict) -> dict:
+    """
+    向 sso.{region}.amazonaws.com 发 SigV4 签名请求（Coral/JSON 1.1 协议）。
+    用于 SWBService 内部操作（如 UpdateSsoConfiguration 配置 MFA），service = "sso"。
+    """
+    import json
+    import botocore.auth
+    import botocore.awsrequest
+    import urllib.request
+
+    url = f"https://sso.{region}.amazonaws.com/"
+    body = json.dumps(payload).encode()
+    app.logger.info(f"_sso_swb_request → {target} payload={json.dumps(payload)}")
+
+    credentials = boto_session.get_credentials().get_frozen_credentials()
+    request = botocore.awsrequest.AWSRequest(
+        method="POST", url=url, data=body,
+        headers={
+            "Content-Type": "application/x-amz-json-1.1",
+            "X-Amz-Target": target,
+        },
+    )
+    botocore.auth.SigV4Auth(credentials, "sso", region).add_auth(request)
+    prepared = request.prepare()
+
+    req = urllib.request.Request(
+        url=prepared.url,
+        data=prepared.body if isinstance(prepared.body, bytes) else (prepared.body or b""),
+        headers=dict(prepared.headers), method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = resp.read()
+            result = json.loads(raw) if raw else {}
+            app.logger.info(f"_sso_swb_request {target} → {resp.status} body={raw[:300]}")
+            return result
+    except urllib.error.HTTPError as e:
+        body_txt = e.read().decode(errors="replace")
+        app.logger.error(f"_sso_swb_request {target} → HTTP {e.code}: {body_txt}")
+        raise RuntimeError(f"HTTP {e.code}: {body_txt}") from e
+
+
+@app.route("/api/sso/disable_mfa", methods=["POST"])
+def sso_disable_mfa():
+    """
+    把 IAM Identity Center 的「提示用户进行 MFA」设置改为「从不（DISABLED）」。
+
+    调用 SWBService.UpdateSsoConfiguration（抓包确认）：
+        端点:   https://sso.{region}.amazonaws.com/
+        Target: SWBService.UpdateSsoConfiguration
+        service(SigV4): sso
+        关键字段: ssoConfiguration.mfaMode = "DISABLED"
+
+    请求体:
+        access_key_id / secret_access_key / session_token / region : 凭证
+        instance_arn (可选) : SSO 实例 ARN，留空自动发现
+    """
+    data = request.get_json() or {}
+    s, err = _sso_session(data)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+
+    region       = (data.get("region") or s.region_name or "").strip()
+    instance_arn = (data.get("instance_arn") or "").strip()
+
+    if not instance_arn:
+        try:
+            insts = s.client("sso-admin").list_instances().get("Instances", [])
+            if not insts:
+                return jsonify({"ok": False, "error":
+                    "未发现 Identity Center 实例，请先开通 SSO"}), 400
+            instance_arn = insts[0].get("InstanceArn")
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"查询 SSO 实例失败: {e}"}), 500
+
+    payload = {
+        "instanceArn": instance_arn,
+        "configurationType": "APP_AUTHENTICATION_CONFIGURATION",
+        "ssoConfiguration": {
+            "mfaMode": "DISABLED",
+            "noMfaSignInBehavior": "ALLOWED_WITH_ENROLLMENT",
+            "allowedMfaTypes": ["TOTP", "WEBAUTHN"],
+        },
+    }
+
+    try:
+        result = _sso_swb_request(s, region, "SWBService.UpdateSsoConfiguration", payload)
+        return jsonify({
+            "ok": True,
+            "instance_arn": instance_arn,
+            "result": result,
+            "message": "已将 MFA 设置改为「从不（DISABLED）」",
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 def _kiro_list_profiles(s, region):
     """列出 Kiro Profile，返回列表。失败返回 []。"""
     try:
