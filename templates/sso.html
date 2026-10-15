@@ -611,24 +611,40 @@ async function whoami(){
 }
 
 // ── 一键开通 SSO ──────────────────────────────────────────
-async function enableSso(){
+async function enableSso(force){
   const btn = $("enableSsoBtn");
-  btn.disabled = true; btn.textContent = "开通中...";
-  setMsg("whoamiMsg", '<span class="sp"></span> 正在开通 IAM Identity Center（可能需要几十秒）...', "info");
+  btn.disabled = true; btn.textContent = force ? "强制重建中..." : "开通中...";
+  setMsg("whoamiMsg", '<span class="sp"></span> 正在'+(force?'删除旧实例并重建':'开通')+' IAM Identity Center（可能需要几十秒）...', "info");
   try {
-    const res = await api("/api/sso/enable_sso", creds());
-    if (!res.ok){ setMsg("whoamiMsg", res.error, "er"); return; }
+    const res = await api("/api/sso/enable_sso", {...creds(), force: !!force});
+    if (!res.ok){
+      setMsg("whoamiMsg", res.error, "er");
+      return;
+    }
+
+    // 已存在但没开 force → 询问是否强制重建
+    if (res.already_exists && !force) {
+      if (confirm("检测到已存在 Identity Center 实例。\n如果控制台显示「未启用」（残留的幽灵实例），点「确定」删除旧实例并重建；\n如果确实已启用，点「取消」。")) {
+        return enableSso(true);
+      }
+      let h = res.message;
+      if (res.identity_store_id){
+        h += '<br>identity store: <strong>'+esc(res.identity_store_id)+'</strong>';
+        const si = document.getElementById("store_id"); if (si) si.value = res.identity_store_id;
+      }
+      setMsg("whoamiMsg", h, "info");
+      return;
+    }
 
     let html = res.message;
     if (res.identity_store_id){
       html += '<br>identity store: <strong>'+esc(res.identity_store_id)+'</strong>';
-      // 自动回填到 store_id 输入框
       const si = document.getElementById("store_id");
       if (si) si.value = res.identity_store_id;
       if (res.portal_url)
         html += ' &nbsp;|&nbsp; 登录地址: <a href="'+esc(res.portal_url)+'" target="_blank" style="color:var(--pr)">'+esc(res.portal_url)+'</a>';
     }
-    setMsg("whoamiMsg", html, res.already_exists ? "info" : "ok");
+    setMsg("whoamiMsg", html, "ok");
   } finally {
     btn.disabled = false; btn.textContent = "一键开通 SSO";
   }

@@ -4195,7 +4195,7 @@ def sso_enable_sso():
                 alive_inst = inst
                 break
 
-    if alive_inst:
+    if alive_inst and not force:
         return jsonify({
             "ok": True,
             "already_exists": True,
@@ -4204,6 +4204,30 @@ def sso_enable_sso():
             "portal_url": sso_core.build_portal_url(alive_inst.get("IdentityStoreId")),
             "message": "账户已存在可用的 Identity Center 实例，无需重复开通",
         })
+
+    # ── force 模式：先删除所有现有实例（含幽灵实例），再重建 ──
+    deleted_arns = []
+    if force and insts:
+        for inst in insts:
+            arn = inst.get("InstanceArn")
+            if not arn:
+                continue
+            try:
+                admin.delete_instance(InstanceArn=arn)
+                deleted_arns.append(arn)
+            except Exception as e:
+                return jsonify({"ok": False, "error":
+                    f"删除旧实例失败（{arn}）: {e}。"
+                    "若是 Organizations 管理账户的组织实例，成员账户无权删除。"}), 500
+        # 删除是异步的，等 AWS 清理
+        for _ in range(15):
+            try:
+                remain = admin.list_instances().get("Instances", [])
+                if not remain:
+                    break
+            except Exception:
+                pass
+            time.sleep(2)
 
     # ── 第二步：创建账户实例 ────────────────────────────────
     try:
@@ -4216,6 +4240,11 @@ def sso_enable_sso():
             return jsonify({"ok": False, "error":
                 "该账户是 Organizations 管理账户，不支持通过 API 创建账户实例，"
                 "请在 AWS 控制台开启组织实例。原始错误: " + msg}), 400
+        # 已存在实例（没开 force 清理，或清理还没生效）
+        if "conflict" in msg.lower() or "already" in msg.lower() or "exist" in msg.lower():
+            return jsonify({"ok": False, "error":
+                "账户已存在 Identity Center 实例但状态异常。请勾选「强制重建」"
+                "删除残留实例后重试，或在控制台手动启用。原始错误: " + msg}), 409
         return jsonify({"ok": False, "error": f"创建实例失败: {msg}"}), 500
 
     # ── 第三步：轮询等待实例就绪，拿到 identity_store_id ──────
