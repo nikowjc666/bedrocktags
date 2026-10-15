@@ -4317,10 +4317,12 @@ def sso_enable_kiro():
 
     try:
         result = _kiro_management_request(s, region, "POST", "/CreateProfile", payload, service="codewhisperer")
+        prof_arn = (result or {}).get("profileArn") or (result or {}).get("profile", {}).get("arn")
         return jsonify({
             "ok": True,
             "profile_name": profile_name,
             "instance_arn": instance_arn,
+            "profile_arn":  prof_arn,
             "result": result,
             "message": f"Kiro Profile「{profile_name}」已开通",
         })
@@ -4332,6 +4334,107 @@ def sso_enable_kiro():
                             "profile_name": profile_name,
                             "message": "Kiro Profile 已存在，无需重复开通"})
         return jsonify({"ok": False, "error": msg}), 500
+
+
+def _kiro_list_profiles(s, region):
+    """列出 Kiro Profile，返回列表。失败返回 []。"""
+    try:
+        r = _kiro_management_request(s, region, "POST", "/ListProfiles", {}, service="codewhisperer")
+        return r.get("profiles") or r.get("Profiles") or []
+    except Exception as e:
+        app.logger.error(f"ListProfiles 失败: {e}")
+        return []
+
+
+@app.route("/api/sso/enable_kiro_api", methods=["POST"])
+def sso_enable_kiro_api():
+    """
+    在 Kiro Profile 设置里开启「API Key」功能（控制台 Settings → API 开关）。
+
+    调用 KiroControlPlaneService.UpdateProfile（抓包确认）：
+        端点:   https://management.{region}.kiro.dev/
+        Target: KiroControlPlaneService.UpdateProfile
+        service(SigV4): codewhisperer
+        关键字段: optInFeatures.apiKeys.toggle = "ON"
+
+    请求体:
+        access_key_id / secret_access_key / session_token / region : 凭证
+        profile_arn  (可选) : 目标 Profile ARN，留空自动从 ListProfiles 发现
+        instance_arn (可选) : SSO 实例 ARN，留空自动发现
+        sso_region   (可选) : 默认同 region
+    """
+    data = request.get_json() or {}
+    s, err = _sso_session(data)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+
+    region       = (data.get("region") or s.region_name or "").strip()
+    profile_arn  = (data.get("profile_arn") or "").strip()
+    instance_arn = (data.get("instance_arn") or "").strip()
+    sso_region   = (data.get("sso_region") or region).strip()
+
+    # ── 自动发现 Profile ──────────────────────────────────
+    prof = None
+    profiles = _kiro_list_profiles(s, region)
+    if profile_arn:
+        prof = next((p for p in profiles if (p.get("arn") or p.get("profileArn")) == profile_arn), None)
+    elif profiles:
+        prof = profiles[0]
+
+    if not prof and not profile_arn:
+        return jsonify({"ok": False, "error":
+            "未发现 Kiro Profile，请先点「一键开通 Kiro」"}), 400
+
+    profile_arn  = profile_arn or prof.get("arn") or prof.get("profileArn")
+    profile_name = (prof.get("name") or prof.get("profileName")) if prof else f"KiroProfile-{region}"
+
+    # ── 自动发现 SSO 实例 ──────────────────────────────────
+    if not instance_arn:
+        # 优先用 profile 里带的 identitySource
+        src = (prof or {}).get("identitySource", {}).get("ssoIdentitySource", {}) if prof else {}
+        instance_arn = src.get("instanceArn", "")
+        sso_region   = src.get("ssoRegion", "") or sso_region
+    if not instance_arn:
+        try:
+            insts = s.client("sso-admin").list_instances().get("Instances", [])
+            if insts:
+                instance_arn = insts[0].get("InstanceArn")
+        except Exception:
+            pass
+
+    payload = {
+        "profileArn":  profile_arn,
+        "profileName": profile_name,
+        "activeFunctionalities": [
+            "ANALYSIS", "CONVERSATIONS", "TASK_ASSIST", "TRANSFORMATIONS", "COMPLETIONS"
+        ],
+        "identitySource": {
+            "ssoIdentitySource": {
+                "instanceArn": instance_arn,
+                "ssoRegion":   sso_region or region,
+            }
+        },
+        "optInFeatures": {
+            "optInFeaturesType": "KIRO",
+            "apiKeys":            {"toggle": "ON"},
+            "dashboardAnalytics": {"toggle": "ON"},
+            "overageConfiguration": {"overageStatus": "DISABLED"},
+        },
+        "referenceTrackerConfiguration": {"recommendationsWithReferences": "ALLOW"},
+        "resourcePolicy": {"effect": "DENY"},
+    }
+
+    try:
+        result = _kiro_management_request(s, region, "POST", "/UpdateProfile", payload, service="codewhisperer")
+        return jsonify({
+            "ok": True,
+            "profile_arn": profile_arn,
+            "profile_name": profile_name,
+            "result": result,
+            "message": "已开启 Kiro API Key 功能（apiKeys=ON）",
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 SSO_CONCURRENCY_DEFAULT = 8
@@ -4423,6 +4526,7 @@ def _kiro_management_request(boto_session, region: str, method: str, path: str, 
         "/ListAssignments":  "KiroControlPlaneQDeveloperService.ListAssignments",
         # Profile 管理用的是 KiroControlPlaneService（不带 QDeveloper）
         "/CreateProfile":    "KiroControlPlaneService.CreateProfile",
+        "/UpdateProfile":    "KiroControlPlaneService.UpdateProfile",
         "/ListProfiles":     "KiroControlPlaneService.ListProfiles",
     }
     target = _SERVICE_TARGET_MAP.get(path, f"KiroControlPlaneQDeveloperService.{path.lstrip('/')}")

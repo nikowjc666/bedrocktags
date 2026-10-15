@@ -167,6 +167,7 @@ input,textarea,select{font-family:inherit;text-transform:none}
         <button class="btn bp" onclick="whoami()">检测凭证</button>
         <button class="btn" id="enableSsoBtn" onclick="enableSso()">一键开通 SSO</button>
         <button class="btn" id="enableKiroBtn" onclick="enableKiro()">一键开通 Kiro</button>
+        <button class="btn" id="enableKiroApiBtn" onclick="enableKiroApi()">开启 Kiro API</button>
       </div>
       <div id="whoamiMsg"></div>
     </div>
@@ -680,9 +681,28 @@ async function enableKiro(){
     let html = res.message;
     if (res.profile_name) html += '<br>Profile: <strong>'+esc(res.profile_name)+'</strong>';
     if (res.instance_arn) html += '<br>SSO 实例: <span style="font-size:10px;color:var(--t2)">'+esc(res.instance_arn)+'</span>';
+    if (res.profile_arn) { window._kiroProfileArn = res.profile_arn; html += '<br>Profile ARN: <span style="font-size:10px;color:var(--t2)">'+esc(res.profile_arn)+'</span>'; }
     setMsg("whoamiMsg", html, res.already_exists ? "info" : "ok");
   } finally {
     btn.disabled = false; btn.textContent = "一键开通 Kiro";
+  }
+}
+
+// ── 开启 Kiro API Key 功能 ────────────────────────────────
+async function enableKiroApi(){
+  const btn = $("enableKiroApiBtn");
+  btn.disabled = true; btn.textContent = "开启中...";
+  setMsg("whoamiMsg", '<span class="sp"></span> 正在开启 Kiro API Key 功能...', "info");
+  try {
+    const body = {...creds()};
+    if (window._kiroProfileArn) body.profile_arn = window._kiroProfileArn;
+    const res = await api("/api/sso/enable_kiro_api", body);
+    if (!res.ok){ setMsg("whoamiMsg", res.error, "er"); return; }
+    let html = res.message;
+    if (res.profile_arn) html += '<br>Profile: <span style="font-size:10px;color:var(--t2)">'+esc(res.profile_arn)+'</span>';
+    setMsg("whoamiMsg", html, "ok");
+  } finally {
+    btn.disabled = false; btn.textContent = "开启 Kiro API";
   }
 }
 
