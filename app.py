@@ -4199,17 +4199,7 @@ def sso_enable_sso():
     def _find(status):
         return next((i for i in insts if (i.get("Status") or "").upper() == status), None)
 
-    active = _find("ACTIVE")
-    if active:
-        sid = active.get("IdentityStoreId")
-        return jsonify({
-            "ok": True, "state": "ACTIVE", "instances": raw,
-            "instance_arn": active.get("InstanceArn"),
-            "identity_store_id": sid,
-            "portal_url": sso_core.build_portal_url(sid) if sid else "",
-            "message": "Identity Center 已开通（ACTIVE）",
-        })
-
+    # 正在创建中：前端继续轮询
     creating = _find("CREATE_IN_PROGRESS")
     if creating:
         return jsonify({
@@ -4218,26 +4208,46 @@ def sso_enable_sso():
             "message": "Identity Center 正在开通中（CREATE_IN_PROGRESS）",
         })
 
+    # 正在删除中：前端继续轮询，删完下一轮会走到创建
     if _find("DELETE_IN_PROGRESS"):
         return jsonify({
             "ok": True, "state": "DELETE_IN_PROGRESS", "instances": raw,
             "message": "上一个实例还在删除中（DELETE_IN_PROGRESS），删除完成后会自动开通",
         })
 
-    # ── 创建账户实例（等同控制台「启用」按钮）──────────────────
+    # ── 关键：以 CreateInstance 的结果为准 ──────────────────
+    # list_instances 可能返回「账号未真正启用但残留」的 ACTIVE 幽灵记录，
+    # 不能据此判定已开通。直接尝试创建：
+    #   - 成功         → 本来就没开通，现在真开通了
+    #   - already/conflict → AWS 确认实例确实存在且可用 → 视为已开通，返回它
     try:
         resp = admin.create_instance(Name=name)
     except Exception as e:
         msg = str(e)
-        app.logger.error(f"enable_sso CreateInstance 失败: {msg} instances={raw}")
-        hint = ""
         low = msg.lower()
+        app.logger.error(f"enable_sso CreateInstance 失败: {msg} instances={raw}")
+
+        # 已存在且可用：AWS 拒绝重复创建，说明确实已开通
+        if "conflict" in low or "already" in low or "exist" in low:
+            existing = _find("ACTIVE") or (insts[0] if insts else None)
+            if existing:
+                sid = existing.get("IdentityStoreId")
+                return jsonify({
+                    "ok": True, "state": "ACTIVE", "instances": raw,
+                    "instance_arn": existing.get("InstanceArn"),
+                    "identity_store_id": sid,
+                    "portal_url": sso_core.build_portal_url(sid) if sid else "",
+                    "message": "AWS 返回实例已存在，视为已开通（ACTIVE）",
+                })
+            return jsonify({"ok": False, "state": "ERROR", "instances": raw,
+                            "error": "AWS 报实例已存在但查询不到，请在控制台确认。原始错误: " + msg}), 409
+
         if "organization" in low or "management account" in low:
-            hint = "该账户可能是 Organizations 管理账户，需在控制台开启组织实例。"
-        elif "conflict" in low or "already" in low or "exist" in low:
-            hint = "AWS 认为账户下仍有实例，见下方实例状态。"
+            return jsonify({"ok": False, "state": "ERROR", "instances": raw,
+                "error": "该账户可能是 Organizations 管理账户，需在控制台开启组织实例。原始错误: " + msg}), 400
+
         return jsonify({"ok": False, "state": "ERROR", "instances": raw,
-                        "error": f"CreateInstance 失败: {msg}" + (f"（{hint}）" if hint else "")}), 500
+                        "error": f"CreateInstance 失败: {msg}"}), 500
 
     app.logger.info(f"enable_sso CreateInstance OK: {resp.get('InstanceArn')}")
     return jsonify({
