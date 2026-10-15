@@ -4163,7 +4163,6 @@ def sso_enable_sso():
 
     region = (data.get("region") or s.region_name or "").strip()
     name   = (data.get("name") or "kiro-auto").strip()
-    force  = bool(data.get("force"))  # 强制开通，忽略残留的幽灵实例
 
     try:
         admin = s.client("sso-admin")
@@ -4176,58 +4175,51 @@ def sso_enable_sso():
     except Exception as e:
         return jsonify({"ok": False, "error": f"查询现有实例失败: {e}"}), 500
 
-    # 验证实例是否真实可用（删除后 list_instances 可能返回残留的幽灵记录）
-    def _instance_alive(inst):
-        sid = inst.get("IdentityStoreId")
-        if not sid:
-            return False
-        try:
-            # 尝试访问 identity store，失败说明实例已失效
-            s.client("identitystore").list_users(IdentityStoreId=sid, MaxResults=1)
-            return True
-        except Exception:
-            return False
+    # 按 Status 判断，而不是「列得出来就算开通」：
+    #   ACTIVE             → 已开通，直接返回
+    #   CREATE_IN_PROGRESS → 正在开通，返回提示
+    #   DELETE_IN_PROGRESS → 刚关闭还在删除中，等删完再创建
+    #   CREATE_FAILED      → 当作没开通，尝试重新创建
+    def _status_map(lst):
+        return {i.get("InstanceArn"): (i.get("Status") or "").upper() for i in lst}
 
-    alive_inst = None
-    if insts and not force:
-        for inst in insts:
-            if _instance_alive(inst):
-                alive_inst = inst
-                break
-
-    if alive_inst and not force:
+    active = next((i for i in insts if (i.get("Status") or "").upper() == "ACTIVE"), None)
+    if active:
         return jsonify({
             "ok": True,
             "already_exists": True,
-            "instance_arn":      alive_inst.get("InstanceArn"),
-            "identity_store_id": alive_inst.get("IdentityStoreId"),
-            "portal_url": sso_core.build_portal_url(alive_inst.get("IdentityStoreId")),
-            "message": "账户已存在可用的 Identity Center 实例，无需重复开通",
+            "status": "ACTIVE",
+            "instance_arn":      active.get("InstanceArn"),
+            "identity_store_id": active.get("IdentityStoreId"),
+            "portal_url": sso_core.build_portal_url(active.get("IdentityStoreId")),
+            "message": "Identity Center 已开通（状态 ACTIVE），无需重复开通",
         })
 
-    # ── force 模式：先删除所有现有实例（含幽灵实例），再重建 ──
-    deleted_arns = []
-    if force and insts:
-        for inst in insts:
-            arn = inst.get("InstanceArn")
-            if not arn:
-                continue
+    creating = next((i for i in insts if (i.get("Status") or "").upper() == "CREATE_IN_PROGRESS"), None)
+    if creating:
+        return jsonify({
+            "ok": True,
+            "already_exists": True,
+            "status": "CREATE_IN_PROGRESS",
+            "instance_arn":      creating.get("InstanceArn"),
+            "identity_store_id": creating.get("IdentityStoreId"),
+            "message": "Identity Center 正在开通中（CREATE_IN_PROGRESS），请稍后点「检测凭证」确认",
+        })
+
+    # 刚关闭的实例还在删除：轮询等它消失（最多约 60 秒，避免 nginx 超时）
+    if any(st == "DELETE_IN_PROGRESS" for st in _status_map(insts).values()):
+        for _ in range(20):
+            time.sleep(3)
             try:
-                admin.delete_instance(InstanceArn=arn)
-                deleted_arns.append(arn)
-            except Exception as e:
-                return jsonify({"ok": False, "error":
-                    f"删除旧实例失败（{arn}）: {e}。"
-                    "若是 Organizations 管理账户的组织实例，成员账户无权删除。"}), 500
-        # 删除是异步的，等 AWS 清理
-        for _ in range(15):
-            try:
-                remain = admin.list_instances().get("Instances", [])
-                if not remain:
-                    break
+                insts = admin.list_instances().get("Instances", [])
             except Exception:
-                pass
-            time.sleep(2)
+                continue
+            if not any(st == "DELETE_IN_PROGRESS" for st in _status_map(insts).values()):
+                break
+        else:
+            return jsonify({"ok": False, "status": "DELETE_IN_PROGRESS", "error":
+                "上一个 Identity Center 实例还在删除中（DELETE_IN_PROGRESS），"
+                "AWS 删除完成前无法重新开通。请过几分钟再点「一键开通 SSO」。"}), 409
 
     # ── 第二步：创建账户实例 ────────────────────────────────
     try:
@@ -4240,11 +4232,12 @@ def sso_enable_sso():
             return jsonify({"ok": False, "error":
                 "该账户是 Organizations 管理账户，不支持通过 API 创建账户实例，"
                 "请在 AWS 控制台开启组织实例。原始错误: " + msg}), 400
-        # 已存在实例（没开 force 清理，或清理还没生效）
+        # 已存在实例：把当前各实例的状态带回去，方便判断
         if "conflict" in msg.lower() or "already" in msg.lower() or "exist" in msg.lower():
+            states = ", ".join(f"{(a or '').split('/')[-1]}={st}" for a, st in _status_map(insts).items())
             return jsonify({"ok": False, "error":
-                "账户已存在 Identity Center 实例但状态异常。请勾选「强制重建」"
-                "删除残留实例后重试，或在控制台手动启用。原始错误: " + msg}), 409
+                f"AWS 拒绝创建：账户下仍有实例（{states or '无'}）。"
+                "若状态为 DELETE_IN_PROGRESS，请等删除完成后再试。原始错误: " + msg}), 409
         return jsonify({"ok": False, "error": f"创建实例失败: {msg}"}), 500
 
     # ── 第三步：轮询等待实例就绪，拿到 identity_store_id ──────
