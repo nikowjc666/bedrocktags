@@ -4543,14 +4543,13 @@ def sso_enable_kiro_api():
         except Exception:
             pass
 
-    # 基于现有 profile 完整回传，只把 apiKeys 改成 ON（部分字段更新会被后端忽略）
+    # 基于现有 profile 完整回传，只把 apiKeys 改成 ON
     existing_feats = (prof or {}).get("optInFeatures", {}) or {}
+    # 关键：optInFeaturesType 在 payload 顶层，不在 optInFeatures 内部！
     opt_in = {
-        "optInFeaturesType": "KIRO",
         "apiKeys":            {"toggle": "ON"},
         "dashboardAnalytics": existing_feats.get("dashboardAnalytics") or {"toggle": "ON"},
     }
-    # overageConfiguration 必须用现有值原样带回（缺了不生效，乱填会报 KIRO 校验错）
     if existing_feats.get("overageConfiguration"):
         opt_in["overageConfiguration"] = existing_feats["overageConfiguration"]
 
@@ -4571,6 +4570,7 @@ def sso_enable_kiro_api():
             }
         },
         "optInFeatures": opt_in,
+        "optInFeaturesType": "KIRO",   # ← 顶层字段，抓包确认
         "referenceTrackerConfiguration": ref_cfg,
         "resourcePolicy": res_pol,
     }
