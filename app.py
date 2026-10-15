@@ -4318,6 +4318,8 @@ def sso_enable_kiro():
     try:
         result = _kiro_management_request(s, region, "POST", "/CreateProfile", payload, service="codewhisperer")
         prof_arn = (result or {}).get("profileArn") or (result or {}).get("profile", {}).get("arn")
+        if prof_arn:
+            _kiro_profile_cache_set(s, region, prof_arn)  # 缓存供 enable_kiro_api 复用
         return jsonify({
             "ok": True,
             "profile_name": profile_name,
@@ -4334,6 +4336,41 @@ def sso_enable_kiro():
                             "profile_name": profile_name,
                             "message": "Kiro Profile 已存在，无需重复开通"})
         return jsonify({"ok": False, "error": msg}), 500
+
+
+# ── Kiro profileArn 缓存（按 账号ID:region 存，供 enable_kiro_api 复用）──
+_KIRO_PROFILE_CACHE_FILE = "outputs/kiro_profiles.json"
+
+def _kiro_profile_cache_key(s, region):
+    try:
+        acct = s.client("sts").get_caller_identity().get("Account", "")
+    except Exception:
+        acct = ""
+    return f"{acct}:{region}"
+
+def _kiro_profile_cache_set(s, region, profile_arn):
+    try:
+        import os
+        os.makedirs("outputs", exist_ok=True)
+        cache = {}
+        if os.path.exists(_KIRO_PROFILE_CACHE_FILE):
+            with open(_KIRO_PROFILE_CACHE_FILE, "r", encoding="utf-8") as f:
+                cache = json.load(f)
+        cache[_kiro_profile_cache_key(s, region)] = profile_arn
+        with open(_KIRO_PROFILE_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(cache, f)
+    except Exception as e:
+        app.logger.error(f"缓存 profileArn 失败: {e}")
+
+def _kiro_profile_cache_get(s, region):
+    try:
+        import os
+        if os.path.exists(_KIRO_PROFILE_CACHE_FILE):
+            with open(_KIRO_PROFILE_CACHE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f).get(_kiro_profile_cache_key(s, region))
+    except Exception:
+        pass
+    return None
 
 
 def _sso_swb_request(boto_session, region: str, target: str, payload: dict) -> dict:
@@ -4436,17 +4473,10 @@ def sso_disable_mfa():
 def _kiro_list_profiles(s, region):
     """列出 Kiro Profile，返回列表。失败返回 []。"""
     try:
+        # 抓包确认：请求体是 {"optInFeaturesType": "KIRO"}
         r = _kiro_management_request(s, region, "POST", "/ListProfiles",
-                                     {"maxResults": 100}, service="codewhisperer")
-        app.logger.info(f"ListProfiles 原始响应: {json.dumps(r)[:800]}")
-        # 兼容多种字段名
-        for key in ("profiles", "Profiles", "profileList", "items", "Items"):
-            if isinstance(r.get(key), list):
-                return r[key]
-        # 整个响应就是列表的情况
-        if isinstance(r, list):
-            return r
-        return []
+                                     {"optInFeaturesType": "KIRO"}, service="codewhisperer")
+        return r.get("profiles") or []
     except Exception as e:
         app.logger.error(f"ListProfiles 失败: {e}")
         return []
@@ -4479,25 +4509,30 @@ def sso_enable_kiro_api():
     instance_arn = (data.get("instance_arn") or "").strip()
     sso_region   = (data.get("sso_region") or region).strip()
 
-    # ── 自动发现 Profile ──────────────────────────────────
+    # ── 发现 Profile ARN：前端传入 → ListProfiles → 缓存 ──────
     prof = None
     profiles = _kiro_list_profiles(s, region)
     if profile_arn:
         prof = next((p for p in profiles if (p.get("arn") or p.get("profileArn")) == profile_arn), None)
     elif profiles:
         prof = profiles[0]
+        profile_arn = prof.get("arn") or prof.get("profileArn")
 
-    if not prof and not profile_arn:
+    # ListProfiles 发现不到时，回退到「一键开通 Kiro」缓存的 profileArn
+    if not profile_arn:
+        profile_arn = _kiro_profile_cache_get(s, region)
+
+    if not profile_arn:
         return jsonify({"ok": False, "error":
-            "未发现 Kiro Profile，请先点「一键开通 Kiro」"}), 400
+            "未发现 Kiro Profile ARN，请先点「一键开通 Kiro」（会自动记录 ARN）"}), 400
 
-    profile_arn  = profile_arn or prof.get("arn") or prof.get("profileArn")
     profile_name = (prof.get("name") or prof.get("profileName")) if prof else f"KiroProfile-{region}"
 
     # ── 自动发现 SSO 实例 ──────────────────────────────────
-    if not instance_arn:
-        # 优先用 profile 里带的 identitySource
-        src = (prof or {}).get("identitySource", {}).get("ssoIdentitySource", {}) if prof else {}
+    if not instance_arn and prof:
+        # ListProfiles 响应里是 identityDetails.ssoIdentityDetails
+        src = (prof.get("identityDetails", {}).get("ssoIdentityDetails", {})
+               or prof.get("identitySource", {}).get("ssoIdentitySource", {}))
         instance_arn = src.get("instanceArn", "")
         sso_region   = src.get("ssoRegion", "") or sso_region
     if not instance_arn:
