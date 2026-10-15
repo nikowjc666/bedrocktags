@@ -4281,7 +4281,7 @@ def sso_enable_kiro():
     }
 
     try:
-        result = _kiro_management_request(s, region, "POST", "/CreateProfile", payload)
+        result = _kiro_management_request(s, region, "POST", "/CreateProfile", payload, service="codewhisperer")
         return jsonify({
             "ok": True,
             "profile_name": profile_name,
@@ -4372,7 +4372,7 @@ def _kiro_request(boto_session, region: str, method: str, path: str, payload: di
         raise
 
 
-def _kiro_management_request(boto_session, region: str, method: str, path: str, payload: dict) -> dict:
+def _kiro_management_request(boto_session, region: str, method: str, path: str, payload: dict, service: str = "q") -> dict:
     """
     向 management.{region}.kiro.dev 发 SigV4 签名请求（Coral/JSON 1.0 协议）。
     用于订阅删除等管理操作（DeleteAssignment 等），service = "q"。
@@ -4407,7 +4407,7 @@ def _kiro_management_request(boto_session, region: str, method: str, path: str, 
             "x-amz-target": target,
         },
     )
-    botocore.auth.SigV4Auth(credentials, "q", region).add_auth(request)
+    botocore.auth.SigV4Auth(credentials, service, region).add_auth(request)
     prepared = request.prepare()
 
     req = urllib.request.Request(
