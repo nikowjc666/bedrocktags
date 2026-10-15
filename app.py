@@ -4346,7 +4346,7 @@ def _sso_swb_request(boto_session, region: str, target: str, payload: dict) -> d
     import botocore.awsrequest
     import urllib.request
 
-    url = f"https://sso.{region}.amazonaws.com/"
+    url = f"https://sso.{region}.amazonaws.com/control/"
     body = json.dumps(payload).encode()
     app.logger.info(f"_sso_swb_request → {target} payload={json.dumps(payload)}")
 
