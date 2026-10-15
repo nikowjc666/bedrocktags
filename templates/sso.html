@@ -441,7 +441,20 @@ function G(id){ return document.getElementById(id).value.trim(); }
 function G2(id){ return document.getElementById(id).checked; }
 function setMsg(id, html, cls){ var el=document.getElementById(id); el.innerHTML='<div class="st '+cls+'">'+html+'</div>'; }
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-async function api(path, body){ const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); return r.json(); }
+async function api(path, body){
+  let r;
+  try {
+    r = await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  } catch(e) {
+    return {ok:false, error:"网络请求失败: "+e.message};
+  }
+  const text = await r.text();
+  try { return JSON.parse(text); }
+  catch(e) {
+    // 网关超时 / 502 等返回的是 HTML，不能静默吞掉
+    return {ok:false, error:"服务器返回非 JSON（HTTP "+r.status+"），可能是网关超时。片段: "+text.replace(/<[^>]+>/g," ").trim().slice(0,150)};
+  }
+}
 
 // ── 个性化订阅配置 ⭐ 新增 ──────────────────────────────────
 // localStorage key，刷新后恢复配置
@@ -603,7 +616,10 @@ async function whoami(){
   window._accountId = res.account || "";  // 保存账户ID供导出使用
   let html = '账号: <strong>'+esc(res.account)+'</strong> &nbsp;|&nbsp; 身份: '+esc(res.arn)+' &nbsp;|&nbsp; 区域: '+esc(res.region);
   if (res.identity_center && res.identity_center.length){
-    html += '<br>identity store: <strong>'+esc(res.identity_center[0].identity_store_id)+'</strong>';
+    const ic0 = res.identity_center[0];
+    html += '<br>identity store: <strong>'+esc(ic0.identity_store_id)+'</strong>';
+    if (ic0.status) html += ' &nbsp;|&nbsp; 状态: <strong style="color:'+(ic0.status==='ACTIVE'?'var(--ok)':'var(--wa)')+'">'+esc(ic0.status)+'</strong>';
+    if (ic0.owner_account_id) html += ' &nbsp;|&nbsp; owner: '+esc(ic0.owner_account_id);
     html += ' &nbsp;|&nbsp; 登录地址: <a href="'+esc(res.identity_center[0].portal_url)+'" target="_blank" style="color:var(--pr)">'+esc(res.identity_center[0].portal_url)+'</a>';
   }
   if (res.identity_center_error) html += '<br>⚠ '+esc(res.identity_center_error);
@@ -614,23 +630,40 @@ async function whoami(){
 async function enableSso(){
   const btn = $("enableSsoBtn");
   btn.disabled = true; btn.textContent = "开通中...";
-  setMsg("whoamiMsg", '<span class="sp"></span> 正在开通 IAM Identity Center（如上一个实例还在删除中，会先等待，最长约 1 分钟）...', "info");
-  try {
-    const res = await api("/api/sso/enable_sso", creds());
-    if (!res.ok){
-      setMsg("whoamiMsg", res.error, res.status === "DELETE_IN_PROGRESS" ? "wa" : "er");
-      return;
-    }
+  // 实例状态表，失败或等待时都显示，能直接看到 AWS 返回的真实状态
+  const instTable = list => (list && list.length)
+    ? '<br><span style="font-size:11px;color:var(--t2)">当前实例: ' + list.map(i =>
+        esc((i.instance_arn||'').split('/').pop()) + ' = <b>' + esc(i.status||'?') + '</b>' +
+        (i.owner_account_id ? ' (owner ' + esc(i.owner_account_id) + ')' : '')).join('；') + '</span>'
+    : '<br><span style="font-size:11px;color:var(--t2)">当前实例: 无</span>';
 
-    let html = res.message;
-    if (res.identity_store_id){
-      html += '<br>identity store: <strong>'+esc(res.identity_store_id)+'</strong>';
-      const si = document.getElementById("store_id");
-      if (si) si.value = res.identity_store_id;
-      if (res.portal_url)
-        html += ' &nbsp;|&nbsp; 登录地址: <a href="'+esc(res.portal_url)+'" target="_blank" style="color:var(--pr)">'+esc(res.portal_url)+'</a>';
+  try {
+    // 每 5 秒调用一次接口，最多约 10 分钟；后端每次只查一次/创建一次，不会超时
+    const started = Date.now();
+    for (let n = 1; ; n++) {
+      const res = await api("/api/sso/enable_sso", creds());
+      if (!res.ok) { setMsg("whoamiMsg", esc(res.error) + instTable(res.instances), "er"); return; }
+
+      if (res.state === "ACTIVE") {
+        let html = esc(res.message);
+        if (res.identity_store_id) {
+          html += '<br>identity store: <strong>'+esc(res.identity_store_id)+'</strong>';
+          const si = document.getElementById("store_id"); if (si) si.value = res.identity_store_id;
+          if (res.portal_url)
+            html += ' &nbsp;|&nbsp; 登录地址: <a href="'+esc(res.portal_url)+'" target="_blank" style="color:var(--pr)">'+esc(res.portal_url)+'</a>';
+        }
+        setMsg("whoamiMsg", html, "ok");
+        return;
+      }
+
+      const secs = Math.round((Date.now() - started) / 1000);
+      if (secs > 600) {
+        setMsg("whoamiMsg", '等待超过 10 分钟仍未完成，请稍后再点一次。' + esc(res.message||'') + instTable(res.instances), "wa");
+        return;
+      }
+      setMsg("whoamiMsg", '<span class="sp"></span> ' + esc(res.message||'') + '（已等待 ' + secs + ' 秒，第 ' + n + ' 次检查）' + instTable(res.instances), "info");
+      await new Promise(r => setTimeout(r, 5000));
     }
-    setMsg("whoamiMsg", html, res.already_exists ? "info" : "ok");
   } finally {
     btn.disabled = false; btn.textContent = "一键开通 SSO";
   }
