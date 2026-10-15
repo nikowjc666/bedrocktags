@@ -166,6 +166,7 @@ input,textarea,select{font-family:inherit;text-transform:none}
       <div class="fr" style="gap:8px">
         <button class="btn bp" onclick="whoami()">检测凭证</button>
         <button class="btn" id="enableSsoBtn" onclick="enableSso()">一键开通 SSO</button>
+        <button class="btn" id="enableKiroBtn" onclick="enableKiro()">一键开通 Kiro</button>
       </div>
       <div id="whoamiMsg"></div>
     </div>
@@ -630,6 +631,23 @@ async function enableSso(){
     setMsg("whoamiMsg", html, res.already_exists ? "info" : "ok");
   } finally {
     btn.disabled = false; btn.textContent = "一键开通 SSO";
+  }
+}
+
+// ── 一键开通 Kiro Profile ─────────────────────────────────
+async function enableKiro(){
+  const btn = $("enableKiroBtn");
+  btn.disabled = true; btn.textContent = "开通中...";
+  setMsg("whoamiMsg", '<span class="sp"></span> 正在开通 Kiro Profile...', "info");
+  try {
+    const res = await api("/api/sso/enable_kiro", creds());
+    if (!res.ok){ setMsg("whoamiMsg", res.error, "er"); return; }
+    let html = res.message;
+    if (res.profile_name) html += '<br>Profile: <strong>'+esc(res.profile_name)+'</strong>';
+    if (res.instance_arn) html += '<br>SSO 实例: <span style="font-size:10px;color:var(--t2)">'+esc(res.instance_arn)+'</span>';
+    setMsg("whoamiMsg", html, res.already_exists ? "info" : "ok");
+  } finally {
+    btn.disabled = false; btn.textContent = "一键开通 Kiro";
   }
 }
 

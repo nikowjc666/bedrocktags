@@ -4224,6 +4224,81 @@ def sso_enable_sso():
     })
 
 
+@app.route("/api/sso/enable_kiro", methods=["POST"])
+def sso_enable_kiro():
+    """
+    自动开通 Kiro Profile（相当于控制台的 "Sign up for Kiro / Enable"）。
+
+    调用私有接口 KiroControlPlaneService.CreateProfile（抓包确认）：
+        端点:   https://management.{region}.kiro.dev/
+        Target: KiroControlPlaneService.CreateProfile
+        service(SigV4): q
+
+    请求体:
+        access_key_id / secret_access_key / session_token / region : 凭证
+        profile_name (可选) : Profile 名称，默认 KiroProfile-{region}
+        instance_arn (可选) : SSO 实例 ARN，留空自动从 list_instances 发现
+        sso_region   (可选) : SSO 实例所在区域，默认同 region
+    """
+    import uuid
+
+    data = request.get_json() or {}
+    s, err = _sso_session(data)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+
+    region       = (data.get("region") or s.region_name or "").strip()
+    profile_name = (data.get("profile_name") or f"KiroProfile-{region}").strip()
+    instance_arn = (data.get("instance_arn") or "").strip()
+    sso_region   = (data.get("sso_region") or region).strip()
+
+    # ── 自动发现 SSO 实例 ARN（若未传）──────────────────────
+    if not instance_arn:
+        try:
+            insts = s.client("sso-admin").list_instances().get("Instances", [])
+            if not insts:
+                return jsonify({"ok": False, "error":
+                    "未发现 Identity Center 实例，请先点「一键开通 SSO」"}), 400
+            instance_arn = insts[0].get("InstanceArn")
+            sso_region   = sso_region or (instance_arn.split(":")[3] if instance_arn else region)
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"查询 SSO 实例失败: {e}"}), 500
+
+    payload = {
+        "profileName": profile_name,
+        "activeFunctionalities": [
+            "ANALYSIS", "CONVERSATIONS", "TASK_ASSIST", "TRANSFORMATIONS", "COMPLETIONS"
+        ],
+        "clientToken": str(uuid.uuid4()),
+        "identitySource": {
+            "ssoIdentitySource": {
+                "instanceArn": instance_arn,
+                "ssoRegion":   sso_region,
+            }
+        },
+        "optInFeatures": {"dashboardAnalytics": {"toggle": "ON"}},
+        "referenceTrackerConfiguration": {"recommendationsWithReferences": "ALLOW"},
+    }
+
+    try:
+        result = _kiro_management_request(s, region, "POST", "/CreateProfile", payload)
+        return jsonify({
+            "ok": True,
+            "profile_name": profile_name,
+            "instance_arn": instance_arn,
+            "result": result,
+            "message": f"Kiro Profile「{profile_name}」已开通",
+        })
+    except Exception as e:
+        msg = str(e)
+        # Profile 已存在时后端通常返回冲突错误，视为成功（幂等）
+        if "already" in msg.lower() or "exist" in msg.lower() or "conflict" in msg.lower():
+            return jsonify({"ok": True, "already_exists": True,
+                            "profile_name": profile_name,
+                            "message": "Kiro Profile 已存在，无需重复开通"})
+        return jsonify({"ok": False, "error": msg}), 500
+
+
 SSO_CONCURRENCY_DEFAULT = 8
 SSO_CONCURRENCY_MAX = 16
 
@@ -4311,6 +4386,9 @@ def _kiro_management_request(boto_session, region: str, method: str, path: str, 
         "/DeleteAssignment": "KiroControlPlaneQDeveloperService.DeleteAssignment",
         "/CreateAssignment": "KiroControlPlaneQDeveloperService.CreateAssignment",
         "/ListAssignments":  "KiroControlPlaneQDeveloperService.ListAssignments",
+        # Profile 管理用的是 KiroControlPlaneService（不带 QDeveloper）
+        "/CreateProfile":    "KiroControlPlaneService.CreateProfile",
+        "/ListProfiles":     "KiroControlPlaneService.ListProfiles",
     }
     target = _SERVICE_TARGET_MAP.get(path, f"KiroControlPlaneQDeveloperService.{path.lstrip('/')}")
 
