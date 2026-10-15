@@ -4436,8 +4436,17 @@ def sso_disable_mfa():
 def _kiro_list_profiles(s, region):
     """列出 Kiro Profile，返回列表。失败返回 []。"""
     try:
-        r = _kiro_management_request(s, region, "POST", "/ListProfiles", {}, service="codewhisperer")
-        return r.get("profiles") or r.get("Profiles") or []
+        r = _kiro_management_request(s, region, "POST", "/ListProfiles",
+                                     {"maxResults": 100}, service="codewhisperer")
+        app.logger.info(f"ListProfiles 原始响应: {json.dumps(r)[:800]}")
+        # 兼容多种字段名
+        for key in ("profiles", "Profiles", "profileList", "items", "Items"):
+            if isinstance(r.get(key), list):
+                return r[key]
+        # 整个响应就是列表的情况
+        if isinstance(r, list):
+            return r
+        return []
     except Exception as e:
         app.logger.error(f"ListProfiles 失败: {e}")
         return []
