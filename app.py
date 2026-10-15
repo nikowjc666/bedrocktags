@@ -4543,35 +4543,58 @@ def sso_enable_kiro_api():
         except Exception:
             pass
 
+    # 基于现有 profile 完整回传，只把 apiKeys 改成 ON（部分字段更新会被后端忽略）
+    existing_feats = (prof or {}).get("optInFeatures", {}) or {}
+    opt_in = {
+        "optInFeaturesType": "KIRO",
+        "apiKeys":            {"toggle": "ON"},
+        "dashboardAnalytics": existing_feats.get("dashboardAnalytics") or {"toggle": "ON"},
+    }
+    # overageConfiguration 必须用现有值原样带回（缺了不生效，乱填会报 KIRO 校验错）
+    if existing_feats.get("overageConfiguration"):
+        opt_in["overageConfiguration"] = existing_feats["overageConfiguration"]
+
+    active_funcs = (prof or {}).get("activeFunctionalities") or [
+        "ANALYSIS", "CONVERSATIONS", "TASK_ASSIST", "TRANSFORMATIONS", "COMPLETIONS"
+    ]
+    ref_cfg = (prof or {}).get("referenceTrackerConfiguration") or {"recommendationsWithReferences": "ALLOW"}
+    res_pol = (prof or {}).get("resourcePolicy") or {"effect": "DENY"}
+
     payload = {
         "profileArn":  profile_arn,
         "profileName": profile_name,
-        "activeFunctionalities": [
-            "ANALYSIS", "CONVERSATIONS", "TASK_ASSIST", "TRANSFORMATIONS", "COMPLETIONS"
-        ],
+        "activeFunctionalities": active_funcs,
         "identitySource": {
             "ssoIdentitySource": {
                 "instanceArn": instance_arn,
                 "ssoRegion":   sso_region or region,
             }
         },
-        "optInFeatures": {
-            "optInFeaturesType":    "KIRO",
-            "apiKeys":              {"toggle": "ON"},
-            "dashboardAnalytics":   {"toggle": "ON"},
-        },
-        "referenceTrackerConfiguration": {"recommendationsWithReferences": "ALLOW"},
-        "resourcePolicy": {"effect": "DENY"},
+        "optInFeatures": opt_in,
+        "referenceTrackerConfiguration": ref_cfg,
+        "resourcePolicy": res_pol,
     }
+    app.logger.info(f"enable_kiro_api UpdateProfile payload={json.dumps(payload)}")
 
     try:
         result = _kiro_management_request(s, region, "POST", "/UpdateProfile", payload, service="codewhisperer")
+        # 回查确认 apiKeys 是否真的变成 ON
+        verify = None
+        try:
+            for p in _kiro_list_profiles(s, region):
+                if (p.get("arn") or p.get("profileArn")) == profile_arn:
+                    verify = p.get("optInFeatures", {}).get("apiKeys", {}).get("toggle")
+                    break
+        except Exception:
+            pass
         return jsonify({
             "ok": True,
             "profile_arn": profile_arn,
             "profile_name": profile_name,
+            "apikeys_toggle_after": verify,
             "result": result,
-            "message": "已开启 Kiro API Key 功能（apiKeys=ON）",
+            "message": "已开启 Kiro API Key 功能" + (
+                f"（确认 apiKeys={verify}）" if verify else "（但回查未确认，请在控制台核对）"),
         })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
