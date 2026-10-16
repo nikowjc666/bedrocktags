@@ -1014,28 +1014,32 @@ async function viewSubscriptions(){
   document.getElementById('subsContent').innerHTML = '<span class="sp"></span> 加载中...';
   
   try {
-    const res = await fetch('/api/sso/subscriptions');
-    const data = await res.json();
-    
+    // 从 AWS 实时查询，需要凭证
+    const data = await api('/api/sso/subscriptions', {...creds()});
+
     if (!data.ok) {
       document.getElementById('subsContent').innerHTML = '<div class="st er">'+esc(data.error)+'</div>';
       return;
     }
-    
+
     if (!data.subscriptions || data.subscriptions.length === 0) {
       document.getElementById('subsContent').innerHTML = '<div class="st info">暂无订阅记录</div>';
       return;
     }
-    
-    let html = '<table class="rtbl"><thead><tr><th>邮箱</th><th>订阅方案</th><th>分配时间</th></tr></thead><tbody>';
+
+    let html = '<div class="st ok" style="margin-bottom:8px">共 <b>'+data.subscriptions.length+'</b> 个订阅</div>';
+    html += '<table class="rtbl"><thead><tr><th>用户名</th><th>订阅类型</th><th>状态</th><th>分配方式</th></tr></thead><tbody>';
     data.subscriptions.forEach(s => {
-      html += '<tr><td>'+esc(s.email)+'</td>';
-      html += '<td><span style="color:var(--pr);font-weight:600">'+esc(s.plan)+'</span></td>';
-      html += '<td style="color:var(--t2)">'+esc((s.updated_at||'').replace('T',' ').slice(0,16))+'</td></tr>';
+      const st = s.status || '';
+      const stColor = st === 'ACTIVE' ? 'var(--ok)' : (st === 'PENDING' ? 'var(--wa)' : 'var(--t2)');
+      html += '<tr><td>'+esc(s.username)+'</td>';
+      html += '<td><span style="color:var(--pr);font-weight:600">'+esc(s.subscription_type)+'</span></td>';
+      html += '<td><span style="color:'+stColor+';font-weight:600">'+esc(st)+'</span></td>';
+      html += '<td style="color:var(--t2);font-size:10px">'+esc(s.assignment_type||'')+'</td></tr>';
     });
     html += '</tbody></table>';
     document.getElementById('subsContent').innerHTML = html;
-    
+
   } catch (e) {
     document.getElementById('subsContent').innerHTML = '<div class="st er">加载失败: '+esc(e.message)+'</div>';
   }

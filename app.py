@@ -5125,25 +5125,74 @@ def sso_run_stream():
     )
 
 
-@app.route("/api/sso/subscriptions", methods=["GET"])
+@app.route("/api/sso/subscriptions", methods=["GET", "POST"])
 def list_subscriptions():
-    """查询所有订阅分配记录"""
-    import sqlite3
+    """
+    查询所有 Kiro 订阅（从 AWS 实时查询，不是本地库）。
+
+    调用 user-subscriptions:ListUserSubscriptions：
+        端点:   https://service.user-subscriptions.{region}.amazonaws.com/ListUserSubscriptions
+        service(SigV4): user-subscriptions
+
+    请求体(POST):
+        access_key_id / secret_access_key / session_token / region : 凭证
+        instance_arn (可选) : 留空自动发现
+    """
+    import json as _j
+    import botocore.auth
+    import botocore.awsrequest
+    import urllib.request
+
+    data = request.get_json(silent=True) or {}
+    s, err = _sso_session(data)
+    if err:
+        return jsonify({"ok": False, "error": err or "请提供凭证（POST ak/sk）"}), 400
+
+    region       = (data.get("region") or s.region_name or "us-east-1").strip()
+    instance_arn = (data.get("instance_arn") or "").strip()
+    if not instance_arn:
+        try:
+            insts = s.client("sso-admin").list_instances().get("Instances", [])
+            if not insts:
+                return jsonify({"ok": False, "error": "未发现 Identity Center 实例"}), 400
+            instance_arn = insts[0].get("InstanceArn")
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"查询 SSO 实例失败: {e}"}), 500
+
+    url = f"https://service.user-subscriptions.{region}.amazonaws.com/ListUserSubscriptions"
+    subs, next_token = [], None
     try:
-        conn = sqlite3.connect('users.db')
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT email, plan, assigned_at, updated_at
-            FROM subscriptions
-            ORDER BY updated_at DESC
-        ''')
-        rows = cursor.fetchall()
-        conn.close()
-        subscriptions = [
-            {"email": r[0], "plan": r[1], "assigned_at": r[2], "updated_at": r[3]}
-            for r in rows
-        ]
-        return jsonify({"ok": True, "subscriptions": subscriptions})
+        creds = s.get_credentials().get_frozen_credentials()
+        while True:
+            payload = {"instanceArn": instance_arn, "maxResults": 100,
+                       "subscriptionRegion": region}
+            if next_token:
+                payload["nextToken"] = next_token
+            body = _j.dumps(payload).encode()
+            req_obj = botocore.awsrequest.AWSRequest(
+                method="POST", url=url, data=body,
+                headers={"Content-Type": "application/json"})
+            botocore.auth.SigV4Auth(creds, "user-subscriptions", region).add_auth(req_obj)
+            prepared = req_obj.prepare()
+            req = urllib.request.Request(url=prepared.url, data=body,
+                                         headers=dict(prepared.headers), method="POST")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                r = _j.loads(resp.read() or b"{}")
+            for item in (r.get("userSubscriptions") or r.get("UserSubscriptions") or []):
+                subs.append({
+                    "username":          item.get("username") or item.get("userName") or "",
+                    "subscription_type": item.get("subscriptionType") or "",
+                    "status":            item.get("status") or "",
+                    "assignment_type":   item.get("aggregatedSubscriptionType") or "",
+                })
+            next_token = r.get("nextToken") or r.get("NextToken")
+            if not next_token:
+                break
+        return jsonify({"ok": True, "subscriptions": subs, "total": len(subs)})
+    except urllib.error.HTTPError as e:
+        txt = e.read().decode(errors="replace")
+        app.logger.error(f"ListUserSubscriptions HTTP {e.code}: {txt}")
+        return jsonify({"ok": False, "error": f"HTTP {e.code}: {txt}"}), 500
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
