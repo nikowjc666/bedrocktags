@@ -1191,7 +1191,7 @@ async function mgmtRun() {
       });
       if (!res.ok) { $("mgmtResultMsg").innerHTML = '<div class="st er">'+esc(res.error)+'</div>'; return; }
       const s = res.summary;
-      $("mgmtResultMsg").innerHTML = `<div class="st ok">完成: 删除 <b>${s.deleted}</b> 跳过 <b>${s.skipped}</b> 失败 <b>${s.failed}</b></div>`;
+      $("mgmtResultMsg").innerHTML = `<div class="st ok">完成: 删除 <b>${s.deleted}</b> 跳过 <b>${s.skipped}</b> 失败 <b>${s.failed}</b>（删前已取消订阅 <b>${s.sub_cancelled||0}</b>）</div>`;
       if (res.results) {
         $("mgmtResultMsg").innerHTML += '<table class="rtbl" style="margin-top:8px"><thead><tr><th>用户名</th><th>结果</th></tr></thead><tbody>' +
           res.results.map(r => `<tr><td>${esc(r.username)}</td><td>${esc(r.status)}</td></tr>`).join('') +

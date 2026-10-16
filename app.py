@@ -5578,25 +5578,46 @@ def sso_delete_run():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 400
 
+    region = (data.get("region") or s.region_name or "").strip()
+    # 默认先取消订阅再删用户，避免删完用户后订阅成为「孤儿」无法取消
+    cancel_sub_first = data.get("cancel_sub_first", True)
+
     results = []
-    deleted = skipped = failed = 0
+    deleted = skipped = failed = sub_cancelled = 0
     for name in targets:
         uid = sso_core.find_existing_user(ids_cli, store_id, name)
         if not uid:
             skipped += 1
             results.append({"username": name, "status": "不存在(跳过)"})
             continue
+
+        sub_note = ""
+        # ── 先取消订阅（立即），失败不阻断删除 ──
+        if cancel_sub_first and region:
+            try:
+                cancel_subscription(s, region, "USER", uid, "IMMEDIATE")
+                sub_cancelled += 1
+                sub_note = " / 已取消订阅"
+            except Exception as e:
+                msg = str(e)
+                # 本来就没订阅，忽略
+                if "not found" in msg.lower() or "no subscription" in msg.lower() or "does not" in msg.lower():
+                    sub_note = ""
+                else:
+                    sub_note = f" / 取消订阅失败: {msg[:60]}"
+
         try:
             sso_core.delete_user(ids_cli, store_id, uid)
             deleted += 1
-            results.append({"username": name, "status": "已删除"})
+            results.append({"username": name, "status": "已删除" + sub_note})
         except Exception as e:
             failed += 1
-            results.append({"username": name, "status": f"失败: {e}"})
+            results.append({"username": name, "status": f"失败: {e}" + sub_note})
 
     return jsonify({
         "ok": True,
-        "summary": {"deleted": deleted, "skipped": skipped, "failed": failed},
+        "summary": {"deleted": deleted, "skipped": skipped, "failed": failed,
+                    "sub_cancelled": sub_cancelled},
         "results": results,
     })
 
