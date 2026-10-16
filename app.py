@@ -5179,18 +5179,46 @@ def list_subscriptions():
             with urllib.request.urlopen(req, timeout=15) as resp:
                 raw = resp.read() or b"{}"
                 r = _j.loads(raw)
-            app.logger.info(f"ListUserSubscriptions 原始响应: {raw[:1000]}")
-            for item in (r.get("userSubscriptions") or r.get("UserSubscriptions")
-                         or r.get("subscriptions") or r.get("items") or []):
+            for item in (r.get("subscriptions") or r.get("userSubscriptions")
+                         or r.get("UserSubscriptions") or r.get("items") or []):
+                status = (item.get("status") or "").upper()
+                # 只保留 活跃中(ACTIVE) 和 待激活(PENDING)，过滤掉 CANCELLED
+                if status not in ("ACTIVE", "PENDING"):
+                    continue
+                principal = item.get("principal") or {}
+                user_id   = principal.get("user") or principal.get("group") or ""
+                sub_type  = (item.get("type") or {}).get("amazonQ") or ""
                 subs.append({
-                    "username":          item.get("username") or item.get("userName") or "",
-                    "subscription_type": item.get("subscriptionType") or "",
-                    "status":            item.get("status") or "",
+                    "user_id":           user_id,
+                    "username":          "",  # 稍后用 Identity Store 补
+                    "subscription_type": sub_type,
+                    "status":            status,
                     "assignment_type":   item.get("aggregatedSubscriptionType") or "",
+                    "principal_type":    "GROUP" if principal.get("group") else "USER",
                 })
             next_token = r.get("nextToken") or r.get("NextToken")
             if not next_token:
                 break
+
+        # 把 user_id 映射成用户名（批量查 Identity Store）
+        try:
+            store_id = sso_core.resolve_identity_store_id(s, None)
+            ids_cli  = s.client("identitystore")
+            id2name  = {}
+            for sub in subs:
+                uid = sub["user_id"]
+                if sub["principal_type"] == "USER" and uid and uid not in id2name:
+                    try:
+                        u = ids_cli.describe_user(IdentityStoreId=store_id, UserId=uid)
+                        id2name[uid] = u.get("UserName", "")
+                    except Exception:
+                        id2name[uid] = ""
+            for sub in subs:
+                sub["username"] = id2name.get(sub["user_id"], "") or sub["user_id"]
+        except Exception as e:
+            app.logger.error(f"订阅用户名映射失败: {e}")
+            for sub in subs:
+                sub["username"] = sub["user_id"]
         return jsonify({"ok": True, "subscriptions": subs, "total": len(subs)})
     except urllib.error.HTTPError as e:
         txt = e.read().decode(errors="replace")
