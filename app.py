@@ -5177,8 +5177,11 @@ def list_subscriptions():
             req = urllib.request.Request(url=prepared.url, data=body,
                                          headers=dict(prepared.headers), method="POST")
             with urllib.request.urlopen(req, timeout=15) as resp:
-                r = _j.loads(resp.read() or b"{}")
-            for item in (r.get("userSubscriptions") or r.get("UserSubscriptions") or []):
+                raw = resp.read() or b"{}"
+                r = _j.loads(raw)
+            app.logger.info(f"ListUserSubscriptions 原始响应: {raw[:1000]}")
+            for item in (r.get("userSubscriptions") or r.get("UserSubscriptions")
+                         or r.get("subscriptions") or r.get("items") or []):
                 subs.append({
                     "username":          item.get("username") or item.get("userName") or "",
                     "subscription_type": item.get("subscriptionType") or "",
