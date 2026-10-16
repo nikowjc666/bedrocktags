@@ -185,9 +185,10 @@ input,textarea,select{font-family:inherit;text-transform:none}
         <div class="fg" style="max-width:90px"><label>序号起始值</label><input id="start" type="number" min="0" value="1"></div>
         <div class="fg" style="max-width:80px"><label>序号位数</label><input id="pad" type="number" min="1" value="2"></div>
       </div>
+      <!-- identity store id 由 ak/sk 自动识别，隐藏字段仅供内部回填 -->
+      <input id="store_id" type="hidden">
       <div class="fr">
         <div class="fg"><label>sso 组名</label><input id="group" value="Kiro-Users" placeholder="Kiro-Users"></div>
-        <div class="fg"><label>identity store id（可选）</label><input id="store_id" placeholder="留空自动发现"></div>
         <div class="fg" style="max-width:96px" title="用户之间并发处理的数量。越大越快，但撞 aws 限流的概率也越高；撞到会自动退避重试。">
           <label>并发数</label><input id="concurrency" type="number" min="1" max="16" value="8">
         </div>
