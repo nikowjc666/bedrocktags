@@ -4908,6 +4908,9 @@ def _sso_batch_events(s, p: dict):
                 group_id, _ = sso_core.ensure_group(ids_cli, store_id, group)
             else:
                 group_id = sso_core.find_group_id(ids_cli, store_id, group)
+                if not group_id:
+                    yield {"type": "error", "error": f"未找到 SSO 组 {group!r}。请先在 IAM Identity Center 创建该组，或在页面勾选“组不存在时自动创建”（需要 identitystore:CreateGroup 权限）。"}
+                    return
         except Exception as e:
             yield {"type": "error", "error": f"处理组失败: {e}"}
             return
